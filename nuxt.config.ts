@@ -21,5 +21,5 @@ export default defineNuxtConfig({
     preload: true,
   },
 
-  css: ['~/assets/css/main.css'],
+  css: ['~/assets/css/main.css'], // ~ risolve a app/ con compatibilityVersion: 4
 })

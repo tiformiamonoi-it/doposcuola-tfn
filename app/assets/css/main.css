@@ -1,0 +1,23 @@
+@theme {
+  /* ─── Palette TFN (Blue Trust #0063A6) ─── */
+  --color-tfn-50:  #f0f7ff;
+  --color-tfn-100: #dff0ff;
+  --color-tfn-200: #bfe4ff;
+  --color-tfn-300: #73c3f7;
+  --color-tfn-400: #1a9af0;
+  --color-tfn-500: #0063a6;
+  --color-tfn-600: #00558a;
+  --color-tfn-700: #00476e;
+  --color-tfn-800: #003657;
+  --color-tfn-900: #002840;
+  --color-tfn-950: #001928;
+
+  /* ─── Font families ─── */
+  --font-sans:    'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-heading: 'Montserrat', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Utility class per i titoli */
+.font-heading {
+  font-family: var(--font-heading);
+}
