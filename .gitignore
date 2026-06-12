@@ -1,0 +1,21 @@
+# Nuxt
+.nuxt
+.output
+.data
+.nitro
+.cache
+
+# Dipendenze
+node_modules
+
+# Variabili d'ambiente (contengono password DB e segreti)
+.env
+.env.*
+!.env.example
+
+# Log
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
