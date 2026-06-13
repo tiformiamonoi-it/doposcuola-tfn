@@ -466,7 +466,7 @@ const { user: sessionUser } = useUserSession()
 const id = route.params.id as string
 
 // Protezione TUTOR: vede solo sé stesso
-if (sessionUser.value?.role === 'TUTOR' && sessionUser.value?.id !== id) {
+if (sessionUser.value?.role === 'TUTOR' && String(sessionUser.value?.id) !== id) {
   await navigateTo('/')
 }
 
@@ -679,6 +679,8 @@ const datiLiquidaDettaglio = reactive({
 
 function apriLiquidaDettaglio() {
   const meseCorr = (compensation.value ?? []).find((m: any) => m.isMeseCorrente)
+  const oggi = new Date()
+  datiLiquidaDettaglio.mese = `${oggi.getFullYear()}-${String(oggi.getMonth() + 1).padStart(2, '0')}`
   if (meseCorr) datiLiquidaDettaglio.importo = String(meseCorr.residuo)
   modalLiquidaDettaglioAperto.value = true
 }
@@ -755,6 +757,7 @@ function apriPagaRimborso(r: any) {
   rimborsoSelezionato.value = r
   const residuo = parseFloat(r.importo) - parseFloat(r.importoPagato)
   datiPagaRimborso.importoPagamento = residuo.toFixed(2)
+  datiPagaRimborso.metodo = 'BONIFICO'
   datiPagaRimborso.note = ''
   modalPagaRimborsoAperto.value = true
 }
