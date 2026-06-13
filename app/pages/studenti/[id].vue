@@ -384,7 +384,7 @@
             </UFormField>
           </div>
 
-          <UFormField name="parentEmail" label="Email genitore / alunno">
+          <UFormField name="parentEmail" label="Email genitore">
             <UInput v-model="datiModifica.parentEmail" type="email" class="w-full" />
           </UFormField>
 
