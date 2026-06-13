@@ -32,4 +32,6 @@ export default defineEventHandler(async (event) => {
     await updatePrenotazioneFlag(studentId, result.data.abilitato)
     return { ok: true }
   }
+
+  throw createError({ statusCode: 400, statusMessage: 'Azione non riconosciuta' })
 })
