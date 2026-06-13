@@ -257,3 +257,110 @@ export async function deactivateTutor(id: string) {
 
   return updated ?? null
 }
+
+// ─────────────────────────────────────────────
+// COMPENSI MENSILI — GET /api/tutors/:id/compensation
+// Storico ultimi N mesi con stato pagamento
+// ─────────────────────────────────────────────
+export async function getMonthlyCompensation(tutorId: string, months = 12) {
+  const now       = new Date()
+  const pastStart = new Date(now.getFullYear(), now.getMonth() - months + 1, 1)
+
+  const [lessonRows, paymentRows] = await Promise.all([
+    db.execute(sql`
+      SELECT DATE_TRUNC('month', data) AS mese,
+             COUNT(*)::text AS num_lezioni,
+             COALESCE(SUM(compenso_tutor::numeric), 0)::text AS compenso_grezzo
+      FROM lessons
+      WHERE tutor_id = ${tutorId} AND data >= ${pastStart}
+      GROUP BY DATE_TRUNC('month', data)
+      ORDER BY mese DESC
+    `),
+    db.select()
+      .from(tutorPayments)
+      .where(and(
+        eq(tutorPayments.tutorId, tutorId),
+        gte(tutorPayments.mese, pastStart),
+      ))
+      .orderBy(desc(tutorPayments.mese)),
+  ])
+
+  // Mappa pagamenti per chiave YYYY-MM
+  const payByMonth = new Map<string, { totale: number; proBono: boolean }>()
+  for (const p of paymentRows) {
+    const key = new Date(p.mese).toISOString().substring(0, 7)
+    const cur = payByMonth.get(key) ?? { totale: 0, proBono: false }
+    payByMonth.set(key, {
+      totale:  cur.totale + parseFloat(p.importo),
+      proBono: cur.proBono || p.status === 'PRO_BONO',
+    })
+  }
+
+  const nowKey = now.toISOString().substring(0, 7)
+
+  return (lessonRows as any[]).map(row => {
+    const meseDate          = new Date(row.mese)
+    const meseKey           = meseDate.toISOString().substring(0, 7)
+    const compensoGrezzo    = parseFloat(row.compenso_grezzo)
+    const compensoCalcolato = Math.floor(compensoGrezzo)
+    const pay               = payByMonth.get(meseKey)
+    const pagato            = pay?.totale ?? 0
+    const residuo           = Math.max(0, compensoCalcolato - pagato)
+    const isMeseCorrente    = meseKey === nowKey
+
+    let stato: string
+    if (pay?.proBono)                          stato = 'PRO_BONO'
+    else if (residuo <= 0.01 && pagato > 0)    stato = 'PAGATO'
+    else if (pagato > 0.01 && residuo > 0.01)  stato = 'PARZIALE'
+    else                                       stato = 'DA_PAGARE'
+
+    return {
+      mese:             meseKey,
+      meseLabel:        meseDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' }),
+      numLezioni:       parseInt(row.num_lezioni),
+      compensoGrezzo:   Number(compensoGrezzo.toFixed(2)),
+      compensoCalcolato,
+      pagato:           Number(pagato.toFixed(2)),
+      residuo:          Number(residuo.toFixed(2)),
+      stato,
+      isMeseCorrente,
+    }
+  })
+}
+
+// ─────────────────────────────────────────────
+// LIQUIDA — POST /api/tutors/:id/pay
+// Crea tutorPayment + accountingEntry USCITA in transazione
+// PRO_BONO: importo=0, nessun accounting
+// ─────────────────────────────────────────────
+export async function payTutor(tutorId: string, data: PayTutorInput) {
+  const meseDate = new Date(data.mese)
+  const importo  = data.proBono ? 0 : parseFloat(data.importo)
+  const status   = data.proBono ? 'PRO_BONO' : 'PAGATO'
+
+  return db.transaction(async (tx) => {
+    const [payment] = await tx.insert(tutorPayments).values({
+      tutorId,
+      mese:    meseDate,
+      importo: importo.toFixed(2),
+      metodo:  data.metodo,
+      status,
+      note:    data.note ?? null,
+    }).returning()
+
+    if (!payment) throw new Error('Inserimento pagamento fallito')
+
+    if (!data.proBono && importo > 0) {
+      await tx.insert(accountingEntries).values({
+        tipo:            'USCITA',
+        importo:         importo.toFixed(2),
+        descrizione:     `Compenso tutor — ${meseDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}`,
+        categoria:       'compenso_tutor',
+        metodoPagamento: data.metodo,
+        note:            `tutorPaymentId:${payment.id} tutorId:${tutorId}`,
+      })
+    }
+
+    return payment
+  })
+}
