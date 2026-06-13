@@ -4,9 +4,7 @@ import { listBookingsForPortal } from '../../services/booking.service'
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
 
-  if (user.role !== 'GENITORE') {
-    throw createError({ statusCode: 403, statusMessage: 'Accesso riservato ai genitori' })
-  }
+  if (user.role !== 'GENITORE') return []
 
   return await listBookingsForPortal(user.id)
 })

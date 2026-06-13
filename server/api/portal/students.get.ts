@@ -4,9 +4,8 @@ import { getPortalStudents } from '../../services/portal.service'
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
 
-  if (user.role !== 'GENITORE') {
-    throw createError({ statusCode: 403, statusMessage: 'Accesso riservato ai genitori' })
-  }
+  // ADMIN/SUPER_TUTOR possono accedere in preview: nessuno studente collegato
+  if (user.role !== 'GENITORE') return []
 
   return await getPortalStudents(user.linkedStudentIds ?? [])
 })
