@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    return payReimbursement(rid, parsed.data)
+    return await payReimbursement(rid, parsed.data)
   } catch (err: any) {
     if (err.message === 'Rimborso non trovato') {
       throw createError({ statusCode: 404, statusMessage: 'Rimborso non trovato' })

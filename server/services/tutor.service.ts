@@ -1,7 +1,7 @@
 // server/services/tutor.service.ts
 import { db } from '../database/client'
 import {
-  users, tutorProfiles, lessons, lessonStudents, students, packages,
+  users, tutorProfiles, lessons,
   tutorPayments, tutorReimbursements, accountingEntries,
 } from '../database/schema'
 import { and, asc, desc, eq, gte, ilike, lte, or, sql } from 'drizzle-orm'
