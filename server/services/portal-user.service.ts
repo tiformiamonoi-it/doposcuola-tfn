@@ -33,13 +33,38 @@ export async function getPortalAccess(studentId: string) {
   return student
 }
 
-// Crea un nuovo account GENITORE e lo collega allo studente
+// Crea o collega un account GENITORE allo studente.
+// Se l'email esiste già come GENITORE (es. genitore con più figli),
+// collega quell'account allo studente e genera una nuova password temporanea.
+// Se l'email appartiene a un account staff (ADMIN/TUTOR/…), errore chiaro.
 export async function createPortalAccount(input: CreatePortalAccessInput) {
   const existing = await db.query.users.findFirst({
     where: eq(users.email, input.email.toLowerCase()),
   })
+
   if (existing) {
-    throw createError({ statusCode: 409, statusMessage: 'Email già in uso da un altro account' })
+    if (existing.role !== 'GENITORE') {
+      throw createError({
+        statusCode: 409,
+        statusMessage: 'Questa email è già usata da un account staff. Usa un\'altra email per il genitore.',
+      })
+    }
+
+    // Account GENITORE già esistente → collegalo a questo studente
+    // (caso normale: genitore con più figli nel centro)
+    const tempPassword = generateTempPassword()
+    const hashedPassword = await bcrypt.hash(tempPassword, 10)
+
+    await db.update(users)
+      .set({ password: hashedPassword, updatedAt: new Date() })
+      .where(eq(users.id, existing.id))
+
+    await db.update(students)
+      .set({ portalUserId: existing.id, updatedAt: new Date() })
+      .where(eq(students.id, input.studentId))
+
+    const { password: _pw, ...safeUser } = existing
+    return { user: safeUser, tempPassword }
   }
 
   const tempPassword = generateTempPassword()
