@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
+import { randomInt } from 'node:crypto'
 import { db } from '../database/client'
 import { users, students } from '../database/schema'
 import type { CreatePortalAccessInput } from '#shared/schemas/portal-user.schema'
@@ -8,7 +9,7 @@ function generateTempPassword(length = 10): string {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
   let result = ''
   for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
+    result += chars.charAt(randomInt(chars.length))
   }
   return result
 }
@@ -58,7 +59,8 @@ export async function createPortalAccount(input: CreatePortalAccessInput) {
       .set({ portalUserId: user.id, updatedAt: new Date() })
       .where(eq(students.id, input.studentId))
 
-    return { user, tempPassword }
+    const { password: _pw, ...safeUser } = user
+    return { user: safeUser, tempPassword }
   })
 }
 
