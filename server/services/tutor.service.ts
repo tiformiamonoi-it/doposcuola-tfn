@@ -475,3 +475,74 @@ export async function getDetailedStats(tutorId: string, months = 6) {
     })),
   }
 }
+
+// ─────────────────────────────────────────────
+// RIMBORSI — GET /api/tutors/:id/reimbursements
+// ─────────────────────────────────────────────
+export async function listReimbursements(tutorId: string) {
+  return db.select()
+    .from(tutorReimbursements)
+    .where(eq(tutorReimbursements.tutorId, tutorId))
+    .orderBy(desc(tutorReimbursements.dataRichiesta))
+}
+
+// ─────────────────────────────────────────────
+// CREA RIMBORSO — POST /api/tutors/:id/reimbursements
+// ─────────────────────────────────────────────
+export async function createReimbursement(tutorId: string, data: CreateReimbursementInput) {
+  const [created] = await db.insert(tutorReimbursements).values({
+    tutorId,
+    importo:       data.importo,
+    descrizione:   data.descrizione,
+    dataRichiesta: data.dataRichiesta ? new Date(data.dataRichiesta) : new Date(),
+    stato:         'DA_PAGARE',
+    note:          data.note ?? null,
+  }).returning()
+
+  return created
+}
+
+// ─────────────────────────────────────────────
+// PAGA RIMBORSO — POST /api/tutors/:id/reimbursements/:rid/pay
+// importoPagato cresce ad ogni pagamento
+// stato PARZIALE se importoPagato < importo, PAGATO se >=
+// ─────────────────────────────────────────────
+export async function payReimbursement(reimbursementId: string, data: PayReimbursementInput) {
+  const [current] = await db.select()
+    .from(tutorReimbursements)
+    .where(eq(tutorReimbursements.id, reimbursementId))
+    .limit(1)
+
+  if (!current) throw new Error('Rimborso non trovato')
+
+  const importoTotale  = parseFloat(current.importo)
+  const giaPagato      = parseFloat(current.importoPagato)
+  const nuovoPagamento = parseFloat(data.importoPagamento)
+  const nuovoPagato    = giaPagato + nuovoPagamento
+  const nuovoStato: 'PARZIALE' | 'PAGATO' = nuovoPagato >= importoTotale ? 'PAGATO' : 'PARZIALE'
+
+  return db.transaction(async (tx) => {
+    const [updated] = await tx.update(tutorReimbursements)
+      .set({
+        importoPagato: nuovoPagato.toFixed(2),
+        stato:         nuovoStato,
+        dataPagamento: nuovoStato === 'PAGATO' ? new Date() : current.dataPagamento,
+        metodo:        data.metodo,
+        note:          data.note ?? current.note,
+        updatedAt:     new Date(),
+      })
+      .where(eq(tutorReimbursements.id, reimbursementId))
+      .returning()
+
+    await tx.insert(accountingEntries).values({
+      tipo:            'USCITA',
+      importo:         nuovoPagamento.toFixed(2),
+      descrizione:     `Rimborso spese: ${current.descrizione}`,
+      categoria:       'rimborso_tutor',
+      metodoPagamento: data.metodo,
+      note:            `rimborsoId:${reimbursementId} tutorId:${current.tutorId}`,
+    })
+
+    return updated
+  })
+}
