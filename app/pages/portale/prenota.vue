@@ -213,7 +213,7 @@ async function inviaPrenotazione() {
       method: 'POST',
       body: {
         studentId:      form.studentId,
-        dataDesiderata: new Date(form.dataDesiderata).toISOString(),
+        dataDesiderata: form.dataDesiderata + 'T12:00:00.000Z',
         materie:        form.materie,
         noteOrario:     form.noteOrario || undefined,
       },
