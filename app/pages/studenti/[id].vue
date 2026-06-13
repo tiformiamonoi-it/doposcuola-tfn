@@ -169,7 +169,7 @@
             Questo studente non ha ancora un account portale.
             Crea un accesso per il genitore per consentirgli di visualizzare note e richiedere lezioni.
           </p>
-          <UButton icon="i-heroicons-plus" @click="mostraModalCreaAccesso = true">
+          <UButton icon="i-heroicons-plus" @click="apriModalCreaAccesso">
             Crea accesso portale
           </UButton>
         </template>
@@ -639,6 +639,18 @@ const credenziali = ref<{ email: string; tempPassword: string } | null>(null)
 const creandoAccesso = ref(false)
 const resetPassword = ref<string | null>(null)
 const togglando = ref(false)
+
+function apriModalCreaAccesso() {
+  const s = studente.value as any
+  // Pre-compila con i dati del genitore già registrati per lo studente
+  datiCreaAccesso.email = s?.parentEmail ?? ''
+  if (s?.parentName) {
+    const parts = (s.parentName as string).trim().split(/\s+/)
+    datiCreaAccesso.firstName = parts[0] ?? ''
+    datiCreaAccesso.lastName  = parts.slice(1).join(' ')
+  }
+  mostraModalCreaAccesso.value = true
+}
 
 async function creaAccessoPortale() {
   creandoAccesso.value = true
