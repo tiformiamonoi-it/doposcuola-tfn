@@ -1,8 +1,8 @@
 // server/services/tutor.service.ts
 import { db } from '../database/client'
 import {
-  users, tutorProfiles, lessons, tutorPayments, tutorReimbursements,
-  accountingEntries,
+  users, tutorProfiles, lessons, lessonStudents, students, packages,
+  tutorPayments, tutorReimbursements, accountingEntries,
 } from '../database/schema'
 import { and, asc, desc, eq, gte, ilike, lte, or, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
@@ -363,4 +363,115 @@ export async function payTutor(tutorId: string, data: PayTutorInput) {
 
     return payment
   })
+}
+
+// ─────────────────────────────────────────────
+// PERFORMANCE — GET /api/tutors/:id/performance
+// Ricavo generato vs compenso vs margine per mese
+// ─────────────────────────────────────────────
+export async function getMonthlyPerformance(tutorId: string, months = 6) {
+  const now       = new Date()
+  const startDate = new Date(now.getFullYear(), now.getMonth() - months + 1, 1)
+
+  const rows = await db.execute(sql`
+    SELECT
+      DATE_TRUNC('month', l.data) AS mese,
+      COUNT(DISTINCT l.id)::text  AS num_lezioni,
+      COUNT(ls.id)::text          AS num_studenti_slot,
+      COALESCE(SUM(l.compenso_tutor::numeric), 0)::text AS compenso_totale,
+      COALESCE(SUM(
+        CASE WHEN ls.mezza_lezione THEN 0.5 ELSE 1.0 END
+        * COALESCE(
+            p.tariffa_oraria::numeric,
+            CASE
+              WHEN p.ore_acquistate IS NOT NULL AND p.ore_acquistate::numeric > 0
+                   AND p.prezzo_totale IS NOT NULL
+              THEN p.prezzo_totale::numeric / p.ore_acquistate::numeric
+              ELSE 25.0
+            END
+          )
+      ), 0)::text AS ricavo_totale
+    FROM lessons l
+    JOIN lesson_students ls ON ls.lesson_id = l.id
+    LEFT JOIN packages p ON p.id = ls.package_id
+    WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate}
+    GROUP BY DATE_TRUNC('month', l.data)
+    ORDER BY mese DESC
+  `)
+
+  return (rows as any[]).map(row => {
+    const ricavo   = parseFloat(row.ricavo_totale)
+    const compenso = parseFloat(row.compenso_totale)
+    const margine  = ricavo - compenso
+    const meseDate = new Date(row.mese)
+
+    return {
+      mese:        meseDate.toISOString().substring(0, 7),
+      meseLabel:   meseDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' }),
+      numLezioni:  parseInt(row.num_lezioni),
+      numStudenti: parseInt(row.num_studenti_slot),
+      ricavo:      Number(ricavo.toFixed(2)),
+      compenso:    Number(compenso.toFixed(2)),
+      margine:     Number(margine.toFixed(2)),
+      marginePerc: ricavo > 0 ? Math.round((margine / ricavo) * 100) : 0,
+    }
+  })
+}
+
+// ─────────────────────────────────────────────
+// STATISTICHE DETTAGLIATE — GET /api/tutors/:id/stats
+// Distribuzione per tipo lezione + top 5 alunni
+// ─────────────────────────────────────────────
+export async function getDetailedStats(tutorId: string, months = 6) {
+  const now       = new Date()
+  const startDate = new Date(now.getFullYear(), now.getMonth() - months + 1, 1)
+
+  const [tipoRows, topStudentRows] = await Promise.all([
+    db.execute(sql`
+      SELECT l.tipo,
+             COUNT(DISTINCT l.id)::text AS num_lezioni,
+             COALESCE(SUM(CASE WHEN ls.mezza_lezione THEN 0.5 ELSE 1.0 END), 0)::text AS ore_totali
+      FROM lessons l
+      JOIN lesson_students ls ON ls.lesson_id = l.id
+      WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate}
+      GROUP BY l.tipo
+    `),
+
+    db.execute(sql`
+      SELECT s.id,
+             s.first_name AS first_name,
+             s.last_name  AS last_name,
+             COUNT(DISTINCT l.id)::text AS num_lezioni,
+             COALESCE(SUM(CASE WHEN ls.mezza_lezione THEN 0.5 ELSE 1.0 END), 0)::text AS ore_totali
+      FROM lessons l
+      JOIN lesson_students ls ON ls.lesson_id = l.id
+      JOIN students s ON s.id = ls.student_id
+      WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate}
+      GROUP BY s.id, s.first_name, s.last_name
+      ORDER BY ore_totali::numeric DESC
+      LIMIT 5
+    `),
+  ])
+
+  const tipoData = (tipoRows as any[]).map(r => ({
+    tipo:       r.tipo as string,
+    numLezioni: parseInt(r.num_lezioni),
+    oreTotali:  parseFloat(r.ore_totali),
+  }))
+
+  const totalOre = tipoData.reduce((s, r) => s + r.oreTotali, 0)
+
+  return {
+    distribuzioneTipo: tipoData.map(r => ({
+      ...r,
+      percentuale: totalOre > 0 ? Math.round((r.oreTotali / totalOre) * 100) : 0,
+    })),
+    topStudenti: (topStudentRows as any[]).map(r => ({
+      id:         r.id as string,
+      firstName:  r.first_name as string,
+      lastName:   r.last_name as string,
+      numLezioni: parseInt(r.num_lezioni),
+      oreTotali:  parseFloat(r.ore_totali),
+    })),
+  }
 }
