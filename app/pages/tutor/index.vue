@@ -361,13 +361,17 @@ function azioniTutor(tutor: any) {
 }
 
 async function toggleAttivo(tutor: any) {
-  if (tutor.active) {
-    await $fetch(`/api/tutors/${tutor.id}`, { method: 'DELETE' })
-    toast.add({ title: 'Tutor disattivato', color: 'info' })
-  } else {
-    await $fetch(`/api/tutors/${tutor.id}`, { method: 'PUT', body: { active: true } })
-    toast.add({ title: 'Tutor riattivato', color: 'success' })
+  try {
+    if (tutor.active) {
+      await $fetch(`/api/tutors/${tutor.id}`, { method: 'DELETE' })
+      toast.add({ title: 'Tutor disattivato', color: 'info' })
+    } else {
+      await $fetch(`/api/tutors/${tutor.id}`, { method: 'PUT', body: { active: true } })
+      toast.add({ title: 'Tutor riattivato', color: 'success' })
+    }
+    refresh()
+  } catch (err: any) {
+    toast.add({ title: err.data?.statusMessage ?? 'Errore aggiornamento stato', color: 'error' })
   }
-  refresh()
 }
 </script>
