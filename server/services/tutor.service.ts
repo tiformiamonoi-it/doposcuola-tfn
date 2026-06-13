@@ -89,9 +89,9 @@ export async function listTutors(query: TutorQuery) {
         WHERE mese >= ${pastStart} AND mese <= ${pastEnd}
         GROUP BY tutor_id, DATE_TRUNC('month', mese)
       )
-      SELECT ml.tutor_id AS "tutorId",
-             COUNT(*)::text AS "mesiArretrati",
-             COALESCE(SUM(ml.compenso_calcolato - COALESCE(mp.pagato, 0)), 0)::text AS "totaleArretrati"
+      SELECT ml.tutor_id AS tutor_id,
+             COUNT(*)::text AS mesi_arretrati,
+             COALESCE(SUM(ml.compenso_calcolato - COALESCE(mp.pagato, 0)), 0)::text AS totale_arretrati
       FROM monthly_lessons ml
       LEFT JOIN monthly_payments mp ON ml.tutor_id = mp.tutor_id AND ml.mese = mp.mese
       WHERE ml.compenso_calcolato > COALESCE(mp.pagato, 0)
@@ -101,7 +101,7 @@ export async function listTutors(query: TutorQuery) {
 
   const lessonMap  = new Map((lessonSums).map(r => [r.tutorId, r]))
   const payMap     = new Map((paymentSumsMese).map(r => [r.tutorId, r]))
-  const arrearsMap = new Map((arrearsRows as any[]).map(r => [r.tutorId as string, r]))
+  const arrearsMap = new Map((arrearsRows as any[]).map(r => [r.tutor_id as string, r]))
 
   let tutoriAttivi    = 0
   let daLiquidare     = 0
@@ -117,8 +117,8 @@ export async function listTutors(query: TutorQuery) {
     const compensoCalcolato = Math.floor(parseFloat(ls?.compenso ?? '0'))
     const pagato            = parseFloat(ps?.pagato ?? '0')
     const compensoResiduo   = Math.max(0, compensoCalcolato - pagato)
-    const mesiArretrati     = parseInt(ar?.mesiArretrati ?? '0')
-    const totaleArretrati   = parseFloat(ar?.totaleArretrati ?? '0')
+    const mesiArretrati     = parseInt(ar?.mesi_arretrati ?? '0')
+    const totaleArretrati   = Math.round(parseFloat(ar?.totale_arretrati ?? '0') * 100) / 100
 
     if (tutor.active) tutoriAttivi++
     if (compensoResiduo > 0.01) { daLiquidare++; totaleDovuto += compensoResiduo }
@@ -199,13 +199,15 @@ export async function createTutor(data: CreateTutorInput) {
       phone:     data.phone ?? null,
     }).returning()
 
+    if (!user) throw new Error('Creazione utente fallita')
+
     const [profile] = await tx.insert(tutorProfiles).values({
-      userId:            user!.id,
+      userId:            user.id,
       modalitaPagamento: data.modalitaPagamento ?? 'ORE',
       importoForfait:    data.importoForfait ?? null,
     }).returning()
 
-    const { password: _, ...safeUser } = user!
+    const { password: _, ...safeUser } = user
     return { user: safeUser, profile }
   })
 }
@@ -233,11 +235,12 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
       .where(and(eq(users.id, id), eq(users.role, 'TUTOR')))
       .returning()
 
+    if (!user) return null
+
     await tx.update(tutorProfiles)
       .set(profileChanges as any)
       .where(eq(tutorProfiles.userId, id))
 
-    if (!user) return null
     const { password: _, ...safeUser } = user
     return { user: safeUser }
   })
