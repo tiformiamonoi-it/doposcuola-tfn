@@ -45,5 +45,6 @@ export default defineEventHandler(async (event) => {
   }
 
   const [updated] = await db.update(users).set(updates).where(eq(users.id, user.id)).returning()
+  if (!updated) throw createError({ statusCode: 404, statusMessage: 'Account non trovato' })
   return { ok: true, firstName: updated.firstName, lastName: updated.lastName }
 })
