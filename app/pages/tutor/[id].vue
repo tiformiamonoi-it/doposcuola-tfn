@@ -171,6 +171,34 @@
                   </template>
                 </UTable>
               </UCard>
+
+              <!-- Singoli compensi pagati (eliminabili) -->
+              <UCard v-if="(tutorPayments ?? []).length" :ui="{ body: 'p-0' }">
+                <template #header>
+                  <span class="text-sm font-medium text-slate-700">Compensi pagati</span>
+                </template>
+                <div class="divide-y divide-slate-100">
+                  <div
+                    v-for="p in tutorPayments"
+                    :key="p.id"
+                    class="flex items-center justify-between px-4 py-2 text-sm"
+                  >
+                    <div>
+                      <span class="font-medium text-slate-800">€ {{ parseFloat(p.importo).toFixed(2) }}</span>
+                      <span class="text-slate-400 ml-2 capitalize">{{ new Date(p.mese).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' }) }}</span>
+                      <span class="text-slate-400 ml-2">{{ p.metodo }}</span>
+                      <UBadge v-if="p.status === 'PRO_BONO'" size="xs" variant="subtle" color="neutral" class="ml-2">PRO BONO</UBadge>
+                    </div>
+                    <UButton
+                      icon="i-heroicons-trash"
+                      size="xs" color="error" variant="ghost"
+                      title="Elimina compenso"
+                      :loading="eliminandoCompenso === p.id"
+                      @click="eliminaCompenso(p)"
+                    />
+                  </div>
+                </div>
+              </UCard>
             </template>
           </div>
         </template>
@@ -495,6 +523,25 @@ const { data: compensation, pending: pendingComp, refresh: refreshComp } = useLa
 const { data: reimbursements, pending: pendingReimb, refresh: refreshReimb } = useLazyFetch(`/api/tutors/${id}/reimbursements`, {
   default: () => [] as any[],
 })
+const { data: tutorPayments, refresh: refreshTutorPayments } = useLazyFetch(`/api/tutors/${id}/payments`, {
+  default: () => [] as any[],
+})
+const eliminandoCompenso = ref<string | null>(null)
+
+async function eliminaCompenso(p: any) {
+  if (!confirm(`Eliminare il compenso di € ${parseFloat(p.importo).toFixed(2)}? Verrà rimosso anche il movimento contabile collegato.`)) return
+  eliminandoCompenso.value = p.id
+  try {
+    await $fetch(`/api/tutor-payments/${p.id}`, { method: 'DELETE' })
+    toast.add({ title: 'Compenso eliminato', color: 'success' })
+    refreshTutorPayments()
+    refreshComp()
+  } catch (err: any) {
+    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Eliminazione non riuscita', color: 'error' })
+  } finally {
+    eliminandoCompenso.value = null
+  }
+}
 const { data: performance, pending: pendingPerf } = useLazyFetch(`/api/tutors/${id}/performance`, {
   default: () => [] as any[],
 })
@@ -732,6 +779,7 @@ async function confermaLiquidaDettaglio() {
     modalLiquidaDettaglioAperto.value = false
     refreshComp()
     refreshTutor()
+    refreshTutorPayments()
   } catch {
     toast.add({ title: 'Errore nella liquidazione', color: 'error' })
   } finally {

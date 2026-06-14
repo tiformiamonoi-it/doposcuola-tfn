@@ -44,6 +44,31 @@
         </div>
 
         <UCheckbox v-model="pagamento.fattura" label="Richiede fattura" />
+
+        <!-- Storico pagamenti del pacchetto -->
+        <div v-if="storico.length" class="border-t border-slate-100 pt-3">
+          <p class="text-xs font-medium text-slate-500 mb-2">Pagamenti registrati</p>
+          <div class="space-y-1 max-h-48 overflow-auto">
+            <div
+              v-for="p in storico"
+              :key="p.id"
+              class="flex items-center justify-between text-sm bg-slate-50 rounded-md px-3 py-1.5"
+            >
+              <div>
+                <span class="font-medium text-slate-800">€ {{ parseFloat(p.importo).toFixed(2) }}</span>
+                <span class="text-slate-400 ml-2">{{ new Date(p.dataPagamento).toLocaleDateString('it-IT') }}</span>
+                <span class="text-slate-400 ml-2">{{ p.metodoPagamento }}</span>
+              </div>
+              <UButton
+                icon="i-heroicons-trash"
+                size="xs" color="error" variant="ghost"
+                title="Elimina pagamento"
+                :loading="eliminando === p.id"
+                @click="eliminaPagamento(p.id)"
+              />
+            </div>
+          </div>
+        </div>
       </div>
     </template>
     <template #footer>
@@ -64,6 +89,8 @@ const isOpen = defineModel<boolean>('open', { default: false })
 
 const toast = useToast()
 const salvandoPagamento = ref(false)
+const storico = ref<any[]>([])
+const eliminando = ref<string | null>(null)
 
 const pagamento = reactive({
   importo: 0,
@@ -73,6 +100,31 @@ const pagamento = reactive({
   fattura: false,
 })
 
+async function caricaStorico() {
+  if (!props.pacchetto) { storico.value = []; return }
+  try {
+    const res = await $fetch('/api/payments', { query: { packageId: props.pacchetto.id, limit: 100 } }) as any
+    storico.value = res?.data ?? []
+  } catch {
+    storico.value = []
+  }
+}
+
+async function eliminaPagamento(pid: string) {
+  if (!confirm('Eliminare questo pagamento? Il movimento contabile collegato verrà rimosso e il saldo del pacchetto ricalcolato.')) return
+  eliminando.value = pid
+  try {
+    await $fetch(`/api/payments/${pid}`, { method: 'DELETE' })
+    toast.add({ title: 'Pagamento eliminato', color: 'success' })
+    await caricaStorico()
+    emit('refresh')
+  } catch (err: any) {
+    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Eliminazione non riuscita', color: 'error' })
+  } finally {
+    eliminando.value = null
+  }
+}
+
 watch(isOpen, (val) => {
   if (val && props.pacchetto) {
     pagamento.importo = parseFloat(props.pacchetto.importoResiduo) || 0
@@ -80,6 +132,7 @@ watch(isOpen, (val) => {
     pagamento.tipo    = 'SALDO'
     pagamento.metodo  = 'CONTANTI'
     pagamento.fattura = false
+    caricaStorico()
   }
 })
 

@@ -582,6 +582,15 @@ export async function deleteTutorPayment(id: string) {
   return { ok: true }
 }
 
+// Elenco dei singoli compensi pagati a un tutor (più recenti in cima)
+export async function listTutorPayments(tutorId: string) {
+  return await db
+    .select()
+    .from(tutorPayments)
+    .where(eq(tutorPayments.tutorId, tutorId))
+    .orderBy(desc(tutorPayments.mese), desc(tutorPayments.createdAt))
+}
+
 // ─────────────────────────────────────────────
 // DELETE rimborso (intero) — tutte le scritture contabili collegate
 // spariscono via CASCADE su accounting_entries.reimbursementId.
