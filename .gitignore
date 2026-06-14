@@ -23,10 +23,13 @@ Thumbs.db
 # Documentazione, agenti e vecchi file
 .old/
 .agents/
+.claude/
+.cursor/
+.superpowers/
 docs/
-specs/
 ERROR_LOGS.md
 append-docs.mjs
 # Ignora file markdown nella root tranne README.md
 /*.md
 !/README.md
+
