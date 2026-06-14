@@ -35,6 +35,9 @@ export const API_POLICY: Array<{ prefix: string; roles: Role[] }> = [
 const DEFAULT_ROLES: Role[] = STAFF
 
 export function isPublicApi(path: string): boolean {
+  // Endpoint interni di Nuxt/Nitro (icone UI, sessione, ecc.) iniziano con /api/_
+  // Devono restare accessibili anche senza login (es. icone nella pagina /login).
+  if (path.startsWith('/api/_')) return true
   return PUBLIC_API_PREFIXES.some((p) => path.startsWith(p))
 }
 
