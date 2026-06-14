@@ -1,5 +1,6 @@
 import { CreateBookingSchema } from '#shared/schemas/booking.schema'
 import { createBooking } from '../../services/booking.service'
+import { getLinkedStudentIds } from '../../utils/portal'
 
 // POST /api/portal/bookings
 export default defineEventHandler(async (event) => {
@@ -16,7 +17,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Verifica che lo studentId appartenga a questo genitore
-  const linkedIds = user.linkedStudentIds ?? []
+  const linkedIds = await getLinkedStudentIds(user.id)
   if (!linkedIds.includes(result.data.studentId)) {
     throw createError({ statusCode: 403, statusMessage: 'Non puoi prenotare per questo studente' })
   }

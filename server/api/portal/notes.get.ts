@@ -1,4 +1,5 @@
 import { getPortalNotes } from '../../services/portal.service'
+import { getLinkedStudentIds } from '../../utils/portal'
 
 // GET /api/portal/notes
 export default defineEventHandler(async (event) => {
@@ -6,5 +7,6 @@ export default defineEventHandler(async (event) => {
 
   if (user.role !== 'GENITORE') return []
 
-  return await getPortalNotes(user.linkedStudentIds ?? [])
+  const ids = await getLinkedStudentIds(user.id)
+  return await getPortalNotes(ids)
 })
