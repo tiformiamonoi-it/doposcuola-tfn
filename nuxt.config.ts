@@ -9,7 +9,9 @@ export default defineNuxtConfig({
 
   colorMode: {
     preference: 'light',
-    fallback: 'light'
+    fallback: 'light',
+    classSuffix: '',
+    storageKey: 'tfn-color-mode-v2' // Cambiare chiave ignora la cache dei telefoni!
   },
 
   app: {

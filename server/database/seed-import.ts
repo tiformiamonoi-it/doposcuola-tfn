@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import { parseDump } from './seed/parse-copy'
+import { toArray } from './seed/transforms'
 
 const DRY_RUN = process.argv.includes('--dry-run')
 
@@ -28,6 +29,11 @@ async function main() {
   }
 
   if (DRY_RUN) {
+    const pkg = blocks.get('packages')?.rows[0]
+    const prof = blocks.get('tutor_profiles')?.rows[0]
+    console.log('\n=== CAMPIONE DECODIFICA ARRAY ===')
+    console.log('packages.stati  →', toArray(pkg?.stati ?? null))
+    console.log('tutor_profiles.materie →', toArray(prof?.materie ?? null))
     console.log('\n[DRY RUN] Nessuna modifica al database.')
     return
   }
