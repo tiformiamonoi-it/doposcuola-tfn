@@ -154,9 +154,8 @@ const uscendo = ref(false)
 async function logout() {
   uscendo.value = true
   try {
-    await $fetch('/api/auth/logout', { method: 'POST' })
     await clear()
-    await navigateTo('/login', { replace: true })
+    await navigateTo('/login', { external: true })
   } catch {
     toast.add({ title: 'Errore durante il logout', color: 'error' })
   } finally {

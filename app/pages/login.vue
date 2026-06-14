@@ -94,6 +94,10 @@ async function onSubmit() {
       method: 'POST',
       body:   state,
     })
+    
+    const { fetch: refreshSession } = useUserSession()
+    await refreshSession()
+    
     await navigateTo(res.redirectTo)
   }
   catch (err: unknown) {

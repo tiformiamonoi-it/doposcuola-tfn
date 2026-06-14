@@ -153,8 +153,9 @@ async function cambiaPassword() {
 async function esciDalPortale() {
   loggingOut.value = true
   try {
-    await $fetch('/api/auth/logout', { method: 'POST' })
-    await navigateTo('/login')
+    const { clear } = useUserSession()
+    await clear()
+    await navigateTo('/login', { external: true })
   } catch {
     loggingOut.value = false
   }
