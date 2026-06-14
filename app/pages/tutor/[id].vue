@@ -220,14 +220,23 @@
                     </UBadge>
                   </template>
                   <template #azioni-cell="{ row }">
-                    <UButton
-                      v-if="row.original.stato !== 'PAGATO'"
-                      size="xs"
-                      variant="ghost"
-                      @click="apriPagaRimborso(row.original)"
-                    >
-                      Paga
-                    </UButton>
+                    <div class="flex items-center justify-end gap-1">
+                      <UButton
+                        v-if="row.original.stato !== 'PAGATO'"
+                        size="xs"
+                        variant="ghost"
+                        @click="apriPagaRimborso(row.original)"
+                      >
+                        Paga
+                      </UButton>
+                      <UButton
+                        icon="i-heroicons-trash"
+                        size="xs" color="error" variant="ghost"
+                        title="Elimina rimborso"
+                        :loading="eliminandoRimborso === row.original.id"
+                        @click="eliminaRimborso(row.original)"
+                      />
+                    </div>
                   </template>
                 </UTable>
                 <div v-if="reimbursements.length === 0" class="py-8 text-center text-sm text-slate-400">
@@ -758,6 +767,23 @@ async function creaNuovoRimborso() {
     toast.add({ title: 'Errore nel salvataggio', color: 'error' })
   } finally {
     salvando.value = false
+  }
+}
+
+// ─── Elimina rimborso ─────────────────────────
+const eliminandoRimborso = ref<string | null>(null)
+
+async function eliminaRimborso(r: any) {
+  if (!confirm(`Eliminare il rimborso "${r.descrizione}"? Verranno eliminati anche i relativi movimenti contabili.`)) return
+  eliminandoRimborso.value = r.id
+  try {
+    await $fetch(`/api/tutors/${id}/reimbursements/${r.id}`, { method: 'DELETE' })
+    toast.add({ title: 'Rimborso eliminato', color: 'success' })
+    refreshReimb()
+  } catch (err: any) {
+    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Eliminazione non riuscita', color: 'error' })
+  } finally {
+    eliminandoRimborso.value = null
   }
 }
 
