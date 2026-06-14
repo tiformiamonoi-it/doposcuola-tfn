@@ -78,7 +78,7 @@ export async function listTutors(query: TutorQuery) {
                DATE_TRUNC('month', data) AS mese,
                FLOOR(COALESCE(SUM(compenso_tutor::numeric), 0)) AS compenso_calcolato
         FROM lessons
-        WHERE data >= ${pastStart} AND data <= ${pastEnd}
+        WHERE data >= ${pastStart.toISOString()} AND data <= ${pastEnd.toISOString()}
         GROUP BY tutor_id, DATE_TRUNC('month', data)
       ),
       monthly_payments AS (
@@ -86,7 +86,7 @@ export async function listTutors(query: TutorQuery) {
                DATE_TRUNC('month', mese) AS mese,
                COALESCE(SUM(importo::numeric), 0) AS pagato
         FROM tutor_payments
-        WHERE mese >= ${pastStart} AND mese <= ${pastEnd}
+        WHERE mese >= ${pastStart.toISOString()} AND mese <= ${pastEnd.toISOString()}
         GROUP BY tutor_id, DATE_TRUNC('month', mese)
       )
       SELECT ml.tutor_id AS tutor_id,
@@ -272,7 +272,7 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
              COUNT(*)::text AS num_lezioni,
              COALESCE(SUM(compenso_tutor::numeric), 0)::text AS compenso_grezzo
       FROM lessons
-      WHERE tutor_id = ${tutorId} AND data >= ${pastStart}
+      WHERE tutor_id = ${tutorId} AND data >= ${pastStart.toISOString()}
       GROUP BY DATE_TRUNC('month', data)
       ORDER BY mese DESC
     `),
@@ -285,10 +285,20 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
       .orderBy(desc(tutorPayments.mese)),
   ])
 
-  // Mappa pagamenti per chiave YYYY-MM
+  const [tutorRec] = await db
+    .select({
+      modalitaPagamento: tutorProfiles.modalitaPagamento,
+      importoForfait:    tutorProfiles.importoForfait,
+    })
+    .from(tutorProfiles)
+    .where(eq(tutorProfiles.userId, tutorId))
+    .limit(1)
+
+  // Mappa pagamenti per chiave YYYY-MM (Local Time per evitare shift di fuso orario)
   const payByMonth = new Map<string, { totale: number; proBono: boolean }>()
   for (const p of paymentRows) {
-    const key = new Date(p.mese).toISOString().substring(0, 7)
+    const pDate = new Date(p.mese)
+    const key = `${pDate.getFullYear()}-${String(pDate.getMonth() + 1).padStart(2, '0')}`
     const cur = payByMonth.get(key) ?? { totale: 0, proBono: false }
     payByMonth.set(key, {
       totale:  cur.totale + parseFloat(p.importo),
@@ -296,13 +306,18 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
     })
   }
 
-  const nowKey = now.toISOString().substring(0, 7)
+  const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
   return (lessonRows as any[]).map(row => {
     const meseDate          = new Date(row.mese)
-    const meseKey           = meseDate.toISOString().substring(0, 7)
+    const meseKey           = `${meseDate.getFullYear()}-${String(meseDate.getMonth() + 1).padStart(2, '0')}`
     const compensoGrezzo    = parseFloat(row.compenso_grezzo)
-    const compensoCalcolato = Math.floor(compensoGrezzo)
+    
+    let compensoCalcolato = Math.floor(compensoGrezzo)
+    if (tutorRec?.modalitaPagamento === 'FORFAIT' && tutorRec.importoForfait) {
+      compensoCalcolato = parseFloat(tutorRec.importoForfait as string)
+    }
+
     const pay               = payByMonth.get(meseKey)
     const pagato            = pay?.totale ?? 0
     const residuo           = Math.max(0, compensoCalcolato - pagato)
@@ -380,7 +395,7 @@ export async function getMonthlyPerformance(tutorId: string, months = 6) {
       COUNT(ls.id)::text          AS num_studenti_slot,
       COALESCE(SUM(l.compenso_tutor::numeric), 0)::text AS compenso_totale,
       COALESCE(SUM(
-        CASE WHEN ls.mezza_lezione THEN 0.5 ELSE 1.0 END
+        CASE WHEN l.mezza_lezione THEN 0.5 ELSE 1.0 END
         * COALESCE(
             p.tariffa_oraria::numeric,
             CASE
@@ -394,7 +409,7 @@ export async function getMonthlyPerformance(tutorId: string, months = 6) {
     FROM lessons l
     JOIN lesson_students ls ON ls.lesson_id = l.id
     LEFT JOIN packages p ON p.id = ls.package_id
-    WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate}
+    WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate.toISOString()}
     GROUP BY DATE_TRUNC('month', l.data)
     ORDER BY mese DESC
   `)
@@ -430,10 +445,10 @@ export async function getDetailedStats(tutorId: string, months = 6) {
     db.execute(sql`
       SELECT l.tipo,
              COUNT(DISTINCT l.id)::text AS num_lezioni,
-             COALESCE(SUM(CASE WHEN ls.mezza_lezione THEN 0.5 ELSE 1.0 END), 0)::text AS ore_totali
+             COALESCE(SUM(CASE WHEN l.mezza_lezione THEN 0.5 ELSE 1.0 END), 0)::text AS ore_totali
       FROM lessons l
       JOIN lesson_students ls ON ls.lesson_id = l.id
-      WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate}
+      WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate.toISOString()}
       GROUP BY l.tipo
     `),
 
@@ -442,13 +457,13 @@ export async function getDetailedStats(tutorId: string, months = 6) {
              s.first_name AS first_name,
              s.last_name  AS last_name,
              COUNT(DISTINCT l.id)::text AS num_lezioni,
-             COALESCE(SUM(CASE WHEN ls.mezza_lezione THEN 0.5 ELSE 1.0 END), 0)::text AS ore_totali
+             COALESCE(SUM(CASE WHEN l.mezza_lezione THEN 0.5 ELSE 1.0 END), 0)::text AS ore_totali
       FROM lessons l
       JOIN lesson_students ls ON ls.lesson_id = l.id
       JOIN students s ON s.id = ls.student_id
-      WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate}
+      WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate.toISOString()}
       GROUP BY s.id, s.first_name, s.last_name
-      ORDER BY ore_totali::numeric DESC
+      ORDER BY COALESCE(SUM(CASE WHEN l.mezza_lezione THEN 0.5 ELSE 1.0 END), 0) DESC
       LIMIT 5
     `),
   ])
@@ -508,27 +523,35 @@ export async function createReimbursement(tutorId: string, data: CreateReimburse
 // stato PARZIALE se importoPagato < importo, PAGATO se >=
 // ─────────────────────────────────────────────
 export async function payReimbursement(reimbursementId: string, data: PayReimbursementInput) {
-  const [current] = await db.select()
-    .from(tutorReimbursements)
-    .where(eq(tutorReimbursements.id, reimbursementId))
-    .limit(1)
-
-  if (!current) throw new Error('Rimborso non trovato')
-
-  const importoTotale  = parseFloat(current.importo)
-  const giaPagato      = parseFloat(current.importoPagato)
-  const nuovoPagamento = parseFloat(data.importoPagamento)
-  const nuovoPagato    = giaPagato + nuovoPagamento
-  const nuovoStato: 'PARZIALE' | 'PAGATO' = nuovoPagato >= importoTotale ? 'PAGATO' : 'PARZIALE'
-
   return db.transaction(async (tx) => {
+    // 1. Lock the row to prevent concurrent payment race conditions
+    const [current] = await tx.execute(sql`
+      SELECT * FROM tutor_reimbursements 
+      WHERE id = ${reimbursementId} 
+      FOR UPDATE
+    `)
+    
+    if (!current) throw new Error('Rimborso non trovato')
+
+    const importoTotale  = parseFloat(current.importo as string)
+    const giaPagato      = parseFloat(current.importo_pagato as string)
+    const nuovoPagamento = parseFloat(data.importoPagamento)
+    const nuovoPagato    = giaPagato + nuovoPagamento
+    
+    // Check against overpayment
+    if (nuovoPagato > importoTotale + 0.01) {
+      throw new Error(`Il pagamento (€${nuovoPagamento.toFixed(2)}) eccede l'importo totale rimborsabile (€${(importoTotale - giaPagato).toFixed(2)} rimanenti)`)
+    }
+
+    const nuovoStato: 'PARZIALE' | 'PAGATO' = nuovoPagato >= importoTotale - 0.01 ? 'PAGATO' : 'PARZIALE'
+
     const [updated] = await tx.update(tutorReimbursements)
       .set({
         importoPagato: nuovoPagato.toFixed(2),
         stato:         nuovoStato,
-        dataPagamento: nuovoStato === 'PAGATO' ? new Date() : current.dataPagamento,
+        dataPagamento: nuovoStato === 'PAGATO' ? new Date() : new Date(current.data_pagamento as string ?? Date.now()),
         metodo:        data.metodo,
-        note:          data.note ?? current.note,
+        note:          data.note ?? (current.note as string),
         updatedAt:     new Date(),
       })
       .where(eq(tutorReimbursements.id, reimbursementId))
@@ -540,7 +563,7 @@ export async function payReimbursement(reimbursementId: string, data: PayReimbur
       descrizione:     `Rimborso spese: ${current.descrizione}`,
       categoria:       'rimborso_tutor',
       metodoPagamento: data.metodo,
-      note:            `rimborsoId:${reimbursementId} tutorId:${current.tutorId}`,
+      note:            `rimborsoId:${reimbursementId} tutorId:${current.tutor_id}`,
     })
 
     return updated
