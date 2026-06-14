@@ -571,3 +571,42 @@ export async function payReimbursement(reimbursementId: string, data: PayReimbur
     return updated
   })
 }
+
+// ─────────────────────────────────────────────
+// DELETE compenso tutor — la scrittura contabile collegata sparisce via CASCADE.
+// Il "pagato" del mese è calcolato a runtime, quindi si riallinea da solo.
+// ─────────────────────────────────────────────
+export async function deleteTutorPayment(id: string) {
+  const [row] = await db.delete(tutorPayments).where(eq(tutorPayments.id, id)).returning()
+  if (!row) throw createError({ statusCode: 404, statusMessage: 'Compenso non trovato' })
+  return { ok: true }
+}
+
+// ─────────────────────────────────────────────
+// DELETE rimborso (intero) — tutte le scritture contabili collegate
+// spariscono via CASCADE su accounting_entries.reimbursementId.
+// ─────────────────────────────────────────────
+export async function deleteReimbursement(id: string) {
+  const [row] = await db.delete(tutorReimbursements).where(eq(tutorReimbursements.id, id)).returning()
+  if (!row) throw createError({ statusCode: 404, statusMessage: 'Rimborso non trovato' })
+  return { ok: true }
+}
+
+// ─────────────────────────────────────────────
+// Eliminazione di UNA scrittura parziale di rimborso (dalla contabilità):
+// riduce l'importo già pagato del rimborso e ne ricalcola lo stato.
+// La cancellazione della riga contabile avviene nel chiamante (accounting.service).
+// ─────────────────────────────────────────────
+export async function reduceReimbursementOnEntryDelete(reimbursementId: string, importoEntry: string) {
+  return await db.transaction(async (tx) => {
+    const [r] = await tx.select().from(tutorReimbursements).where(eq(tutorReimbursements.id, reimbursementId)).limit(1)
+    if (!r) return
+    const nuovoPagato = Math.max(0, parseFloat(r.importoPagato) - parseFloat(importoEntry))
+    const totale      = parseFloat(r.importo)
+    const stato: 'DA_PAGARE' | 'PARZIALE' | 'PAGATO' =
+      nuovoPagato <= 0.01 ? 'DA_PAGARE' : (nuovoPagato >= totale - 0.01 ? 'PAGATO' : 'PARZIALE')
+    await tx.update(tutorReimbursements)
+      .set({ importoPagato: nuovoPagato.toFixed(2), stato, updatedAt: new Date() })
+      .where(eq(tutorReimbursements.id, reimbursementId))
+  })
+}
