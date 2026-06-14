@@ -228,6 +228,26 @@
               {{ row.original.tipo === 'USCITA' || row.original.tipo === 'DEBITO' ? '-' : '' }}€ {{ fmt(parseFloat(row.original.importo)) }}
             </span>
           </template>
+          <template #azioni-cell="{ row }">
+            <div class="flex justify-end gap-1">
+              <UButton
+                v-if="isManuale(row.original)"
+                icon="i-heroicons-pencil-square"
+                size="xs" color="neutral" variant="ghost"
+                title="Modifica"
+                @click="apriModifica(row.original)"
+              />
+              <UTooltip v-else text="Movimento automatico: modificalo dal pagamento di origine">
+                <UButton icon="i-heroicons-pencil-square" size="xs" color="neutral" variant="ghost" disabled />
+              </UTooltip>
+              <UButton
+                icon="i-heroicons-trash"
+                size="xs" color="error" variant="ghost"
+                title="Elimina"
+                @click="apriElimina(row.original)"
+              />
+            </div>
+          </template>
         </UTable>
         <div class="mt-4 flex justify-center border-t border-slate-100 pt-4" v-if="metaEntries && metaEntries.totalPages > 1">
           <UPagination v-model:page="filtroEntries.page" :total="metaEntries.total" :items-per-page="filtroEntries.limit" @update:page="caricaEntries" />
@@ -310,6 +330,69 @@
       </template>
     </UModal>
 
+    <!-- ─── MODAL ELIMINA MOVIMENTO (elimina / storno) ─── -->
+    <UModal v-model:open="modalEliminaAperto" title="Elimina movimento">
+      <template #body>
+        <div class="space-y-3">
+          <p class="text-sm text-slate-600">
+            Stai per eliminare il movimento
+            <strong>{{ movimentoDaEliminare?.descrizione }}</strong>
+            (€ {{ movimentoDaEliminare ? fmt(parseFloat(movimentoDaEliminare.importo)) : '' }}).
+          </p>
+          <p v-if="movimentoDaEliminare && isAuto(movimentoDaEliminare)" class="text-sm text-amber-600">
+            ⚠️ È un movimento <strong>automatico</strong> collegato a un pagamento: "Elimina definitivamente"
+            rimuoverà anche il pagamento di origine e ricalcolerà i saldi.
+          </p>
+          <p class="text-sm text-slate-500">
+            Lo <strong>storno</strong> mantiene lo storico creando un movimento opposto (consigliato a fini fiscali).
+          </p>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex justify-end gap-2 w-full">
+          <UButton variant="ghost" @click="modalEliminaAperto = false">Annulla</UButton>
+          <UButton color="neutral" variant="outline" :loading="eliminando === 'storno'" @click="eseguiElimina('storno')">Crea storno</UButton>
+          <UButton color="error" :loading="eliminando === 'delete'" @click="eseguiElimina('delete')">Elimina definitivamente</UButton>
+        </div>
+      </template>
+    </UModal>
+
+    <!-- ─── MODAL MODIFICA MOVIMENTO MANUALE ─── -->
+    <UModal v-model:open="modalModificaAperto" title="Modifica movimento manuale">
+      <template #body>
+        <div class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <UFormField label="Tipo">
+              <USelect v-model="modificaMovimento.tipo" :items="[{label:'Entrata',value:'ENTRATA'},{label:'Uscita',value:'USCITA'},{label:'Credito',value:'CREDITO'},{label:'Debito',value:'DEBITO'},{label:'Nota',value:'NOTA'}]" class="w-full" />
+            </UFormField>
+            <UFormField label="Data">
+              <UInput type="date" v-model="modificaMovimento.data" class="w-full" />
+            </UFormField>
+          </div>
+          <UFormField label="Descrizione">
+            <UInput v-model="modificaMovimento.descrizione" class="w-full" />
+          </UFormField>
+          <div class="grid grid-cols-2 gap-4">
+            <UFormField label="Importo (€)">
+              <UInputNumber v-model="modificaMovimento.importo" :min="0.01" :step="0.01" class="w-full" />
+            </UFormField>
+            <UFormField label="Metodo">
+              <USelect v-model="modificaMovimento.metodoPagamento" :items="['CONTANTI', 'BONIFICO', 'POS', 'ASSEGNO', 'ALTRO']" class="w-full" />
+            </UFormField>
+          </div>
+          <UFormField label="Categoria">
+            <UInput v-model="modificaMovimento.categoria" class="w-full" />
+          </UFormField>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex justify-end gap-2 w-full">
+          <UButton variant="ghost" @click="modalModificaAperto = false">Annulla</UButton>
+          <UButton :loading="salvandoModifica" @click="salvaModifica">Salva modifiche</UButton>
+        </div>
+      </template>
+    </UModal>
+
   </div>
 </template>
 
@@ -370,6 +453,7 @@ const colonneEntries = [
   { accessorKey: 'descrizione', header: 'Descrizione' },
   { accessorKey: 'metodoPagamento', header: 'Metodo' },
   { accessorKey: 'importo', header: 'Importo' },
+  { id: 'azioni', header: '' },
 ]
 
 const colonneFatture = [
@@ -436,6 +520,80 @@ async function salvaMovimento() {
     toast.add({ title: 'Errore', description: 'Impossibile salvare il movimento', color: 'error' })
   } finally {
     salvandoMovimento.value = false
+  }
+}
+
+// ─── Azioni movimenti: elimina (con storno) / modifica (solo manuali) ───
+function isAuto(row: any) {
+  return !!(row.paymentId || row.tutorPaymentId || row.reimbursementId)
+}
+function isManuale(row: any) {
+  return !isAuto(row)
+}
+
+const modalEliminaAperto = ref(false)
+const movimentoDaEliminare = ref<any>(null)
+const eliminando = ref<'delete' | 'storno' | null>(null)
+
+function apriElimina(row: any) {
+  movimentoDaEliminare.value = row
+  modalEliminaAperto.value = true
+}
+
+async function eseguiElimina(mode: 'delete' | 'storno') {
+  if (!movimentoDaEliminare.value) return
+  eliminando.value = mode
+  try {
+    await $fetch(`/api/accounting/entries/${movimentoDaEliminare.value.id}`, { method: 'DELETE', query: { mode } })
+    toast.add({ title: mode === 'storno' ? 'Storno creato' : 'Movimento eliminato', color: 'success' })
+    modalEliminaAperto.value = false
+    movimentoDaEliminare.value = null
+    refreshAll()
+  } catch (err: any) {
+    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Operazione non riuscita', color: 'error' })
+  } finally {
+    eliminando.value = null
+  }
+}
+
+const modalModificaAperto = ref(false)
+const salvandoModifica = ref(false)
+const modificaMovimento = reactive({
+  id: '', tipo: 'USCITA', importo: 0, descrizione: '', categoria: '', metodoPagamento: 'BONIFICO', data: '',
+})
+
+function apriModifica(row: any) {
+  modificaMovimento.id          = row.id
+  modificaMovimento.tipo        = row.tipo
+  modificaMovimento.importo     = parseFloat(row.importo)
+  modificaMovimento.descrizione = row.descrizione
+  modificaMovimento.categoria   = row.categoria ?? ''
+  modificaMovimento.metodoPagamento = row.metodoPagamento ?? 'BONIFICO'
+  modificaMovimento.data        = row.data ? new Date(row.data).toISOString().substring(0, 10) : ''
+  modalModificaAperto.value     = true
+}
+
+async function salvaModifica() {
+  salvandoModifica.value = true
+  try {
+    await $fetch(`/api/accounting/entries/${modificaMovimento.id}`, {
+      method: 'PUT',
+      body: {
+        tipo:            modificaMovimento.tipo,
+        importo:         Number(modificaMovimento.importo),
+        descrizione:     modificaMovimento.descrizione,
+        categoria:       modificaMovimento.categoria || null,
+        metodoPagamento: modificaMovimento.metodoPagamento || null,
+        data:            modificaMovimento.data,
+      },
+    })
+    toast.add({ title: 'Movimento aggiornato', color: 'success' })
+    modalModificaAperto.value = false
+    refreshAll()
+  } catch (err: any) {
+    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Modifica non riuscita', color: 'error' })
+  } finally {
+    salvandoModifica.value = false
   }
 }
 </script>
