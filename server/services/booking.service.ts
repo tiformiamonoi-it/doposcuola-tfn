@@ -17,6 +17,7 @@ export async function createBooking(input: CreateBookingInput, userId: string) {
   return await db.transaction(async (tx) => {
     const [booking] = await tx.insert(bookings).values({
       userId,
+      studentId:      input.studentId,
       studentName:    student.firstName,
       studentSurname: student.lastName,
       studentPhone:   student.studentPhone ?? '',
@@ -49,29 +50,16 @@ export async function listBookingsForPortal(userId: string) {
   })
 }
 
-// Lista prenotazioni per l'admin.
-// Filtra per studentId risolvendo prima il portalUserId dello studente —
-// usa bookings.userId (colonna esistente) invece di bookings.studentId
-// per non dipendere dalla migrazione 0002.
+// Lista prenotazioni per l'admin, filtrabili per studente (usa bookings.studentId)
 export async function listBookingsForAdmin(studentId?: string) {
-  let filterUserId: string | undefined
-
-  if (studentId) {
-    const student = await db.query.students.findFirst({
-      where: eq(students.id, studentId),
-      columns: { portalUserId: true },
-    })
-    filterUserId = student?.portalUserId ?? undefined
-    if (!filterUserId) return []
-  }
-
   return await db.query.bookings.findMany({
-    where: filterUserId ? eq(bookings.userId, filterUserId) : undefined,
+    where: studentId ? eq(bookings.studentId, studentId) : undefined,
     orderBy: [desc(bookings.createdAt)],
     with: {
       subjects: { columns: { name: true } },
       user:     { columns: { firstName: true, lastName: true, email: true } },
-    }
+      student:  { columns: { firstName: true, lastName: true } },
+    },
   })
 }
 

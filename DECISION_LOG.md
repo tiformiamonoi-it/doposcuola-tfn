@@ -15,17 +15,17 @@ Questo log documenta tutte le decisioni tecnologiche chiave adottate durante la 
 | `DECISION_LOG.md` | ✅ Aggiornato |
 | Stack tecnologico scelto | ✅ Definitivo (vedi ADL-003, ADL-004) |
 | Schema database (`server/database/schema.ts`) | ✅ Scritto con Drizzle |
-| Schemi validazione Zod (`shared/schemas/`) | ✅ Scritti per Student, Package, Lesson, Payment |
+| Schemi validazione Zod (`shared/schemas/`) | ✅ Scritti — Student, Package, Lesson, Payment, Tutor, Portal, Booking, Contact |
 | Services: `student.service.ts`, `package.service.ts` | ✅ Scritti — vedi ADL-007 |
 | API Routes: Studenti (5) + Pacchetti (4) | ✅ Scritte — vedi ADL-007 |
 | Services: `lesson.service.ts`, `payment.service.ts`, `accounting.service.ts` | ✅ Scritti — vedi ADL-008 |
 | API Routes: Lezioni (3) + Pagamenti (2) + Contabilità (1) | ✅ Scritte — vedi ADL-008 |
 | Design Document: Evoluzione Piattaforma | ✅ Approvato — vedi ADL-009 |
 | **Fase 7** — Nuxt 4 + Layout Admin + Portale Famiglie + Design System | ✅ Completata — vedi ADL-010 |
-| **Fase 8** — Auth & RBAC + migrazioni DB evoluzione | ✅ Completata — schema + migrazione Supabase applicata + middleware + auth API + pagina login |
+| **Fase 8** — Auth & RBAC + migrazioni DB evoluzione | ✅ Completata — schema + migrazione Supabase + middleware + auth API + login |
 | **Fase 9** — Pagine Vue gestionale interno | ✅ Sprint 1 (Tutor) completato — vedi ADL-012 |
-| **Fase 10** — Note Didattiche (service + API + UI) | ⏳ Dopo Fase 9 |
-| **Fase 11** — Portale Famiglie (login, dashboard, prenota, feedback) | ⏳ Dopo Fase 9+10 |
+| **Fase 10** — Note Didattiche (service + API + UI) | ✅ Completata — vedi ADL-013 |
+| **Fase 11** — Portale Famiglie | ✅ Completata — vedi ADL-014 |
 | **Fase 12** — Funzionalità Aggiuntive (Bollettino, Briefing, Calendario, FORFAIT) | ⏳ Dopo Fase 11 |
 
 ---
@@ -81,28 +81,22 @@ Fase 1 completata: analisi di `.old/` per mappare i flussi logici, identificare 
 
 ### Stato
 **Approvato e Finalizzato** — 12 Giugno 2026
-*(aggiornato: Nuxt 3 → Nuxt 4; ORM risolto definitivamente in ADL-004)*
 
 ### Contesto
-Valutati due scenari architetturali: Scenario A (Nuxt monolite full-stack) vs Scenario B (Vue 3 + backend Go/Python separato). I requisiti di sistema (principalmente operazioni CRUD, contabilità, prenotazioni) e la necessità di massima produttività di sviluppo hanno guidato la decisione.
+Valutati due scenari architetturali: Scenario A (Nuxt monolite full-stack) vs Scenario B (Vue 3 + backend Go/Python separato).
 
 ### Decisione
 Adottare ufficialmente **Scenario A — Nuxt 4 Full-Stack TypeScript**.
 
 | Componente | Scelta | Motivazione |
 |-----------|--------|-------------|
-| **Framework** | Nuxt 4 (non Nuxt 3) | API server + frontend in un unico progetto; Nitro per il runtime server |
-| **Linguaggio** | TypeScript ovunque | Tipi condivisi tra frontend e backend eliminano errori di integrazione |
-| **Validazione** | Zod (condiviso) | Un solo schema usato sia dal browser che dal server (vedi ADL-005) |
-| **Database** | PostgreSQL (Supabase o Vercel Postgres) | Serverless-first, scalabile, relazionale |
-| **ORM** | Drizzle (**definitivo** — vedi ADL-004) | Edge-compatible, zero cold start, SQL trasparente |
-| **UI Components** | Nuxt UI **v4** (Tailwind CSS v4) | Integrazione nativa Nuxt 4, accessibilità WCAG inclusa — vedi ADL-010 per dettagli configurazione |
-| **Icone** | Heroicons via @iconify | Già usate nel frontend legacy, familiari al team |
-
-### Conseguenze
-- Velocità di sviluppo massimizzata: un solo linguaggio, tipi condivisi.
-- Eliminazione della frammentazione (backend Express separato dal frontend Vue).
-- Scalabilità sufficiente per i carichi CRUD senza la complessità di un backend Go/Python.
+| **Framework** | Nuxt 4 | API server + frontend in un unico progetto |
+| **Linguaggio** | TypeScript ovunque | Tipi condivisi tra frontend e backend |
+| **Validazione** | Zod (condiviso) | Un solo schema usato sia dal browser che dal server |
+| **Database** | PostgreSQL (Supabase) | Serverless-first, scalabile, relazionale |
+| **ORM** | Drizzle | Edge-compatible, zero cold start, SQL trasparente |
+| **UI Components** | Nuxt UI **v4** (Tailwind CSS v4) | Integrazione nativa Nuxt 4, accessibilità WCAG inclusa |
+| **Icone** | Heroicons via @iconify | Già usate nel frontend legacy |
 
 ---
 
@@ -111,43 +105,15 @@ Adottare ufficialmente **Scenario A — Nuxt 4 Full-Stack TypeScript**.
 ### Stato
 **Approvato** — 12 Giugno 2026
 
-### Contesto
-ADL-003 lasciava aperta la scelta tra Drizzle e Prisma. Questa voce la chiude definitivamente.
-
-### Problema con Prisma
-
-Prisma usa un "query engine" compilato in Rust (binario nativo). Su ambienti serverless (Vercel, Netlify Edge Functions):
-1. Deve essere inizializzato a ogni cold start → **ritardo 2–5 secondi** sulla prima richiesta dopo inattività
-2. Peso del bundle > 8 MB → incompatibile con i limiti Vercel Edge Functions
-3. Richiede configurazione target distinta per Node.js / Edge / Bun
-
 ### Decisione
 **Drizzle ORM** per tutta la data access layer.
 
 **Motivazioni:**
-- **Zero cold start** — Drizzle è TypeScript puro, nessun binario. Avvio < 10ms.
-- **Edge-first** — Compatibile nativamente con Cloudflare Workers, Vercel Edge, Netlify Edge.
-- **SQL leggibile** — Le query generano SQL esatto e ottimizzabile. Con Prisma il SQL era opaco.
-- **Type-safe** — Lo schema `server/database/schema.ts` è TypeScript puro: il compilatore verifica le query a compile-time.
+- **Zero cold start** — TypeScript puro, nessun binario. Avvio < 10ms.
+- **Edge-first** — Compatibile nativamente con Cloudflare Workers, Vercel Edge.
+- **SQL leggibile** — Le query generano SQL esatto e ottimizzabile.
+- **Type-safe** — Lo schema è TypeScript puro verificato a compile-time.
 - **Bundle size** — Drizzle ~30KB vs Prisma Client ~300KB.
-
-> **Metafora per non tecnici:** Prisma è un montacarichi pesante — potente ma lento ad avviarsi. Drizzle è un cameriere sui pattini a rotelle: leggerissimo, arriva al tavolo quasi istantaneamente.
->
-> **In pratica:** Aprendo l'app dopo ore di inattività, con Prisma il primo clic avrebbe atteso 2–3 secondi. Con Drizzle è istantaneo.
-
-### File implementati in questa sessione
-- `server/database/schema.ts` — 18 tabelle, 10 enum, relazioni complete
-- `server/database/client.ts` — connessione singleton Drizzle + postgres.js
-
-### Comandi PowerShell
-```powershell
-npm install drizzle-orm postgres
-npm install --save-dev drizzle-kit
-```
-
-### Conseguenze
-- Eliminazione totale del cold start.
-- **BREAKING rispetto al legacy:** nessun `@prisma/client`, nessuna cartella `prisma/`. Usare `server/database/schema.ts`.
 
 ---
 
@@ -156,63 +122,29 @@ npm install --save-dev drizzle-kit
 ### Stato
 **Approvato e Implementato** — 12 Giugno 2026
 
-### Contesto
-Il sistema legacy usava `express-validator` solo sul backend, con validazione assente o duplicata sul frontend. Questo ha prodotto inconsistenze e bug silenti (es. pacchetti con `oreAcquistate = 0` salvati nel DB).
-
 ### Decisione
 Tutti i dati in ingresso (form → API → database) passano attraverso schemi Zod definiti in `shared/schemas/` e condivisi tra browser e server.
-
-**Regola architetturale:** Non esiste validazione "locale" a un solo layer. Se uno schema esiste, è condiviso.
 
 ### File implementati
 | File | Cosa valida |
 |------|-------------|
-| `shared/schemas/student.schema.ts` | Anagrafica studente, dati genitore, CF/CAP/PIva italiani |
-| `shared/schemas/package.schema.ts` | Pacchetti ORE/MENSILE, pagamenti, regole incrociate (acconto ≤ prezzo totale) |
-| `shared/schemas/lesson.schema.ts` | Lezioni, studenti (con dedup), slot, calendario, check-duplicate |
-
-**Caratteristiche dei messaggi di errore:**
-- Tutti in italiano chiaro (es. "Il CAP deve essere composto da 5 cifre")
-- Validazione incrociata con `.superRefine()` per regole che coinvolgono più campi
-- Tipi TypeScript inferiti automaticamente dagli schemi
-
-### Comandi PowerShell
-```powershell
-npm install zod
-```
-
-### Conseguenze
-- Un solo punto di verità per le regole di validazione.
-- Errori mostrati nel browser prima ancora di inviare la richiesta al server.
-- Impossibile salvare dati malformati (ore negative, email senza @, ecc.).
+| `shared/schemas/student.schema.ts` | Anagrafica studente, dati genitore, CF/CAP italiani |
+| `shared/schemas/package.schema.ts` | Pacchetti ORE/MENSILE/A_CONSUMO, pagamenti, regole incrociate |
+| `shared/schemas/lesson.schema.ts` | Lezioni, studenti (con dedup), slot, calendario |
+| `shared/schemas/tutor.schema.ts` | Tutor, compensi, rimborsi |
+| `shared/schemas/booking.schema.ts` | Prenotazioni portale, aggiornamento stato |
+| `shared/schemas/portal-user.schema.ts` | Creazione account GENITORE, reset password, flag prenotazione |
+| `shared/schemas/contact.schema.ts` | Form pubblico contatto (client-only, nessun backend) |
 
 ---
 
 ## [ADL-006] Documentazione: DOCUMENTAZIONE_PROGETTO.md come "Bibbia"
 
 ### Stato
-**Approvato** — 12 Giugno 2026 — in attesa di revisione finale
-
-### Contesto
-Per garantire continuità tra sessioni e allineamento del team, è necessario un documento unico che descriva l'architettura completa in linguaggio accessibile a utenti non tecnici.
+**Approvato** — 12 Giugno 2026
 
 ### Decisione
-Il file `DOCUMENTAZIONE_PROGETTO.md` è la fonte di verità primaria del progetto. Contiene:
-
-1. **Il progetto in breve** — cosa fa l'app, chi la usa, le 7 schermate principali
-2. **Struttura Nuxt 4** — cartelle, metafora ristorante, comandi CLI passo per passo
-3. **Validazione Zod** — metafora dogana, esempi schema, comandi installazione
-4. **Macchina a stati pacchetti** — le 6 regole cristallizzate, il bug di concorrenza e la soluzione, tariffe tutor
-5. **Diagrammi Mermaid** — 3 flussi: creazione lezione, prenotazione pubblica, evoluzione stato pacchetto
-6. **Design System** — palette colori, font, regole bottoni, badge stati
-7. **Manuale di collaudo** — 10 test visivi senza codice, eseguibili dall'utente finale
-
-### Regola
-**Nessuna riga di codice applicativo viene scritta prima che questo documento sia approvato dall'utente.**
-
-### Conseguenze
-- Allineamento garantito tra aspettative utente e implementazione.
-- Riferimento permanente per decisioni di design future.
+Il file `DOCUMENTAZIONE_PROGETTO.md` è la fonte di verità primaria del progetto. Contiene architettura completa, macchina a stati pacchetti, design system, manuale di collaudo visuale.
 
 ---
 
@@ -222,36 +154,26 @@ Il file `DOCUMENTAZIONE_PROGETTO.md` è la fonte di verità primaria del progett
 **Implementato** — 12 Giugno 2026
 
 ### Decisione
-Architettura a 3 livelli implementata per le entità Studente e Pacchetto:
+Architettura a 3 livelli implementata per le entità Studente e Pacchetto.
 
-**Layer 1 — Services (`server/services/`)**
+**Services (`server/services/`)**
 | File | Funzioni esportate |
 |------|--------------------|
 | `student.service.ts` | `listStudents`, `getStudentById`, `createStudent`, `updateStudent`, `deactivateStudent` |
 | `package.service.ts` | `listPackages`, `getPackageById`, `createPackage`, `updatePackage`, `computePackageStates`, `recomputeAndSavePackageStates` |
 
-**Layer 2 — API Routes (`server/api/`)**
+**API Routes**
 | Route | Verbo | Funzione |
 |-------|-------|----------|
-| `/api/students` | GET | Lista paginata con filtri (search, active, classe) |
+| `/api/students` | GET | Lista paginata con filtri |
 | `/api/students` | POST | Crea studente — validazione Zod → 201 Created |
 | `/api/students/:id` | GET | Singolo studente — 404 se non trovato |
-| `/api/students/:id` | PUT | Aggiornamento parziale — solo campi inviati |
-| `/api/students/:id` | DELETE | Soft-delete (active=false) — 409 se già disattivato |
-| `/api/packages` | GET | Lista con filtri (studentId, tipo, stati) |
-| `/api/packages` | POST | Crea pacchetto + eventuale pagamento iniziale (transazione) |
-| `/api/packages/:id` | GET | Singolo pacchetto — 404 se non trovato |
-| `/api/packages/:id` | PUT | Aggiornamento + ricalcolo stati — 409 se CHIUSO |
-
-**Macchina a stati** (`computePackageStates`): funzione pura esportata, implementa esattamente le 6 regole del §4 della Bibbia. Chiamata automaticamente su ogni create/update.
-
-**`recomputeAndSavePackageStates`**: funzione di utilità esportata, sarà chiamata da `lesson.service.ts` (Fase 6) dopo ogni scalamento ore.
-
-### Conseguenze
-- Ogni richiesta HTTP è validata da Zod prima di toccare il DB.
-- I pacchetti CHIUSI sono bloccati in scrittura a livello API (409 Conflict).
-- Il soft-delete sugli studenti preserva la storia delle lezioni e dei pagamenti.
-- La transazione atomica in `createPackage` garantisce che pacchetto + pagamento + accounting siano sempre coerenti.
+| `/api/students/:id` | PUT | Aggiornamento parziale |
+| `/api/students/:id` | DELETE | Soft-delete (active=false) |
+| `/api/packages` | GET | Lista con filtri |
+| `/api/packages` | POST | Crea pacchetto + eventuale pagamento iniziale |
+| `/api/packages/:id` | GET | Singolo pacchetto |
+| `/api/packages/:id` | PUT | Aggiornamento + ricalcolo stati |
 
 ---
 
@@ -260,44 +182,11 @@ Architettura a 3 livelli implementata per le entità Studente e Pacchetto:
 ### Stato
 **Implementato** — 12 Giugno 2026
 
-### Decisione architetturale chiave: Opzione A (mapping senza migrazione DB)
-Il campo `fatturaRichiesta` richiesto dall'utente è mappato internamente al campo DB `richiedeFattura` (payments).
-Il campo `fatturaEmessa` è gestito esclusivamente nella tabella `accounting_entries` (già presente nello schema).
-Nessuna migrazione SQL è necessaria. Il Service Layer funge da strato di traduzione.
-
-### Schemi Zod
-| File | Contenuto |
-|------|-----------|
-| `shared/schemas/payment.schema.ts` | `metodoPagamento` ristretto a CONTANTI/BONIFICO, `fatturaRichiesta`, `UpdateInvoiceStatusSchema` |
-
-### Services (`server/services/`)
-| File | Funzioni esportate |
-|------|--------------------|
-| `lesson.service.ts` | `createLesson`, `listLessons`, `getLessonById`, `getLessonCalendar` |
-| `payment.service.ts` | `createPayment`, `toggleInvoiceStatus`, `listPayments` |
-| `accounting.service.ts` | `reverseTransaction`, `getCashFlow`, `getPendingInvoices`, `getNetMargin`, `getDashboard` |
-
-### API Routes (`server/api/`)
-| Route | Verbo | Funzione |
-|-------|-------|----------|
-| `/api/lessons` | GET | Lista paginata con filtri (tutor, studente, data, tipo) |
-| `/api/lessons` | POST | Crea lezione — transazione atomica scalamento ore + compenso |
-| `/api/lessons/:id` | GET | Singola lezione con studenti e ore scalate |
-| `/api/payments` | POST | Registra pagamento — transazione atomica + ricalcolo stati |
-| `/api/payments/:id/invoice` | PUT | Segna fattura emessa/non emessa (aggiorna accounting_entries) |
-| `/api/accounting/dashboard` | GET | Cruscotto: Cassa/Banca totale + ultimi 30gg + fatture in attesa + margine |
-
 ### Garanzie architetturali implementate
 1. **Race condition ore**: `SET ore_residuo = ore_residuo - X` — mai read-modify-write in memoria
-2. **MENSILE**: giorno scalato solo alla prima lezione dello studente per quella data (COUNT check nella transazione)
+2. **MENSILE**: giorno scalato solo alla prima lezione dello studente per quella data
 3. **Penna Indelebile**: `reverseTransaction` crea uno STORNO (importo negativo) — nessun DELETE su accounting_entries
 4. **Separazione Cassa/Banca**: `getCashFlow()` aggrega per metodoPagamento con SUM separato
-5. **Tracciamento Fatture**: `getPendingInvoices()` JOIN payments + accounting_entries — sempre aggiornato in tempo reale
-
-### Conseguenze
-- Tutti i movimenti finanziari sono permanenti e tracciabili (audit trail completo).
-- Il dashboard mostra lo stato finanziario reale senza calcoli a runtime complessi.
-- `toggleInvoiceStatus` non modifica la tabella payments — il pagamento rimane immutabile.
 
 ---
 
@@ -306,12 +195,9 @@ Nessuna migrazione SQL è necessaria. Il Service Layer funge da strato di traduz
 ### Stato
 **Approvato** — 12 Giugno 2026
 
-### Contesto
-Il gestionale nasce come strumento interno. Con questa decisione evolve in una piattaforma di comunicazione completa tra centro, tutor e famiglie. Il design è stato prodotto tramite sessione di brainstorming strutturata e documentato in `docs/superpowers/specs/2026-06-12-platform-evolution-design.md`.
-
 ### Decisioni chiave
 
-**Autenticazione:** `nuxt-auth-utils` con sessioni server cifrate in cookie HttpOnly. Sostituisce il JWT manuale del legacy. Revoca immediata lato server. Installazione: `npm install nuxt-auth-utils`.
+**Autenticazione:** `nuxt-auth-utils` con sessioni server cifrate in cookie HttpOnly.
 
 **4 Ruoli operativi:**
 | Ruolo | Accesso |
@@ -323,44 +209,14 @@ Il gestionale nasce come strumento interno. Con questa decisione evolve in una p
 
 **5 Middleware Nuxt 4:** `auth`, `staff-only`, `admin-or-super`, `admin-only`, `portal-only`.
 
-**Evoluzione database (nessuna tabella rinominata o eliminata):**
+**Evoluzione database:**
 | Modifica | Tabella | Dettaglio |
 |----------|---------|-----------|
 | Aggiunta valore enum | `users.role` | `SUPER_TUTOR` |
 | Nuova colonna FK nullable | `students.portalUserId` | Uno-a-molti: un GENITORE → più studenti (fratelli) |
-| Nuova colonna booleana | `students.abilitatoPrenotazioneOnline` | Flag admin per abilitare/disabilitare prenotazione portale |
-| Nuova colonna obbligatoria | `bookings.userId` | Solo prenotazioni autenticate — flusso anonimo eliminato |
-| 2 nuove colonne nullable | `tutor_profiles` | `modalitaPagamento` (ORE/FORFAIT) + `importoForfait` |
-| Nuova tabella | `student_notes` | Note didattiche INTERNA/FAMIGLIA con autore e link lezione opzionale |
-
-**Prenotazioni:** Il flusso anonimo (`/prenota`) viene eliminato. Chi vuole iscriversi contatta il centro → prova gratuita → iscrizione → l'admin crea l'account portale. Solo utenti GENITORE autenticati possono prenotare.
-
-**Note didattiche:** Tabella `student_notes` con visibilità per ruolo. ADMIN e SUPER_TUTOR possono cancellare tutte le note. TUTOR solo le proprie.
-
-**Compenso tutor ORE/FORFAIT:** I tutor a forfait hanno il compenso mensile fisso in `importoForfait`. Il sistema calcola comunque il costo teorico a ore per ogni lezione — la contabilità mostra il confronto forfait vs. ore reali.
-
-**Funzionalità aggiuntive approvate:**
-- Calendario Intelligente prenotazioni (implementato, nascosto al lancio — attivabile da `system_configs`)
-- Bollettino Settimanale famiglie (email domenicale solo se ci sono note FAMIGLIA quella settimana)
-- Briefing Mattutino admin (pannello "Da fare oggi" — appare solo se ci sono urgenze)
-
-**Decisioni scartate con motivazione:** Vedi Appendice del design document.
-
-### Fasi di implementazione
-| Fase | Contenuto | Dipendenze |
-|------|-----------|-----------|
-| **Fase 7** | Nuxt 4 + Layout Admin + Portale Famiglie + Design System | Nessuna |
-| **Fase 8** | Auth & RBAC + tutte le migrazioni DB | Fase 7 |
-| **Fase 9** | Pagine Vue gestionale interno | Fase 8 |
-| **Fase 10** | Note Didattiche (service + API + UI) | Fase 8 |
-| **Fase 11** | Portale Famiglie | Fase 8 + Fase 10 |
-| **Fase 12** | Funzionalità Aggiuntive | Fase 8 + 10 + 11 |
-
-### Conseguenze
-- Il gestionale diventa una piattaforma multi-ruolo con accesso esterno per le famiglie.
-- La prenotazione anonima è eliminata — accesso solo tramite account gestito dall'admin.
-- Il caso fratelli è gestito nativamente tramite `students.portalUserId` (uno-a-molti).
-- Il flag `abilitatoPrenotazioneOnline` dà controllo totale all'admin senza logiche hardcodate.
+| Nuova colonna booleana | `students.abilitatoPrenotazioneOnline` | Flag admin |
+| Nuova colonna obbligatoria | `bookings.userId` | Solo prenotazioni autenticate |
+| Nuova tabella | `student_notes` | Note INTERNA/FAMIGLIA con autore |
 
 ---
 
@@ -369,139 +225,39 @@ Il gestionale nasce come strumento interno. Con questa decisione evolve in una p
 ### Stato
 **Completato** — 13 Giugno 2026
 
-### Contesto
-Installazione di Nuxt 4 su un progetto esistente (Drizzle + Zod già presenti), configurazione del design system brand Ti Formiamo Noi, e creazione dei due layout Vue: admin con sidebar collassabile e portale famiglie mobile-first.
-
 ### Decisioni chiave
 
 **1. Nuxt UI v4 (non v3)**
-Al momento dell'installazione `@nuxt/ui latest` ha installato la versione **v4.8.2**, non v3 come pianificato. La configurazione è diversa da v3 in tre punti critici:
+Al momento dell'installazione è stata installata la versione v4, con configurazione diversa da v3:
 
-| Aspetto | Nuxt UI v3 (pianificato) | Nuxt UI v4 (installato) |
-|---------|--------------------------|-------------------------|
-| Colori in `app.config.ts` | `ui.primary: 'tfn'` | `ui.colors.primary: 'tfn'` |
-| Gray in `app.config.ts` | `ui.gray: 'slate'` | `ui.colors.neutral: 'slate'` |
-| Wrapper obbligatorio | non richiesto | `<UApp>` richiesto in `app.vue` |
+| Aspetto | Nuxt UI v4 |
+|---------|-----------|
+| Colori in `app.config.ts` | `ui.colors.primary: 'tfn'` |
+| Gray in `app.config.ts` | `ui.colors.neutral: 'slate'` |
+| Wrapper obbligatorio | `<UApp>` richiesto in `app.vue` |
 
-**2. CSS obbligatorio: `@import 'tailwindcss'` e `@import '@nuxt/ui'`**
-Con Nuxt UI v4 + Tailwind CSS v4, il file `app/assets/css/main.css` DEVE iniziare con questi due import. Senza di essi, Tailwind non processa il file e nessun stile viene applicato:
+**2. CSS obbligatorio:** `@import 'tailwindcss'` e `@import '@nuxt/ui'` in `app/assets/css/main.css`.
 
-```css
-@import 'tailwindcss';
-@import '@nuxt/ui';
+**3. DB lazy init via Proxy:** `server/database/client.ts` usa Proxy JavaScript per connettere al DB solo alla prima query.
 
-@theme {
-  --color-tfn-500: #0063a6;
-  /* ... */
-}
-```
-
-**3. Percorso CSS con `compatibilityVersion: 4`**
-Con `future.compatibilityVersion: 4`, Nuxt cambia il `srcDir` da `.` (root) a `app/`. Quindi `~` in `nuxt.config.ts` risolve a `app/`, NON alla root del progetto. Il file CSS deve essere in `app/assets/css/main.css` — non in `assets/css/main.css` alla root.
-
-**4. DB lazy init via Proxy (fix avvio server)**
-`server/database/client.ts` riscritta con pattern Proxy JavaScript: la connessione al database avviene solo alla prima query API, mai al caricamento del modulo. Questo evita crash all'avvio quando `DATABASE_URL` non è ancora caricata da Nuxt.
-
-**5. SSR-safe sidebar: `useCookie` (non `localStorage`)**
-Lo stato collapsed/expanded della sidebar usa `useCookie('sidebar-collapsed')`. `localStorage` causerebbe un hydration mismatch: il server renderizza con lo stato default, il client legge localStorage e cambia → flash visibile. `useCookie` è letto identicamente da server e client.
-
-**6. `npx nuxt prepare` prima di `npm run dev` dopo aver svuotato `.nuxt/`**
-Dopo aver cancellato `.nuxt/` (pulizia cache), Vite cercherà `tsconfig.json` generato da Nuxt. Se `.nuxt/tsconfig.json` non esiste ancora, tutti i file `.vue` falliscono con `failed to resolve "extends":"./.nuxt/tsconfig.json"`. Soluzione: eseguire sempre `npx nuxt prepare` prima di `npm run dev` dopo una pulizia cache.
-
-**7. Dipendenza peer `@paralleldrive/cuid2`**
-`nuxt-auth-utils` (già installato per Fase 8) richiede `@paralleldrive/cuid2` come peer dependency. Installato con `npm install @paralleldrive/cuid2`.
-
-### File creati/modificati
-
-| File | Descrizione |
-|------|-------------|
-| `nuxt.config.ts` | Nuxt 4, moduli, font Google, CSS path, optimizeDeps Vite |
-| `tsconfig.json` | Estende `.nuxt/tsconfig.json` generato automaticamente |
-| `app.config.ts` | `ui.colors.primary: 'tfn'`, `ui.colors.neutral: 'slate'` |
-| `app/assets/css/main.css` | Imports Tailwind+NuxtUI, palette `--color-tfn-*`, font-heading |
-| `app/app.vue` | Entry point con wrapper `<UApp>` obbligatorio |
-| `app/layouts/default.vue` | Sidebar collassabile, 7 voci nav Heroicons outline |
-| `app/layouts/portal.vue` | Header blu, bottom nav mobile, desktop nav orizzontale |
-| `app/pages/index.vue` | Pagina temporanea verifica design system |
-| `app/pages/portale/index.vue` | Pagina portale con `definePageMeta({ layout: 'portal' })` |
-| `server/database/client.ts` | Lazy Proxy init — evita crash avvio senza DB reale |
-| `.env` | Valori placeholder per sviluppo locale |
-| `.env.example` | Template committato per onboarding |
-| `.gitignore` | Esclude `.nuxt`, `.output`, `.env`, `node_modules` |
-
-### Comandi PowerShell di riferimento
-
-```powershell
-# Installa dipendenze
-npm install nuxt @nuxt/ui @nuxtjs/google-fonts @iconify-json/heroicons
-npm install @paralleldrive/cuid2
-
-# Genera tipi Nuxt (obbligatorio dopo nuxt install o dopo aver svuotato .nuxt/)
-npx nuxt prepare
-
-# Avvia dev server
-npm run dev
-
-# Se si svuota .nuxt/ per debug:
-Remove-Item -Recurse -Force .nuxt
-npx nuxt prepare
-npm run dev
-```
-
-### Conseguenze
-- Il progetto ha ora un design system completo e funzionante basato su Nuxt UI v4.
-- Il tema brand TFN (#0063A6) è attivo come colore `primary` in tutti i componenti UI.
-- I due layout (admin e portale) sono pronti — le pagine interne saranno create nelle Fasi 9-11.
-- Il DB si connette solo su richiesta — nessun crash in sviluppo senza PostgreSQL avviato.
+**4. SSR-safe sidebar:** `useCookie('sidebar-collapsed')` invece di `localStorage`.
 
 ---
 
 ## [ADL-011] Modulo Pacchetti a Consumo
 
 ### Stato
-**Completato** � 13 Giugno 2026
-
-### Contesto
-� stato richiesto di aggiungere un terzo tipo di pacchetto (A_CONSUMO) oltre a quelli esistenti (ORE, MENSILE). Questo pacchetto ha una logica prepagata e ricaricabile, dove il cliente paga un importo che viene convertito in ore in base a una 	ariffaOraria specifica, senza limiti di validit� temporale intrinseci (la scadenza � opzionale).
+**Completato** — 13 Giugno 2026
 
 ### Decisioni chiave
 
-**1. Architettura Data Model (Approccio B)**
-Invece di stravolgere la tabella packages, si � scelto di mantenere la struttura esistente aggiungendo semplicemente 	ariffaOraria. Per gestire le ricariche successive, � stata creata la nuova tabella package_recharges che funge da "libretto". Ad ogni ricarica, la tabella packages accumula le ore e i costi nei totali storici (oreAcquistate, prezzoTotale).
+**1. Architettura Data Model:** nuova tabella `package_recharges` per il libretto ricariche. La tabella `packages` accumula ore e costi nei totali storici.
 
-**2. Transazioni Atomiche**
-Sia la creazione del pacchetto che la successiva ricarica (echargePackage in package.service.ts) operano all'interno di una singola transazione Drizzle che:
-- Aggiunge le ore al pacchetto (e aggiorna i residui).
-- Inserisce un record nel libretto package_recharges.
-- Se � previsto un pagamento immediato, registra in payments e genera il movimento ccountingEntries.
-- Ricalcola gli stati del pacchetto (computePackageStates).
+**2. Transazioni Atomiche:** creazione pacchetto e ricarica (`rechargePackage`) usano singola transazione Drizzle che: aggiunge ore, inserisce record nel libretto, registra in payments, aggiorna accounting_entries, ricalcola stati.
 
-**3. Correzione Zod (Zod v4)**
-Si � scoperto che la codebase adotta una versione recente di Zod (v4+), che non accetta pi� la sintassi equired_error come oggetto per i metodi base come z.number(), ma richiede { message: "..." }. I file schema sono stati fixati tramite refactoring di massa (message al posto di equired_error).
+**3. Correzione Zod v4:** migrazione massiva da `required_error` a `message` in tutti gli schemi.
 
-### File creati/modificati
-- server/database/schema.ts � Aggiunta 	ariffaOraria, nuova tabella packageRecharges.
-- shared/schemas/package.schema.ts � Modificato PackageTypeEnum e aggiunta RechargePackageSchema.
-- server/services/package.service.ts � Implementata logica transazionale in echargePackage e modifica a createPackage.
-- server/api/packages/[id]/recharge.post.ts & echarges.get.ts � Nuovi endpoint.
-- pp/pages/pacchetti/index.vue e impostazioni/index.vue � UI di creazione e gestione template a consumo con stima automatica delle ore in base alla tariffa.
-- pp/pages/studenti/[id].vue � Modal di Ricarica e consultazione Libretto Storico aggiunte alla vista studente.
-
-### Conseguenze
-- Il modulo si integra nativamente senza intaccare i calcoli delle lezioni esistenti.
-- Totale compatibilit� con i compensi dei tutor (le ore vengono scalate allo stesso modo).
-- Le transazioni evitano stati parziali in cui le ore vengono accreditate senza tracciamento contabile.
-
-
-**4. Tabelle e UI (Nuxt UI v4)**
-Le tabelle sono state aggiornate in tutto l'applicativo per usare i template slot corretti introdotti da Nuxt UI v4 (basato su TanStack Table). Gli slot '-data' sono stati sostituiti da '-cell'. Inoltre, � stata migliorata la UI dei pacchetti: la colonna residuo ora mostra in maniera inequivocabile i giorni per i pacchetti mensili e rimuove i decimali superflui (.0) per le ore.
-
-**5. Validazione CUID2 (Zod)**
-La libreria di generazione ID nel DB produce CUIDv2, ma Zod '.cuid()' valida solo CUIDv1. Si � deciso di utilizzare '.min(1)' negli schemi condivisi per prevenire fallimenti di validazione sui nuovi formati ID mantenendo la sicurezza delle API.
-
-**6. Macchina a Stati - ESAURITO per Giorni**
-Per i pacchetti MENSILI, la regola per calcolare lo stato ESAURITO non valuta pi� solo le ore, ma considera il pacchetto ESAURITO anche se i giorni residui arrivano a zero, anche in presenza di un plafond ore formalmente avanzato.
-
+**4. Macchina a Stati - ESAURITO per Giorni:** pacchetto MENSILE → ESAURITO anche se i giorni residui arrivano a zero (non solo le ore).
 
 ---
 
@@ -510,49 +266,176 @@ Per i pacchetti MENSILI, la regola per calcolare lo stato ESAURITO non valuta pi
 ### Stato
 **Completato** — 13 Giugno 2026
 
-### Contesto
-Fase 9 e' la costruzione delle pagine Vue del gestionale interno. Lo Sprint 1 copre il modulo tutor completo: registrazione account tutor, gestione compensi mensili, rimborsi spese, statistiche di performance. Il modulo era un placeholder "Sezione in arrivo".
+### Decisioni chiave
+
+**1. Architettura a batch query (no N+1):** `listTutors` esegue 4 query in parallelo via `Promise.all`.
+
+**2. CTE SQL per arretrati in PostgreSQL:** alias CTE in snake_case senza virgolette.
+
+**3. Campi monetari come `z.string()` (deliberata):** i service usano `parseFloat()` internamente.
+
+**4. PRO_BONO:** nessuna registrazione contabile per pagamenti pro bono.
+
+**5. Rimborsi parziali con accumulo:** `DA_PAGARE` → `PARZIALE` → `PAGATO`.
+
+**6. `USwitch` invece di `UToggle` in Nuxt UI v4.**
+
+---
+
+## [ADL-013] Fase 10 — Note Didattiche
+
+### Stato
+**Completato** — 13 Giugno 2026
 
 ### Decisioni chiave
 
-**1. Architettura a batch query (no N+1)**
-`listTutors` esegue 4 query in parallelo via `Promise.all`: lista utenti+profili, somma lezioni per tutor (mese corrente), somma pagamenti effettuati, CTE SQL per arretrati mensili. Nessuna query dentro il loop.
+Note con visibilità INTERNA/FAMIGLIA. ADMIN e SUPER_TUTOR possono cancellare tutte le note. TUTOR solo le proprie. Componente `StudentNoteFeed` estratto come componente separato per riuso sia nel gestionale che nel portale.
 
-**2. CTE SQL per arretrati in PostgreSQL**
-Gli arretrati mensili sono calcolati con una CTE SQL via `db.execute(sql...)`. Alias CTE in snake_case senza virgolette (`tutor_id`, `mesi_arretrati`, `totale_arretrati`) — le virgolette su camelCase causano problemi nei driver PostgreSQL.
+---
 
-**3. Campi monetari come `z.string()` (deliberata)**
-Tutti i campi monetari negli Zod schemas tutor (`importo`, `importoForfait`, `importoPagamento`) sono `z.string()`. I service usano `parseFloat()` internamente. Coerente con il layer di validazione esistente.
+## [ADL-014] Fase 11 — Portale Famiglie
 
-**4. PRO_BONO: nessuna registrazione contabile**
-Se `payTutor` riceve `proBono: true`, il pagamento viene registrato con `importo=0` e `stato='PRO_BONO'`, senza creare record in `accountingEntries`.
+### Stato
+**Completato** — 13 Giugno 2026
 
-**5. Rimborsi parziali con accumulo**
-`payReimbursement` accumula l'importo pagato: `DA_PAGARE` -> `PARZIALE` -> `PAGATO`. Ogni pagamento (anche parziale) crea un record USCITA in `accountingEntries`.
+### Contesto
+Costruzione del Portale Famiglie: area riservata ai GENITORE per visualizzare note didattiche, richiedere prenotazioni e gestire il proprio account. Più pannello admin nella scheda studente e form pubblico `/prenota` per nuove famiglie.
 
-**6. Protezione TUTOR nella pagina dettaglio**
-La pagina `/tutor/[id]` usa middleware `staff-only`. I TUTOR vedono solo il proprio profilo. Confronto: `String(sessionUser.id) !== id` (cast obbligatorio: `sessionUser.id` e' `number`, `route.params.id` e' `string`).
-
-**7. `USwitch` invece di `UToggle` in Nuxt UI v4**
-Il componente toggle si chiama `USwitch` in Nuxt UI v4. Il linter del progetto lo corregge automaticamente.
-
-**8. `await` obbligatorio in try/catch per Promise async**
-In route handler, `return service()` senza `await` fa sfuggire gli errori al `try/catch`. Fix: `return await service()`.
-
-### File creati
+### File implementati
 
 | File | Descrizione |
 |------|-------------|
-| `shared/schemas/tutor.schema.ts` | 6 Zod schemas: CreateTutor, UpdateTutor, TutorQuery, PayTutor, CreateReimbursement, PayReimbursement |
-| `server/services/tutor.service.ts` | 12 funzioni di business logic |
-| `server/api/tutors/` | 10 route API (CRUD + compensation + pay + performance + stats + reimbursements) |
-| `app/pages/tutor/index.vue` | Lista tutor: 4 KPI, filtri con debounce, UTable v4, modal Crea/Liquida |
-| `app/pages/tutor/[id].vue` | Dettaglio tutor: 4 tab, 5 modal, protezione TUTOR RBAC |
+| `shared/schemas/booking.schema.ts` | CreateBookingSchema, UpdateBookingStatusSchema |
+| `shared/schemas/portal-user.schema.ts` | CreatePortalAccessSchema, ResetPortalPasswordSchema, UpdatePortalFlagSchema |
+| `shared/schemas/contact.schema.ts` | PublicContactSchema (client-only, nessun backend) |
+| `server/services/portal.service.ts` | getPortalStudents, getPortalNotes, checkPrenotazioneAbilitata |
+| `server/services/booking.service.ts` | createBooking, listBookingsForPortal, listBookingsForAdmin, updateBookingStatus |
+| `server/services/portal-user.service.ts` | createPortalAccount (con logica force), getPortalAccess, resetPortalPassword, updatePrenotazioneFlag |
+| `server/api/portal/students.get.ts` | GET studenti collegati al GENITORE |
+| `server/api/portal/notes.get.ts` | GET note FAMIGLIA |
+| `server/api/portal/bookings.get.ts` | GET prenotazioni del GENITORE |
+| `server/api/portal/bookings.post.ts` | POST nuova prenotazione |
+| `server/api/portal/profile.put.ts` | PUT aggiorna profilo + cambio password |
+| `server/api/admin/students/[id]/portal-access.get.ts` | GET stato account portale (admin) |
+| `server/api/admin/students/[id]/portal-access.post.ts` | POST crea/collega account GENITORE |
+| `server/api/admin/students/[id]/portal-access.put.ts` | PUT reset password / toggle prenotazione |
+| `server/api/admin/bookings/index.get.ts` | GET lista prenotazioni admin |
+| `server/api/admin/bookings/[id]/status.put.ts` | PUT conferma/cancella prenotazione |
+| `app/pages/portale/index.vue` | Dashboard GENITORE con benvenuto |
+| `app/pages/portale/note.vue` | Feed note FAMIGLIA |
+| `app/pages/portale/prenota.vue` | Wizard 3-step prenotazione lezione |
+| `app/pages/portale/profilo.vue` | Account + figli collegati + cambio password + logout |
+| `app/layouts/portal.vue` | Voce Prenota condizionale (solo se abilitato) |
+| `app/pages/studenti/[id].vue` | Pannello "Accesso Portale" + prenotazioni PENDING |
+| `app/pages/prenota.vue` | Form pubblico richiesta contatto (client-only, nessun backend) |
 
-### Commit range
-`6e95794` -> `81014dc` — 13 commit
+### Decisioni architetturali prese in implementazione (deviazioni dal piano originale)
+
+**1. Genitore con più figli — flow in due step con conferma**
+
+Il piano originale prevedeva un errore 409 se l'email era già in uso. L'implementazione reale usa un flow in due step:
+- Prima chiamata senza `force`: se l'email esiste come GENITORE, il backend restituisce `{ requiresConfirmation: true, existingUser: {...} }` (non un errore HTTP)
+- Il frontend mostra un banner arancione di conferma con nome e email del genitore già registrato
+- Seconda chiamata con `force: true`: collega lo studente all'account esistente **senza modificare la password**
+
+**Motivazione:** Un genitore con due figli nello stesso centro deve poter usare le stesse credenziali senza che il secondo collegamento resetti la password del primo figlio.
+
+**2. `bookings.userId` invece di `bookings.studentId` per filtrare prenotazioni admin**
+
+La migrazione `0002_mushy_raider.sql` (che aggiunge `student_id` a `bookings`) non è ancora stata applicata a Supabase perché richiede la porta Direct Connection (5432). Per evitare errori 500, `listBookingsForAdmin` risolve `student.portalUserId` e filtra per `bookings.userId` — funziona con le colonne già esistenti.
+
+**3. `portal-only` middleware espanso per ADMIN/SUPER_TUTOR**
+
+Il piano prevedeva il middleware solo per GENITORE. Implementazione: ADMIN e SUPER_TUTOR possono accedere a `/portale` in modalità "preview" per testare l'esperienza genitore. Le API portal restituiscono `[]` (lista vuota) invece di 403 per questi ruoli, evitando crash SSR.
+
+**4. Campi opzionali in `UpdateStudentSchema` con `.refine()` Zod v4**
+
+I campi email, telefono, CAP, CF dello studente e genitore erano marcati obbligatori nel vecchio schema. Con Zod v4, il pattern per campi opzionali che accettano stringa vuota è:
+```typescript
+z.string().refine(v => !v || /regex/.test(v), 'messaggio').optional().nullable()
+```
+
+**5. `|| null` invece di `|| undefined` nei body PUT studente**
+
+`undefined` è omesso dalla serializzazione JSON — il campo non arriva al server. `null` invece è incluso — Drizzle imposta il campo a NULL nel DB. Questo era il motivo per cui le modifiche ai campi facoltativi non venivano salvate.
+
+**6. Auto-prefill modal creazione accesso portale**
+
+Il modal si apre con email, nome e cognome pre-compilati da `studente.parentEmail` e `studente.parentName`. L'admin non deve riscrivere dati già presenti nella scheda studente.
+
+**7. Shortcut portale nella sidebar gestionale**
+
+Aggiunte icone in fondo alla sidebar `default.vue` per accedere rapidamente a `/portale` e `/prenota`. Visibili solo ad ADMIN e SUPER_TUTOR.
+
+### Pending tecnico
+
+- **Migrazione `0002_mushy_raider.sql`**: ✅ APPLICATA. La nota precedente (che la indicava come non applicata) era errata. La migrazione è in produzione, come dimostrato dall'uso effettivo di `lessons.mezza_lezione` e `bookings.student_id` (entrambe introdotte dalla 0002) in tutto il codice. Nessun pending su questa migrazione.
 
 ### Conseguenze
-- Modulo tutor completamente operativo: creazione account, compensi, rimborsi, statistiche.
-- I tutor possono fare login e vedere solo il proprio profilo (RBAC corretto).
-- Dashboard principale (`/`) rimane placeholder — Sprint 2 da pianificare.
+- Il gestionale è ora una piattaforma multi-ruolo con accesso esterno per le famiglie.
+- Il caso fratelli (stesso genitore, più figli) è gestito nativamente con flow di conferma.
+- Il flag `abilitatoPrenotazioneOnline` dà controllo totale all'admin senza logiche hardcodate.
+- Il form pubblico `/prenota` è client-only: nessun dato viene inviato al backend (riduce spam e carico).
+
+---
+
+## [2026-06-13] Logica "Mezza Lezione"
+
+**Decisione:**
+La spunta "Mezza Lezione" è applicata globalmente all'intera lezione (non al singolo studente).
+
+**Regole di Business (CRITICHE):**
+1. **Studenti:** scalano **SEMPRE** 1.0 ora dal proprio pacchetto (mai 0.5).
+2. **Tutor:** pagato per **0.5 ore** se la lezione è "Mezza Lezione".
+
+---
+
+## [2026-06-13] Fix Compatibilità Nuxt UI v4 e Zod CUID2
+
+**Decisioni:**
+1. **Nuxt UI v4 Object Binding:** In Nuxt UI v4, `USelectMenu` con array di oggetti non usa `value-attribute`. Il componente associa l'intero oggetto al `v-model`. La primitiva viene estratta con `item?.value` prima di inviare all'API.
+2. **CUID2 vs CUID1 in Zod:** Migrazione massiva da `.cuid()` a `.cuid2()` in tutti i file `shared/schemas/*.ts`.
+3. **Drizzle Relational Queries:** `listLessons` migrato a `db.query.lessons.findMany({ with: { lessonStudents: true, ... } })` per evitare "0 studenti" nel calendario.
+
+---
+
+## [2026-06-13] Completamento Ricariche "A Consumo" ed UX Pacchetti
+
+**Decisioni:**
+1. **Pagamento Parziale Ricarica:** `RechargePackageSchema` accetta oggetto nidificato `pagamentoIniziale`.
+2. **Estrazione Componenti UI:** `ModalRicaricaPacchetto.vue`, `ModalLibrettoRicariche.vue`, `ModalPagamentoPacchetto.vue` come componenti globali.
+3. **Fix Dropdown Nuxt UI v4:** evento corretto per `UDropdownMenu` items è `onSelect` (non `click`).
+4. **Badge "DA_PAGARE":** colore neutro (grigio) se il pacchetto ha ancora > 90% del tempo disponibile.
+
+---
+
+## [2026-06-14] Ottimizzazione Performance Navigazione e Bugfix Zod
+
+**Decisioni:**
+1. **Navigazione Istantanea SSR (Nuxt 4 / Vue 3 Suspense):** Tutte le chiamate API all'interno di <script setup> nelle pagine (pp/pages/**/*.vue) sono state migrate da wait useFetch a useLazyFetch (senza wait). L'uso di wait bloccava la transizione della rotta lato client finch� il server non rispondeva, causando la percezione di un'app "lentissima". Ora la navigazione � immediata e le pagine gestiscono lo stato pending con gli Skeleton di Nuxt UI.
+2. **Validazione Zod Campi Vuoti:** Negli schemi condivisi (es. StudentSchema), i campi opzionali che prevedono un formato specifico (Regex per CF, CAP, Telefono, Email) usano il pattern z.union([z.string().regex(...), z.literal(''), z.null(), z.undefined()]) invece di .refine(v => !v || regex). Questo garantisce compatibilit� nativa al 100% con i form di Nuxt UI quando il campo viene toccato e poi svuotato.
+3. **Calcolo Data Inizio Pacchetto:** Quando si seleziona uno studente in "Nuovo Pacchetto", il sistema cerca in background i suoi pacchetti storici e imposta la data di inizio del nuovo pacchetto al **giorno successivo alla scadenza dell'ultimo pacchetto attivo**, garantendo continuit� senza accavallamenti.
+4. **Eliminazione Matching Manuale:** Aggiunto endpoint DELETE /api/admin/bookings/:id per permettere l'eliminazione dei badge inseriti manualmente nel tabellone di matching giornaliero.
+
+---
+
+## [ADL-015] Audit & Remediation — 14 Giugno 2026
+
+### Stato
+**In corso** — branch `fix/audit-remediation`
+
+### Contesto
+Audit completo della webapp. Trovati e corretti diversi problemi (bug, discrepanze, RBAC, sicurezza).
+
+### Correzioni applicate
+1. **Sicurezza API (CRITICO):** 46/68 route `/api/**` erano prive di autenticazione. Aggiunta guardia globale `server/middleware/01.auth-guard.ts` + policy ruoli in `server/utils/auth-policy.ts`. Ogni route API ora richiede login + ruolo ammesso; gli endpoint interni `/api/_*` (icone, sessione) restano pubblici.
+2. **Crash compensi tutor (ALTO):** `getMonthlyCompensation` referenziava una tabella `tutors` inesistente → corretto su `tutorProfiles`. Ripristinata anche la logica FORFAIT.
+3. **Conti pacchetti (ALTO):** `updatePackage` ora ricalcola `importoResiduo` quando cambia il prezzo e mantiene `giorniResiduo` nel calcolo stati (MENSILI).
+4. **RBAC contabilità (ALTO):** pagina `/contabilita` portata a middleware `admin-only` (SUPER_TUTOR escluso, come da ADL-009); API contabili ristrette ad ADMIN dalla guardia globale.
+5. **Coerenza prenotazioni (MEDIO):** `listBookingsForAdmin` usa direttamente `bookings.studentId` (rimosso workaround obsoleto via `portalUserId`).
+6. **Sessione genitore (MEDIO):** gli ID dei figli collegati vengono risolti dal DB ad ogni richiesta (no più staleness della sessione).
+7. **Performance DB (BASSO):** indici GIN su `packages.stati` e trigram per le ricerche per nome.
+8. **Pulizia (BASSO):** rimozione script/file temporanei, encoding €.
+
+### Nota migrazioni
+La migrazione `0002_mushy_raider.sql` È applicata. La precedente nota in ADL-014 era errata.
