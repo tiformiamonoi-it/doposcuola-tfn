@@ -72,7 +72,7 @@ definePageMeta({
 })
 useHead({ title: 'Note — Portale Famiglie' })
 
-const { data, pending } = await useFetch('/api/portal/notes')
+const { data, pending } = useLazyFetch('/api/portal/notes')
 const notes = computed(() => (data.value as any[]) ?? [])
 
 function formatDate(dateStr: string) {
@@ -83,3 +83,4 @@ function formatDate(dateStr: string) {
   })
 }
 </script>
+

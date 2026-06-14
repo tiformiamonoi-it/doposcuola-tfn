@@ -33,11 +33,10 @@ export async function getPortalAccess(studentId: string) {
   return student
 }
 
-// Crea o collega un account GENITORE allo studente.
-// Se l'email esiste già come GENITORE (es. genitore con più figli),
-// collega quell'account allo studente e genera una nuova password temporanea.
-// Se l'email appartiene a un account staff (ADMIN/TUTOR/…), errore chiaro.
-export async function createPortalAccount(input: CreatePortalAccessInput) {
+// Crea un nuovo account GENITORE o, se l'email esiste già, restituisce
+// una richiesta di conferma senza fare nulla (force=false).
+// Con force=true collega lo studente all'account esistente senza cambiare la password.
+export async function createPortalAccount(input: CreatePortalAccessInput, force = false) {
   const existing = await db.query.users.findFirst({
     where: eq(users.email, input.email.toLowerCase()),
   })
@@ -46,25 +45,30 @@ export async function createPortalAccount(input: CreatePortalAccessInput) {
     if (existing.role !== 'GENITORE') {
       throw createError({
         statusCode: 409,
-        statusMessage: 'Questa email è già usata da un account staff. Usa un\'altra email per il genitore.',
+        statusMessage: 'Questa email è usata da un account staff. Usa un\'altra email per il genitore.',
       })
     }
 
-    // Account GENITORE già esistente → collegalo a questo studente
-    // (caso normale: genitore con più figli nel centro)
-    const tempPassword = generateTempPassword()
-    const hashedPassword = await bcrypt.hash(tempPassword, 10)
+    if (!force) {
+      // Segnala al frontend che serve conferma — non fa nulla
+      return {
+        requiresConfirmation: true as const,
+        existingUser: {
+          id:        existing.id,
+          email:     existing.email,
+          firstName: existing.firstName,
+          lastName:  existing.lastName,
+        },
+      }
+    }
 
-    await db.update(users)
-      .set({ password: hashedPassword, updatedAt: new Date() })
-      .where(eq(users.id, existing.id))
-
+    // force=true: collega lo studente all'account esistente, PASSWORD INVARIATA
     await db.update(students)
       .set({ portalUserId: existing.id, updatedAt: new Date() })
       .where(eq(students.id, input.studentId))
 
     const { password: _pw, ...safeUser } = existing
-    return { user: safeUser, tempPassword }
+    return { ok: true, user: safeUser, alreadyExisted: true as const }
   }
 
   const tempPassword = generateTempPassword()
@@ -85,7 +89,7 @@ export async function createPortalAccount(input: CreatePortalAccessInput) {
       .where(eq(students.id, input.studentId))
 
     const { password: _pw, ...safeUser } = user
-    return { user: safeUser, tempPassword }
+    return { ok: true, user: safeUser, tempPassword, alreadyExisted: false as const }
   })
 }
 

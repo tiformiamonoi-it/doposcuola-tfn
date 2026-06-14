@@ -201,7 +201,7 @@
 import { CreateStudentSchema } from '#shared/schemas/student.schema'
 import { normalizzaTelefono } from '~/utils/phone'
 
-definePageMeta({ middleware: ['staff-only'] })
+definePageMeta({ middleware: ['admin-or-super'] })
 
 const router = useRouter()
 const toast = useToast()
@@ -251,7 +251,7 @@ const pagina = ref(1)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 // ─── Fetch studenti ───
-const { data, pending, refresh } = await useFetch('/api/students', {
+const { data, pending, refresh } = useLazyFetch('/api/students', {
   query: computed(() => ({
     search:  search.value   || undefined,
     active:  filtroAttivo.value === 'all' ? undefined : filtroAttivo.value,

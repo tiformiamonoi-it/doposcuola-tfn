@@ -10,6 +10,7 @@ export default defineNuxtConfig({
   modules: [
     '@nuxt/ui',
     '@nuxtjs/google-fonts',
+    'nuxt-auth-utils',
   ],
 
   googleFonts: {
@@ -22,4 +23,10 @@ export default defineNuxtConfig({
   },
 
   css: ['~/assets/css/main.css'], // ~ risolve a app/ con compatibilityVersion: 4
+
+  vite: {
+    optimizeDeps: {
+      include: ['@vue/devtools-core', '@vue/devtools-kit'],
+    },
+  },
 })

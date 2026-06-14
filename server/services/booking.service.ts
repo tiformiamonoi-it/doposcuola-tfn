@@ -1,6 +1,6 @@
-import { eq, desc } from 'drizzle-orm'
+import { eq, desc, sql } from 'drizzle-orm'
 import { db } from '../database/client'
-import { bookings, bookingSubjects, students } from '../database/schema'
+import { bookings, bookingSubjects, students, closureDates } from '../database/schema'
 import type { CreateBookingInput, UpdateBookingStatusInput } from '#shared/schemas/booking.schema'
 
 // Crea una prenotazione dal portale famiglie
@@ -14,6 +14,23 @@ export async function createBooking(input: CreateBookingInput, userId: string) {
     throw createError({ statusCode: 404, statusMessage: 'Studente non trovato' })
   }
 
+  const dateObj = new Date(input.dataDesiderata)
+  
+  // 1. Controllo Domenica (0 = Domenica)
+  if (dateObj.getDay() === 0) {
+    throw createError({ statusCode: 400, statusMessage: 'Impossibile prenotare di Domenica' })
+  }
+
+  // 2. Controllo Chiusure
+  const targetDateStr = dateObj.toISOString().split('T')[0]
+  const isClosed = await db.query.closureDates.findFirst({
+    where: sql`DATE(${closureDates.date}) = ${targetDateStr}`
+  })
+  
+  if (isClosed) {
+    throw createError({ statusCode: 400, statusMessage: 'Il centro è chiuso in questa data' })
+  }
+
   return await db.transaction(async (tx) => {
     const [booking] = await tx.insert(bookings).values({
       userId,
@@ -21,9 +38,9 @@ export async function createBooking(input: CreateBookingInput, userId: string) {
       studentName:    student.firstName,
       studentSurname: student.lastName,
       studentPhone:   student.studentPhone ?? '',
-      requestedDate:  new Date(input.dataDesiderata),
+      requestedDate:  dateObj,
       notes:          input.noteOrario ?? null,
-      status:         'PENDING',
+      status:         'CONFIRMED',
     }).returning()
 
     if (input.materie.length > 0) {
@@ -45,7 +62,13 @@ export async function listBookingsForPortal(userId: string) {
     where: eq(bookings.userId, userId),
     orderBy: [desc(bookings.createdAt)],
     with: {
-      subjects: { columns: { name: true, assignedSlot: true } },
+      subjects: {
+        with: {
+          assignedTutor: {
+            columns: { firstName: true, lastName: true }
+          }
+        }
+      },
     }
   })
 }

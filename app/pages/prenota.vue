@@ -104,7 +104,7 @@ const errors = reactive<Record<string, string>>({})
 const inviando = ref(false)
 const inviato = ref(false)
 
-function inviaRichiesta() {
+async function inviaRichiesta() {
   // Reset errori
   for (const key of Object.keys(errors)) {
     delete errors[key]
@@ -119,11 +119,19 @@ function inviaRichiesta() {
     return
   }
 
-  // Nessuna chiamata backend — solo lato client
   inviando.value = true
-  setTimeout(() => {
-    inviando.value = false
+  try {
+    await $fetch('/api/contact', {
+      method: 'POST',
+      body: form
+    })
     inviato.value = true
-  }, 800)
+  } catch (err: any) {
+    // Gestione errore (es. Toast o messaggio)
+    console.error('Errore durante invio form', err)
+    alert('Si è verificato un errore durante l\'invio. Riprova più tardi.')
+  } finally {
+    inviando.value = false
+  }
 }
 </script>

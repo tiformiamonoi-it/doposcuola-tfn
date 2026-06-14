@@ -142,7 +142,8 @@
                   <template #compensoCalcolato-cell="{ row }">
                     <div class="text-sm">
                       <div class="font-medium">€ {{ row.original.compensoCalcolato }}</div>
-                      <div class="text-slate-400 text-xs">grezzo: € {{ row.original.compensoGrezzo.toFixed(2) }}</div>
+                      <div v-if="tutor.modalitaPagamento === 'FORFAIT'" class="text-tfn-500 font-medium text-xs mt-0.5">Quota Forfait</div>
+                      <div class="text-slate-400 text-xs">ore: € {{ row.original.compensoGrezzo.toFixed(2) }}</div>
                     </div>
                   </template>
                   <template #pagato-cell="{ row }">
@@ -339,7 +340,7 @@
             <UInput v-model="datiModifica.importoForfait" type="number" class="w-full" />
           </UFormField>
           <UFormField name="noteInterne" label="Note interne">
-            <UTextarea v-model="datiModifica.noteInterne" rows="3" class="w-full" />
+            <UTextarea v-model="datiModifica.noteInterne" :rows="3" class="w-full" />
           </UFormField>
           <div class="flex justify-end gap-3 pt-2">
             <UButton variant="ghost" @click="modalModificaAperto = false">Annulla</UButton>
@@ -354,8 +355,13 @@
       <template #body>
         <div class="space-y-4">
           <div class="flex gap-2">
-            <UInput v-model="nuovaMateria" placeholder="Es. Matematica (Superiori)" class="flex-1" @keydown.enter.prevent="aggiungiMateria" />
-            <UButton @click="aggiungiMateria">Aggiungi</UButton>
+            <USelectMenu
+              v-model="materiaSelezionata"
+              :items="materieNonAssegnate"
+              placeholder="Seleziona dal pool globale..."
+              class="flex-1"
+            />
+            <UButton @click="aggiungiMateriaSelezionata" :disabled="!materiaSelezionata">Aggiungi</UButton>
           </div>
           <div class="flex flex-wrap gap-2">
             <span
@@ -394,7 +400,7 @@
             Pro Bono
           </label>
           <UFormField name="note" label="Note">
-            <UTextarea v-model="datiLiquidaDettaglio.note" rows="2" class="w-full" />
+            <UTextarea v-model="datiLiquidaDettaglio.note" :rows="2" class="w-full" />
           </UFormField>
           <div class="flex justify-end gap-3 pt-2">
             <UButton variant="ghost" @click="modalLiquidaDettaglioAperto = false">Annulla</UButton>
@@ -418,7 +424,7 @@
             <UInput v-model="datiNuovoRimborso.dataRichiesta" type="date" class="w-full" />
           </UFormField>
           <UFormField name="note" label="Note">
-            <UTextarea v-model="datiNuovoRimborso.note" rows="2" class="w-full" />
+            <UTextarea v-model="datiNuovoRimborso.note" :rows="2" class="w-full" />
           </UFormField>
           <div class="flex justify-end gap-3 pt-2">
             <UButton variant="ghost" @click="modalNuovoRimborsoAperto = false">Annulla</UButton>
@@ -443,7 +449,7 @@
             <USelect v-model="datiPagaRimborso.metodo" :items="metodiPagamento" class="w-full" />
           </UFormField>
           <UFormField name="note" label="Note">
-            <UTextarea v-model="datiPagaRimborso.note" rows="2" class="w-full" />
+            <UTextarea v-model="datiPagaRimborso.note" :rows="2" class="w-full" />
           </UFormField>
           <div class="flex justify-end gap-3 pt-2">
             <UButton variant="ghost" @click="modalPagaRimborsoAperto = false">Annulla</UButton>
@@ -457,7 +463,7 @@
 </template>
 
 <script setup lang="ts">
-definePageMeta({ middleware: ['staff-only'] })
+definePageMeta({ middleware: ['admin-or-super'] })
 
 const route = useRoute()
 const toast = useToast()
@@ -471,19 +477,19 @@ if (sessionUser.value?.role === 'TUTOR' && String(sessionUser.value?.id) !== id)
 }
 
 // ─── Fetch dati principali ─────────────────────
-const { data: tutor, pending: pendingTutor, refresh: refreshTutor } = await useFetch(`/api/tutors/${id}`, {
+const { data: tutor, pending: pendingTutor, refresh: refreshTutor } = useLazyFetch(`/api/tutors/${id}`, {
   default: () => null,
 })
-const { data: compensation, pending: pendingComp, refresh: refreshComp } = await useFetch(`/api/tutors/${id}/compensation`, {
+const { data: compensation, pending: pendingComp, refresh: refreshComp } = useLazyFetch(`/api/tutors/${id}/compensation`, {
   default: () => [] as any[],
 })
-const { data: reimbursements, pending: pendingReimb, refresh: refreshReimb } = await useFetch(`/api/tutors/${id}/reimbursements`, {
+const { data: reimbursements, pending: pendingReimb, refresh: refreshReimb } = useLazyFetch(`/api/tutors/${id}/reimbursements`, {
   default: () => [] as any[],
 })
-const { data: performance, pending: pendingPerf } = await useFetch(`/api/tutors/${id}/performance`, {
+const { data: performance, pending: pendingPerf } = useLazyFetch(`/api/tutors/${id}/performance`, {
   default: () => [] as any[],
 })
-const { data: stats } = await useFetch(`/api/tutors/${id}/stats`, {
+const { data: stats } = useLazyFetch(`/api/tutors/${id}/stats`, {
   default: () => null as any,
 })
 
@@ -632,18 +638,25 @@ async function salvaTutor() {
 
 // ─── Modal Materie ────────────────────────────
 const modalMaterieAperto = ref(false)
-const nuovaMateria = ref('')
+const materiaSelezionata = ref('')
 const materieLocali = ref<string[]>([...((tutor.value?.materie as string[]) ?? [])])
+
+// Fetch materie globali
+const { data: configsData } = useLazyFetch('/api/settings/configs', { default: () => ({}) })
+const materieDisponibili = computed<string[]>(() => {
+  try { return JSON.parse(configsData.value?.materie || '[]') } catch { return [] }
+})
+const materieNonAssegnate = computed(() => materieDisponibili.value.filter(m => !materieLocali.value.includes(m)))
 
 watch(tutor, (t) => {
   materieLocali.value = [...((t?.materie as string[]) ?? [])]
 })
 
-function aggiungiMateria() {
-  const m = nuovaMateria.value.trim()
+function aggiungiMateriaSelezionata() {
+  const m = materiaSelezionata.value
   if (m && !materieLocali.value.includes(m)) {
     materieLocali.value.push(m)
-    nuovaMateria.value = ''
+    materiaSelezionata.value = ''
   }
 }
 function rimuoviMateria(i: number) {

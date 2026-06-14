@@ -34,5 +34,6 @@
 </template>
 
 <script setup lang="ts">
+definePageMeta({ middleware: ['admin-or-super'] })
 useHead({ title: 'Dashboard — Ti Formiamo Noi' })
 </script>

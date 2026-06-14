@@ -46,7 +46,7 @@
         @input="onSearch"
       />
       <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
-        <UToggle v-model="soloLiquidare" @update:model-value="caricaTutor" />
+        <USwitch v-model="soloLiquidare" @update:model-value="caricaTutor" />
         Solo da liquidare
       </label>
     </div>
@@ -186,7 +186,7 @@
             Pro Bono (nessun pagamento, nessuna registrazione contabile)
           </label>
           <UFormField name="note" label="Note">
-            <UTextarea v-model="datiLiquida.note" class="w-full" rows="2" />
+            <UTextarea v-model="datiLiquida.note" class="w-full" :rows="2" />
           </UFormField>
           <div class="flex justify-end gap-3 pt-2">
             <UButton variant="ghost" @click="modalLiquidaAperto = false">Annulla</UButton>
@@ -215,7 +215,7 @@ const filterQuery = computed(() => ({
 }))
 
 // ─── Fetch ────────────────────────────────────
-const { data, pending, refresh } = await useFetch('/api/tutors', {
+const { data, pending, refresh } = useLazyFetch('/api/tutors', {
   query: filterQuery,
   default: () => ({ data: [], kpi: { tutoriAttivi: 0, daLiquidare: 0, totaleDovuto: 0, mediaLiquidazione: 0 } }),
 })
@@ -287,7 +287,12 @@ async function creaTutor() {
     refresh()
   } catch (err: any) {
     const msg = err.data?.statusMessage ?? 'Errore nella creazione'
-    toast.add({ title: msg, color: 'error' })
+    const errors = err.data?.data?.errors
+    let desc = ''
+    if (errors) {
+      desc = Object.entries(errors).map(([k, v]) => `${k}: ${v}`).join(' | ')
+    }
+    toast.add({ title: msg, description: desc, color: 'error' })
   } finally {
     salvando.value = false
   }
@@ -375,3 +380,4 @@ async function toggleAttivo(tutor: any) {
   }
 }
 </script>
+

@@ -43,6 +43,7 @@
           type="date"
           :min="minDate"
           class="w-full"
+          @change="validaDataDesiderata"
         />
         <p class="text-xs text-slate-400">La segreteria assegnerà l'orario esatto.</p>
       </div>
@@ -166,7 +167,7 @@ const step = ref(1)
 const loading = ref(false)
 const steps = ['Data', 'Materie', 'Conferma']
 
-const { data: studentsData } = await useFetch('/api/portal/students')
+const { data: studentsData } = useLazyFetch('/api/portal/students')
 const students = computed(() => (studentsData.value as any[]) ?? [])
 
 const form = reactive({
@@ -182,11 +183,51 @@ watchEffect(() => {
   }
 })
 
+const { data: closuresData } = useLazyFetch('/api/portal/closures')
+const closures = computed(() => (closuresData.value as any[]) ?? [])
+
 const minDate = computed(() => {
-  const today = new Date()
-  today.setDate(today.getDate() + 1)
-  return today.toISOString().split('T')[0]
+  const now = new Date()
+  // Se sono le 11:30 o più tardi, blocca la data di oggi e passa a domani
+  if (now.getHours() > 11 || (now.getHours() === 11 && now.getMinutes() >= 30)) {
+    const tomorrow = new Date(now)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    return tomorrow.toISOString().split('T')[0]
+  }
+  return now.toISOString().split('T')[0]
 })
+
+function validaDataDesiderata() {
+  if (!form.dataDesiderata) return
+  
+  const selectedDate = new Date(form.dataDesiderata)
+  
+  // 1. Controllo Domenica (0 = Domenica)
+  if (selectedDate.getDay() === 0) {
+    toast.add({ title: 'Impossibile prenotare di Domenica', color: 'error' })
+    form.dataDesiderata = ''
+    return
+  }
+
+  // 2. Controllo chiusure
+  const isChiuso = closures.value.some((c: any) => c.date.split('T')[0] === form.dataDesiderata)
+  if (isChiuso) {
+    toast.add({ title: 'Il centro è chiuso in questa data', color: 'error' })
+    form.dataDesiderata = ''
+    return
+  }
+
+  // 3. Controllo limite 11:30 per giorno stesso (doppia sicurezza in caso di minDate aggirato)
+  const now = new Date()
+  const todayStr = now.toISOString().split('T')[0]
+  if (form.dataDesiderata === todayStr) {
+    if (now.getHours() > 11 || (now.getHours() === 11 && now.getMinutes() >= 30)) {
+      toast.add({ title: 'Le lezioni per oggi si potevano prenotare solo entro le 11:30', color: 'error' })
+      form.dataDesiderata = ''
+      return
+    }
+  }
+}
 
 const studentSelezionato = computed(() => {
   const s = students.value.find((s: any) => s.id === form.studentId)
@@ -230,3 +271,4 @@ async function inviaPrenotazione() {
   }
 }
 </script>
+

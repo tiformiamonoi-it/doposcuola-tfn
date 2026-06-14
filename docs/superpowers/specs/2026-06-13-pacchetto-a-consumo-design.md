@@ -134,8 +134,12 @@ che escludano `A_CONSUMO`; in caso, trattare `A_CONSUMO` come `ORE`.)
   importo: number().nonnegative().max(99999)
   tariffaOraria: number().positive().max(9999).optional()  // snapshot opzionale; default = tariffa del pacchetto
   data: coerce.date().default(now)
-  metodoPagamento: PaymentMethodEnum.optional()
-  richiedeFattura: boolean().default(false)
+  pagamentoIniziale: z.object({
+    importo: z.number().nonnegative().max(99999),
+    metodoPagamento: PaymentMethodEnum,
+    data: z.coerce.date(),
+    richiedeFattura: z.boolean().default(false)
+  }).optional()
   note: string().max(500).optional()
   ```
 - `standard-packages` (validazione inline nel POST): aggiungere `tariffaOraria` opzionale,
@@ -149,9 +153,10 @@ che escludano `A_CONSUMO`; in caso, trattare `A_CONSUMO` come `ORE`.)
    Campi: tariffa oraria (precompilata, modificabile), ore iniziali, totale (auto, modificabile).
    Scadenza 15/06 (riusa `calcolaDataScadenza`/`aggiornaDatiScadenza`).
 3. **Lista pacchetti + Scheda studente** (`app/pages/pacchetti/index.vue`, `app/pages/studenti/[id].vue`):
-   - azione **"Ricarica"** per i pacchetti `A_CONSUMO` → modale ricarica;
-   - **libretto delle ricariche** (data · ore · totale) nella scheda studente.
-4. **Evidenza Esaurito**: badge/avviso "Ricarica" sui pacchetti `A_CONSUMO` esauriti.
+   - azione **"Ricarica"** per i pacchetti `A_CONSUMO` → modale ricarica globale (`app/components/ModalRicaricaPacchetto.vue`);
+   - **libretto delle ricariche** (data · ore · totale) in un modale globale dedicato (`app/components/ModalLibrettoRicariche.vue`);
+   - azione **"Registra pagamento"** condivisa tramite `app/components/ModalPagamentoPacchetto.vue`.
+4. **Evidenza Esaurito e Pagamenti**: badge/avviso "Ricarica" sui pacchetti `A_CONSUMO` esauriti, e badge "Da PAGARE" che diventa grigio (neutro) se >90% delle ore sono rimanenti.
 
 ## 9. Componenti coinvolti (riepilogo file)
 

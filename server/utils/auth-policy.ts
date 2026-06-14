@@ -13,6 +13,7 @@ const GENITORE_ONLY: Role[] = ['GENITORE']
 export const PUBLIC_API_PREFIXES = [
   '/api/auth/login',
   '/api/_auth/session', // gestito da nuxt-auth-utils
+  '/api/contact',       // endpoint pubblico del form
 ]
 
 // Regole ordinate: la PRIMA che matcha decide i ruoli ammessi

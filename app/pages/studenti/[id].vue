@@ -94,7 +94,7 @@
               <span class="font-medium text-slate-800">Pacchetti</span>
               <UBadge color="neutral" variant="subtle">{{ pacchetti.length }}</UBadge>
             </div>
-            <UButton icon="i-heroicons-plus" size="xs" :to="`/pacchetti?studentId=${studente.id}`">
+            <UButton icon="i-heroicons-plus" size="xs" :to="`/pacchetti?studentId=${studente.id}&studentName=${encodeURIComponent(studente.lastName + ' ' + studente.firstName)}`">
               Nuovo pacchetto
             </UButton>
           </div>
@@ -163,8 +163,32 @@
           </div>
         </template>
 
+        <!-- Conferma collegamento genitore già esistente -->
+        <div v-if="confermaCollegamento" class="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
+          <div class="flex items-start gap-3">
+            <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p class="text-sm font-medium text-slate-800">Genitore già registrato</p>
+              <p class="text-sm text-slate-600 mt-1">
+                L'email <strong>{{ confermaCollegamento.email }}</strong> appartiene già all'account di
+                <strong>{{ confermaCollegamento.firstName }} {{ confermaCollegamento.lastName }}</strong>.
+              </p>
+              <p class="text-sm text-slate-600">
+                Vuoi collegare anche questo studente al loro account esistente?
+                La password non verrà modificata.
+              </p>
+            </div>
+          </div>
+          <div class="flex gap-2 justify-end">
+            <UButton size="sm" variant="ghost" @click="confermaCollegamento = null">Annulla</UButton>
+            <UButton size="sm" color="primary" :loading="creandoAccesso" @click="creaAccessoPortale(true)">
+              Sì, collega studente
+            </UButton>
+          </div>
+        </div>
+
         <!-- Nessun account portale -->
-        <template v-if="!(portalAccess as any)?.portalUser">
+        <template v-else-if="!(portalAccess as any)?.portalUser">
           <p class="text-sm text-slate-500 mb-4">
             Questo studente non ha ancora un account portale.
             Crea un accesso per il genitore per consentirgli di visualizzare note e richiedere lezioni.
@@ -225,26 +249,32 @@
           </UButton>
         </template>
 
-        <!-- Prenotazioni PENDING -->
-        <template v-if="bookingsPending.length > 0">
+        <!-- Prenotazioni Attive -->
+        <template v-if="bookingsActive.length > 0">
           <div class="mt-4 pt-4 border-t border-slate-100">
             <div class="flex items-center gap-2 mb-3">
-              <span class="text-sm font-medium text-slate-800">Prenotazioni in attesa</span>
-              <UBadge color="warning" variant="subtle">{{ bookingsPending.length }}</UBadge>
+              <span class="text-sm font-medium text-slate-800">Prenotazioni Attive</span>
+              <UBadge color="primary" variant="subtle">{{ bookingsActive.length }}</UBadge>
             </div>
             <div class="space-y-2">
               <div
-                v-for="b in bookingsPending"
+                v-for="b in bookingsActive"
                 :key="b.id"
-                class="flex items-start justify-between bg-amber-50 border border-amber-200 rounded-lg p-3"
+                class="flex items-start justify-between border rounded-lg p-3"
+                :class="b.status === 'CONFIRMED' ? 'bg-success-50/30 border-success-100' : 'bg-amber-50/30 border-amber-100'"
               >
                 <div class="text-sm space-y-0.5">
-                  <p class="font-medium text-slate-800">{{ formatDateBooking(b.requestedDate) }}</p>
+                  <div class="flex items-center gap-2">
+                    <p class="font-medium text-slate-800">{{ formatDateBooking(b.requestedDate) }}</p>
+                    <UBadge size="xs" :color="b.status === 'CONFIRMED' ? 'success' : 'warning'" variant="subtle">
+                      {{ b.status === 'CONFIRMED' ? 'Confermata' : 'In attesa' }}
+                    </UBadge>
+                  </div>
                   <p class="text-slate-500">{{ b.subjects?.map((s: any) => s.name).join(', ') }}</p>
                   <p v-if="b.notes" class="text-slate-400 text-xs">{{ b.notes }}</p>
                 </div>
                 <div class="flex gap-2 ml-3">
-                  <UButton size="xs" color="success" @click="confermaBooking(b.id)">Conferma</UButton>
+                  <UButton v-if="b.status === 'PENDING'" size="xs" color="success" @click="confermaBooking(b.id)">Conferma</UButton>
                   <UButton size="xs" color="error" variant="outline" @click="cancellaBooking(b.id)">Cancella</UButton>
                 </div>
               </div>
@@ -431,7 +461,7 @@
 import { UpdateStudentSchema } from '#shared/schemas/student.schema'
 import { normalizzaTelefono } from '~/utils/phone'
 
-definePageMeta({ middleware: ['staff-only'] })
+definePageMeta({ middleware: ['admin-or-super'] })
 
 const route = useRoute()
 const toast = useToast()
@@ -469,10 +499,10 @@ const CLASSI_LISTA = [
 ]
 
 // ─── Fetch studente ───
-const { data: studente, pending, refresh } = await useFetch(`/api/students/${id}`)
+const { data: studente, pending, refresh } = useLazyFetch(`/api/students/${id}`)
 
 // ─── Fetch pacchetti dello studente ───
-const { data: datiPacchetti, pending: pendingPacchetti, refresh: refreshPacchetti } = await useFetch('/api/packages', {
+const { data: datiPacchetti, pending: pendingPacchetti, refresh: refreshPacchetti } = useLazyFetch('/api/packages', {
   query: { studentId: id, limit: 50 },
 })
 const pacchetti = computed(() => datiPacchetti.value?.data ?? [])
@@ -620,17 +650,17 @@ const isAdmin = computed(() =>
   ['ADMIN', 'SUPER_TUTOR'].includes(sessionUser.value?.role ?? '')
 )
 
-const { data: portalAccess, refresh: refreshPortal } = await useFetch(
+const { data: portalAccess, refresh: refreshPortal } = useLazyFetch(
   `/api/admin/students/${id}/portal-access`,
   { lazy: true }
 )
 
-const { data: pendingBookings, refresh: refreshBookings } = await useFetch(
+const { data: pendingBookings, refresh: refreshBookings } = useLazyFetch(
   `/api/admin/bookings?studentId=${id}`,
   { lazy: true }
 )
-const bookingsPending = computed(() =>
-  ((pendingBookings.value as any[]) ?? []).filter((b: any) => b.status === 'PENDING')
+const bookingsActive = computed(() =>
+  ((pendingBookings.value as any[]) ?? []).filter((b: any) => b.status === 'CONFIRMED' || b.status === 'PENDING')
 )
 
 const mostraModalCreaAccesso = ref(false)
@@ -639,29 +669,59 @@ const credenziali = ref<{ email: string; tempPassword: string } | null>(null)
 const creandoAccesso = ref(false)
 const resetPassword = ref<string | null>(null)
 const togglando = ref(false)
+const confermaCollegamento = ref<{
+  email: string
+  firstName: string
+  lastName: string
+} | null>(null)
 
 function apriModalCreaAccesso() {
   const s = studente.value as any
-  // Pre-compila con i dati del genitore già registrati per lo studente
   datiCreaAccesso.email = s?.parentEmail ?? ''
   if (s?.parentName) {
     const parts = (s.parentName as string).trim().split(/\s+/)
     datiCreaAccesso.firstName = parts[0] ?? ''
     datiCreaAccesso.lastName  = parts.slice(1).join(' ')
   }
+  confermaCollegamento.value = null
   mostraModalCreaAccesso.value = true
 }
 
-async function creaAccessoPortale() {
+async function creaAccessoPortale(force = false) {
   creandoAccesso.value = true
   try {
+    const body = force
+      ? { email: datiCreaAccesso.email, force: true }
+      : { ...datiCreaAccesso }
     const res = await $fetch(`/api/admin/students/${id}/portal-access`, {
       method: 'POST',
-      body: datiCreaAccesso,
+      body,
     }) as any
-    credenziali.value = { email: res.email, tempPassword: res.tempPassword }
+
+    if (res.requiresConfirmation) {
+      // Genitore già esiste: chiede conferma prima di collegare
+      confermaCollegamento.value = {
+        email:     res.existingUser.email,
+        firstName: res.existingUser.firstName,
+        lastName:  res.existingUser.lastName,
+      }
+      mostraModalCreaAccesso.value = false
+      return
+    }
+
     await refreshPortal()
-    toast.add({ title: 'Account portale creato', color: 'success' })
+
+    if (res.alreadyExisted) {
+      toast.add({
+        title: 'Studente collegato',
+        description: 'L\'account del genitore era già registrato — le credenziali non sono cambiate.',
+        color: 'success',
+      })
+      confermaCollegamento.value = null
+    } else {
+      credenziali.value = { email: res.email, tempPassword: res.tempPassword }
+      toast.add({ title: 'Account portale creato', color: 'success' })
+    }
     mostraModalCreaAccesso.value = false
   } catch (e: any) {
     toast.add({

@@ -439,3 +439,14 @@ Audit completo della webapp. Trovati e corretti diversi problemi (bug, discrepan
 
 ### Nota migrazioni
 La migrazione `0002_mushy_raider.sql` È applicata. La precedente nota in ADL-014 era errata.
+
+---
+
+## [2026-06-14] Nuova Logica Portale Famiglie (Prenotazioni)
+
+**Decisioni:**
+1. **Auto-Conferma:** Le prenotazioni create dal portale famiglie nascono sempre in stato CONFIRMED.
+2. **Cut-off Prenotazione:** Dal portale e' possibile prenotare per il giorno stesso solo fino alle 11:30.
+3. **Cut-off Cancellazione:** Dal portale e' possibile cancellare o modificare una prenotazione per il giorno stesso solo fino alle 12:30.
+4. **Blocco Festivita:** Non e' possibile prenotare la Domenica e nelle date configurate in closure_dates.
+5. **Reset Matching:** Qualsiasi modifica effettuata dal genitore via portale su una lezione (che era gia' stata matchata) cancella automaticamente assignedTutorId e assignedSlot in modo che la lezione torni "da matchare" nel tabellone senza creare inconsistenze.

@@ -92,7 +92,7 @@ useHead({ title: 'Profilo — Portale Famiglie' })
 const toast = useToast()
 const { user } = useUserSession()
 
-const { data: studentsData, pending: pendingStudents } = await useFetch('/api/portal/students')
+const { data: studentsData, pending: pendingStudents } = useLazyFetch('/api/portal/students')
 const students = computed(() => (studentsData.value as any[]) ?? [])
 
 const pwForm = reactive({ currentPassword: '', newPassword: '', confirmPassword: '' })
@@ -137,3 +137,4 @@ async function esciDalPortale() {
   }
 }
 </script>
+

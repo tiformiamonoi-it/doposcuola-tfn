@@ -1,6 +1,6 @@
 # Pacchetto "A Consumo" (crediti ricaricabili) — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Aggiungere un terzo tipo di pacchetto `A_CONSUMO`: prepagato, ricaricabile, con tariffa oraria e storico ricariche.
 
@@ -38,7 +38,7 @@
 - Modify: `server/database/schema.ts`
 - Create (auto): `server/database/migrations/<timestamp>_*.sql`
 
-- [ ] **Step 1: Aggiungere `A_CONSUMO` all'enum dei tipi**
+- [x] **Step 1: Aggiungere `A_CONSUMO` all'enum dei tipi**
 
 In `server/database/schema.ts`, sostituire la riga dell'enum (≈ riga 39):
 
@@ -46,7 +46,7 @@ In `server/database/schema.ts`, sostituire la riga dell'enum (≈ riga 39):
 export const packageTypeEnum = pgEnum('package_type', ['ORE', 'MENSILE', 'A_CONSUMO'])
 ```
 
-- [ ] **Step 2: Aggiungere `tariffaOraria` a `standardPackages`**
+- [x] **Step 2: Aggiungere `tariffaOraria` a `standardPackages`**
 
 Nella tabella `standardPackages` (≈ riga 196-213), aggiungere la colonna subito dopo `prezzoStandard`:
 
@@ -57,7 +57,7 @@ Nella tabella `standardPackages` (≈ riga 196-213), aggiungere la colonna subit
   tariffaOraria:     numeric('tariffa_oraria', { precision: 10, scale: 2 }),
 ```
 
-- [ ] **Step 3: Aggiungere `tariffaOraria` a `packages`**
+- [x] **Step 3: Aggiungere `tariffaOraria` a `packages`**
 
 Nella tabella `packages` (≈ riga 227-263), aggiungere la colonna subito dopo `orarioGiornaliero`:
 
@@ -68,7 +68,7 @@ Nella tabella `packages` (≈ riga 227-263), aggiungere la colonna subito dopo `
   tariffaOraria:     numeric('tariffa_oraria', { precision: 10, scale: 2 }),
 ```
 
-- [ ] **Step 4: Aggiungere la tabella `package_recharges`**
+- [x] **Step 4: Aggiungere la tabella `package_recharges`**
 
 In `server/database/schema.ts`, subito DOPO la chiusura della tabella `packages` (dopo la riga `}))` dell'indice `tipoCreatedIdx`, ≈ riga 263) e PRIMA della tabella `payments`, inserire:
 
@@ -94,7 +94,7 @@ export const packageRecharges = pgTable('package_recharges', {
 }))
 ```
 
-- [ ] **Step 5: Aggiungere le relazioni Drizzle**
+- [x] **Step 5: Aggiungere le relazioni Drizzle**
 
 Nella sezione RELAZIONI, dentro `packagesRelations` (≈ riga 571-577), aggiungere `recharges`:
 
@@ -118,7 +118,7 @@ export const packageRechargesRelations = relations(packageRecharges, ({ one }) =
 }))
 ```
 
-- [ ] **Step 6: Generare la migrazione**
+- [x] **Step 6: Generare la migrazione**
 
 Run (PowerShell):
 ```powershell
@@ -126,7 +126,7 @@ npm run db:generate
 ```
 Expected: drizzle-kit crea un nuovo file in `server/database/migrations/` con `ALTER TYPE ... ADD VALUE 'A_CONSUMO'`, `ALTER TABLE ... ADD COLUMN tariffa_oraria`, e `CREATE TABLE package_recharges`. Output termina con "Your SQL migration file ➜ ...".
 
-- [ ] **Step 7: Applicare la migrazione al database**
+- [x] **Step 7: Applicare la migrazione al database**
 
 Run (PowerShell):
 ```powershell
@@ -136,7 +136,7 @@ Expected: output senza errori, le modifiche vengono applicate su Supabase.
 
 > ⚠️ Se PostgreSQL rifiuta `ADD VALUE` dentro una transazione (errore "ALTER TYPE ... ADD VALUE cannot run inside a transaction block"), aprire il file SQL generato e spostare la riga `ALTER TYPE "public"."package_type" ADD VALUE 'A_CONSUMO';` in cima al file, su una riga isolata (drizzle-kit di solito lo gestisce già; intervenire solo se l'errore compare).
 
-- [ ] **Step 8: Verifica manuale**
+- [x] **Step 8: Verifica manuale**
 
 Run (PowerShell):
 ```powershell
@@ -144,7 +144,7 @@ npm run dev
 ```
 Expected: il server parte senza errori di schema. Aprire `http://localhost:3000/pacchetti` → la pagina carica senza errori in console relativi a colonne mancanti. Fermare con `Ctrl+C`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```powershell
 git add server/database/schema.ts server/database/migrations
@@ -158,7 +158,7 @@ git commit -m "feat(db): tipo A_CONSUMO, colonna tariffa_oraria, tabella package
 **Files:**
 - Modify: `shared/schemas/package.schema.ts`
 
-- [ ] **Step 1: Aggiungere `A_CONSUMO` a `PackageTypeEnum`**
+- [x] **Step 1: Aggiungere `A_CONSUMO` a `PackageTypeEnum`**
 
 In `shared/schemas/package.schema.ts` (≈ riga 19-21), sostituire:
 
@@ -168,7 +168,7 @@ export const PackageTypeEnum = z.enum(['ORE', 'MENSILE', 'A_CONSUMO'], {
 })
 ```
 
-- [ ] **Step 2: Aggiungere `tariffaOraria` e `dataScadenza` a `CreatePackageSchema`**
+- [x] **Step 2: Aggiungere `tariffaOraria` e `dataScadenza` a `CreatePackageSchema`**
 
 In `CreatePackageSchema`, dentro l'oggetto `.object({ ... })`, aggiungere questi due campi subito dopo `dataInizio` (≈ riga 92):
 
@@ -182,7 +182,7 @@ In `CreatePackageSchema`, dentro l'oggetto `.object({ ... })`, aggiungere questi
       .optional(),
 ```
 
-- [ ] **Step 3: Rendere `tariffaOraria` obbligatoria per i pacchetti A_CONSUMO**
+- [x] **Step 3: Rendere `tariffaOraria` obbligatoria per i pacchetti A_CONSUMO**
 
 Dentro il blocco `.superRefine((data, ctx) => { ... })` di `CreatePackageSchema`, aggiungere all'inizio del corpo (subito dopo `{`):
 
@@ -197,7 +197,7 @@ Dentro il blocco `.superRefine((data, ctx) => { ... })` di `CreatePackageSchema`
     }
 ```
 
-- [ ] **Step 4: Aggiungere lo schema della ricarica**
+- [x] **Step 4: Aggiungere lo schema della ricarica**
 
 In fondo al file, PRIMA della sezione "TIPI TypeScript" (≈ riga 201), aggiungere:
 
@@ -229,7 +229,7 @@ export const RechargePackageSchema = z.object({
 })
 ```
 
-- [ ] **Step 5: Esportare il tipo TypeScript della ricarica**
+- [x] **Step 5: Esportare il tipo TypeScript della ricarica**
 
 Nella sezione "TIPI TypeScript" in fondo al file, aggiungere:
 
@@ -237,7 +237,7 @@ Nella sezione "TIPI TypeScript" in fondo al file, aggiungere:
 export type RechargePackageInput = z.infer<typeof RechargePackageSchema>
 ```
 
-- [ ] **Step 6: Verifica manuale (type-check)**
+- [x] **Step 6: Verifica manuale (type-check)**
 
 Run (PowerShell):
 ```powershell
@@ -245,7 +245,7 @@ npx nuxi typecheck
 ```
 Expected: nessun errore relativo a `package.schema.ts`. (Se `nuxi typecheck` non è configurato e fallisce per altri motivi, in alternativa verificare che `npm run dev` parta senza errori TypeScript su questo file.)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
 git add shared/schemas/package.schema.ts
@@ -259,7 +259,7 @@ git commit -m "feat(schema): validazione A_CONSUMO, dataScadenza, RechargePackag
 **Files:**
 - Modify: `server/services/package.service.ts`
 
-- [ ] **Step 1: Importare la tabella `packageRecharges`**
+- [x] **Step 1: Importare la tabella `packageRecharges`**
 
 In cima a `server/services/package.service.ts` (riga 2), aggiungere `packageRecharges` all'import:
 
@@ -267,7 +267,7 @@ In cima a `server/services/package.service.ts` (riga 2), aggiungere `packageRech
 import { accountingEntries, packages, packageRecharges, payments } from '../database/schema'
 ```
 
-- [ ] **Step 2: Riscrivere `createPackage` per gestire scadenza esplicita, tariffa e prima ricarica**
+- [x] **Step 2: Riscrivere `createPackage` per gestire scadenza esplicita, tariffa e prima ricarica**
 
 Sostituire l'INTERA funzione `createPackage` (≈ riga 170-239) con:
 
@@ -363,7 +363,7 @@ export async function createPackage(data: CreatePackageInput) {
 }
 ```
 
-- [ ] **Step 3: Verifica manuale (creazione via UI esistente)**
+- [x] **Step 3: Verifica manuale (creazione via UI esistente)**
 
 Run (PowerShell):
 ```powershell
@@ -371,7 +371,7 @@ npm run dev
 ```
 Aprire `http://localhost:3000/pacchetti` → "Nuovo Pacchetto" con un pacchetto **ORE** normale (il flusso esistente non deve rompersi). Salvare. Expected: il pacchetto si crea senza errori 422/500, e la sua **data di scadenza** ora viene salvata (verificabile riaprendo la lista: la colonna "Scadenza" mostra la data invece di "—"). Fermare con `Ctrl+C`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```powershell
 git add server/services/package.service.ts
@@ -385,7 +385,7 @@ git commit -m "feat(service): createPackage salva dataScadenza, tariffa e prima 
 **Files:**
 - Modify: `server/services/package.service.ts`
 
-- [ ] **Step 1: Importare il tipo `RechargePackageInput`**
+- [x] **Step 1: Importare il tipo `RechargePackageInput`**
 
 In `server/services/package.service.ts` (riga 4), aggiungere `RechargePackageInput` all'import dei tipi:
 
@@ -393,7 +393,7 @@ In `server/services/package.service.ts` (riga 4), aggiungere `RechargePackageInp
 import type { CreatePackageInput, PackageQuery, RechargePackageInput, UpdatePackageInput } from '../../shared/schemas/package.schema'
 ```
 
-- [ ] **Step 2: Aggiungere la funzione `rechargePackage`**
+- [x] **Step 2: Aggiungere la funzione `rechargePackage`**
 
 In fondo a `server/services/package.service.ts`, aggiungere:
 
@@ -483,7 +483,7 @@ export async function rechargePackage(id: string, data: RechargePackageInput) {
 }
 ```
 
-- [ ] **Step 3: Aggiungere la funzione `getPackageRecharges` (per il libretto)**
+- [x] **Step 3: Aggiungere la funzione `getPackageRecharges` (per il libretto)**
 
 In fondo a `server/services/package.service.ts`, aggiungere:
 
@@ -498,7 +498,7 @@ export async function getPackageRecharges(packageId: string) {
 }
 ```
 
-- [ ] **Step 4: Verifica manuale (compilazione)**
+- [x] **Step 4: Verifica manuale (compilazione)**
 
 Run (PowerShell):
 ```powershell
@@ -506,7 +506,7 @@ npm run dev
 ```
 Expected: il server parte senza errori TypeScript. Fermare con `Ctrl+C`. (La verifica funzionale avviene nel Task 5 quando esiste l'endpoint.)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add server/services/package.service.ts
@@ -522,7 +522,7 @@ git commit -m "feat(service): rechargePackage e getPackageRecharges"
 - Create: `server/api/packages/[id]/recharges.get.ts`
 - Modify: `server/api/packages/[id].get.ts`
 
-- [ ] **Step 1: Creare l'endpoint di ricarica**
+- [x] **Step 1: Creare l'endpoint di ricarica**
 
 Creare `server/api/packages/[id]/recharge.post.ts`:
 
@@ -556,7 +556,7 @@ export default defineEventHandler(async (event) => {
 })
 ```
 
-- [ ] **Step 2: Creare l'endpoint del libretto**
+- [x] **Step 2: Creare l'endpoint del libretto**
 
 Creare `server/api/packages/[id]/recharges.get.ts`:
 
@@ -575,7 +575,7 @@ export default defineEventHandler(async (event) => {
 })
 ```
 
-- [ ] **Step 3: Verifica manuale (ricarica end-to-end via API)**
+- [x] **Step 3: Verifica manuale (ricarica end-to-end via API)**
 
 Run (PowerShell):
 ```powershell
@@ -583,7 +583,7 @@ npm run dev
 ```
 Then, in un secondo terminale PowerShell, creare prima un pacchetto A_CONSUMO via UI non è ancora possibile (UI nel Task 8). Per ora verificare l'endpoint con un pacchetto A_CONSUMO creato manualmente: saltare questa verifica funzionale completa al Task 8. Qui basta verificare che il server **parta senza errori** e che la rotta sia registrata: aprire `http://localhost:3000/api/packages/xxx/recharges` nel browser → deve rispondere con JSON `{"data":[]}` (non un 404 di rotta). Fermare con `Ctrl+C`.
 
-- [ ] **Step 4: Includere le ricariche nel GET singolo pacchetto**
+- [x] **Step 4: Includere le ricariche nel GET singolo pacchetto**
 
 In `server/api/packages/[id].get.ts`, sostituire l'intero contenuto con:
 
@@ -611,7 +611,7 @@ export default defineEventHandler(async (event) => {
 })
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add server/api/packages
@@ -625,7 +625,7 @@ git commit -m "feat(api): endpoint recharge + recharges + libretto nel GET pacch
 **Files:**
 - Modify: `server/api/standard-packages/index.post.ts`
 
-- [ ] **Step 1: Aggiungere `tariffaOraria` allo schema e all'insert**
+- [x] **Step 1: Aggiungere `tariffaOraria` allo schema e all'insert**
 
 In `server/api/standard-packages/index.post.ts`, sostituire l'intero contenuto con:
 
@@ -683,11 +683,11 @@ export default defineEventHandler(async (event) => {
 
 > Nota: `oreIncluse` passa da `.positive()` a `.nonnegative()` perché per i template A_CONSUMO le ore incluse possono essere 0 (conta solo la tariffa).
 
-- [ ] **Step 2: Verifica manuale (rinviata al Task 7)**
+- [x] **Step 2: Verifica manuale (rinviata al Task 7)**
 
 La verifica funzionale del template A_CONSUMO avviene tramite UI nel Task 7. Qui basta che `npm run dev` parta senza errori.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```powershell
 git add server/api/standard-packages/index.post.ts
@@ -701,7 +701,7 @@ git commit -m "feat(api): template standard accetta tariffaOraria per A_CONSUMO"
 **Files:**
 - Modify: `app/pages/impostazioni/index.vue`
 
-- [ ] **Step 1: Aggiungere `A_CONSUMO` al dropdown Tipo del form template**
+- [x] **Step 1: Aggiungere `A_CONSUMO` al dropdown Tipo del form template**
 
 In `app/pages/impostazioni/index.vue`, nel form template, sostituire il blocco `<USelect ... :items="[{ label: 'ORE'...">` del Tipo con:
 
@@ -719,7 +719,7 @@ In `app/pages/impostazioni/index.vue`, nel form template, sostituire il blocco `
             </UFormField>
 ```
 
-- [ ] **Step 2: Aggiungere il blocco campi per A_CONSUMO**
+- [x] **Step 2: Aggiungere il blocco campi per A_CONSUMO**
 
 Subito DOPO il blocco `<template v-else>` del MENSILE (la chiusura `</template>` che segue il grid di "Ore totali incluse" + "Prezzo standard"), aggiungere un nuovo blocco condizionale per A_CONSUMO. Per chiarezza, sostituire la struttura condizionale ore/prezzo con tre rami espliciti. Individuare il blocco che inizia con `<!-- ORE: ore inserite direttamente -->` e termina con la chiusura del `<template v-else>` del MENSILE, e sostituirlo INTERAMENTE con:
 
@@ -765,7 +765,7 @@ Subito DOPO il blocco `<template v-else>` del MENSILE (la chiusura `</template>`
           </template>
 ```
 
-- [ ] **Step 3: Aggiungere `tariffaOraria` allo stato reattivo e al reset**
+- [x] **Step 3: Aggiungere `tariffaOraria` allo stato reattivo e al reset**
 
 Nel `<script setup>`, nell'oggetto `reactive({ ... })` di `nuovo`, aggiungere il campo dopo `prezzoStandard`:
 
@@ -776,7 +776,7 @@ Nel `<script setup>`, nell'oggetto `reactive({ ... })` di `nuovo`, aggiungere il
 
 E in `apriModalCrea`, dentro `Object.assign(nuovo, { ... })`, aggiungere `tariffaOraria: 15` all'elenco dei reset.
 
-- [ ] **Step 4: Inviare `tariffaOraria` alla creazione del template**
+- [x] **Step 4: Inviare `tariffaOraria` alla creazione del template**
 
 In `creaTemplate`, nella costruzione di `body`, dopo il blocco `if (nuovo.tipo === 'MENSILE') { ... }`, aggiungere:
 
@@ -786,7 +786,7 @@ In `creaTemplate`, nella costruzione di `body`, dopo il blocco `if (nuovo.tipo =
     }
 ```
 
-- [ ] **Step 5: Mostrare la tariffa nella lista template**
+- [x] **Step 5: Mostrare la tariffa nella lista template**
 
 Nel template della lista, nella riga descrittiva sotto il nome (`<p class="text-xs text-slate-500 mt-0.5">`), aggiungere la visualizzazione della tariffa per A_CONSUMO. Sostituire il paragrafo con:
 
@@ -804,7 +804,7 @@ Nel template della lista, nella riga descrittiva sotto il nome (`<p class="text-
             </p>
 ```
 
-- [ ] **Step 6: Verifica manuale**
+- [x] **Step 6: Verifica manuale**
 
 Run (PowerShell):
 ```powershell
@@ -812,7 +812,7 @@ npm run dev
 ```
 Aprire `http://localhost:3000/impostazioni` → "Aggiungi template" → Tipo "A consumo" → compare solo il campo **Tariffa oraria**. Inserire nome "A consumo Medie", categoria "Medie", tariffa 15 → Salva. Expected: il template appare in lista con testo "Tariffa: € 15.00/ora". Fermare con `Ctrl+C`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
 git add app/pages/impostazioni/index.vue
@@ -826,7 +826,7 @@ git commit -m "feat(ui): template a consumo con tariffa oraria in Impostazioni"
 **Files:**
 - Modify: `app/pages/pacchetti/index.vue`
 
-- [ ] **Step 1: Aggiungere "A consumo" al dropdown Tipo**
+- [x] **Step 1: Aggiungere "A consumo" al dropdown Tipo**
 
 In `app/pages/pacchetti/index.vue`, nel form Nuovo Pacchetto, sostituire il blocco `<UFormField label="Tipo" required>` con:
 
@@ -845,7 +845,7 @@ In `app/pages/pacchetti/index.vue`, nel form Nuovo Pacchetto, sostituire il bloc
           </UFormField>
 ```
 
-- [ ] **Step 2: Aggiungere il blocco campi A_CONSUMO**
+- [x] **Step 2: Aggiungere il blocco campi A_CONSUMO**
 
 Subito DOPO il blocco `<UFormField v-if="nuovo.tipo === 'ORE'" label="Ore acquistate" ...>` (e prima del `<template v-else>` del MENSILE), aggiungere. Per chiarezza dei rami, individuare il commento `<!-- ORE: ore inserite direttamente -->` e il successivo `<!-- MENSILE: ... -->` con il suo `<template v-else>`, e sostituire entrambi i rami con questa struttura a tre rami:
 
@@ -896,7 +896,7 @@ Subito DOPO il blocco `<UFormField v-if="nuovo.tipo === 'ORE'" label="Ore acquis
           </template>
 ```
 
-- [ ] **Step 3: Nascondere il campo "Prezzo totale" generico per A_CONSUMO**
+- [x] **Step 3: Nascondere il campo "Prezzo totale" generico per A_CONSUMO**
 
 Più in basso nel form c'è il grid con `<UFormField label="Prezzo totale (€)" required>` e `<UFormField label="Data inizio" required>`. Per A_CONSUMO il prezzo è già gestito sopra (Totale iniziale). Sostituire quel grid con una versione che mostra il prezzo solo per ORE/MENSILE:
 
@@ -911,7 +911,7 @@ Più in basso nel form c'è il grid con `<UFormField label="Prezzo totale (€)"
           </div>
 ```
 
-- [ ] **Step 4: Aggiungere `tariffaOraria` allo stato e gestire la scadenza A_CONSUMO**
+- [x] **Step 4: Aggiungere `tariffaOraria` allo stato e gestire la scadenza A_CONSUMO**
 
 Nel `<script setup>`, nell'oggetto `reactive` di `nuovo`, aggiungere dopo `orarioGiornaliero`:
 
@@ -922,7 +922,7 @@ Nel `<script setup>`, nell'oggetto `reactive` di `nuovo`, aggiungere dopo `orari
 
 E in `apriModalCrea`, dentro `Object.assign(nuovo, { ... })`, aggiungere `tariffaOraria: 15` all'elenco dei reset.
 
-- [ ] **Step 5: Estendere `calcolaDataScadenza` per A_CONSUMO (stessa logica di ORE)**
+- [x] **Step 5: Estendere `calcolaDataScadenza` per A_CONSUMO (stessa logica di ORE)**
 
 Nella funzione `calcolaDataScadenza`, il ramo ORE va usato anche per A_CONSUMO. Sostituire la firma e la prima riga:
 
@@ -931,7 +931,7 @@ function calcolaDataScadenza(tipo: 'ORE' | 'MENSILE' | 'A_CONSUMO'): string {
   if (tipo === 'ORE' || tipo === 'A_CONSUMO') {
 ```
 
-- [ ] **Step 6: Calcolare il totale suggerito quando cambiano ore/tariffa (A_CONSUMO)**
+- [x] **Step 6: Calcolare il totale suggerito quando cambiano ore/tariffa (A_CONSUMO)**
 
 Subito dopo il `watch` esistente che ricalcola le ore per il MENSILE, aggiungere un secondo `watch` per il totale suggerito A_CONSUMO:
 
@@ -948,7 +948,7 @@ watch(
 )
 ```
 
-- [ ] **Step 7: Inviare `tariffaOraria` e `dataScadenza` alla creazione**
+- [x] **Step 7: Inviare `tariffaOraria` e `dataScadenza` alla creazione**
 
 In `creaPacchetto`, nella costruzione di `body`, dopo `if (nuovo.dataScadenza) body.dataScadenza = nuovo.dataScadenza`, aggiungere:
 
@@ -958,7 +958,7 @@ In `creaPacchetto`, nella costruzione di `body`, dopo `if (nuovo.dataScadenza) b
     }
 ```
 
-- [ ] **Step 8: Far funzionare il selettore template anche per gli A_CONSUMO**
+- [x] **Step 8: Far funzionare il selettore template anche per gli A_CONSUMO**
 
 In `applicaTemplate`, dopo le righe che impostano `oreAcquistate`/`prezzoTotale`, gestire il caso A_CONSUMO leggendo la tariffa dal template. Sostituire la funzione `applicaTemplate` con:
 
@@ -982,7 +982,7 @@ function applicaTemplate(templateId: string) {
 }
 ```
 
-- [ ] **Step 9: Aggiornare l'etichetta del template nel selettore (mostra la tariffa per A_CONSUMO)**
+- [x] **Step 9: Aggiornare l'etichetta del template nel selettore (mostra la tariffa per A_CONSUMO)**
 
 Sostituire il `computed` `templateOptions` con:
 
@@ -998,7 +998,7 @@ const templateOptions = computed(() =>
 )
 ```
 
-- [ ] **Step 10: Verifica manuale (creazione A_CONSUMO)**
+- [x] **Step 10: Verifica manuale (creazione A_CONSUMO)**
 
 Run (PowerShell):
 ```powershell
@@ -1011,7 +1011,7 @@ Aprire `http://localhost:3000/pacchetti` → "Nuovo Pacchetto":
 
 Expected: il pacchetto si crea senza errori. Riaprendo la lista, compare un pacchetto con scadenza 15/06. Fermare con `Ctrl+C`.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```powershell
 git add app/pages/pacchetti/index.vue
@@ -1026,7 +1026,7 @@ git commit -m "feat(ui): creazione pacchetto A_CONSUMO con tariffa e totale auto
 - Modify: `app/pages/pacchetti/index.vue` (azione + modale Ricarica)
 - Modify: `app/pages/studenti/[id].vue` (libretto)
 
-- [ ] **Step 1: Aggiungere l'azione "Ricarica" nel menu dei pacchetti A_CONSUMO**
+- [x] **Step 1: Aggiungere l'azione "Ricarica" nel menu dei pacchetti A_CONSUMO**
 
 In `app/pages/pacchetti/index.vue`, sostituire la funzione `azioniPacchetto` con:
 
@@ -1044,7 +1044,7 @@ function azioniPacchetto(row: any) {
 
 > Nota: in Nuxt UI v4 `UDropdownMenu` usa `onSelect` (non `click`) per le voci. Questo corregge anche l'azione pagamento esistente.
 
-- [ ] **Step 2: Aggiungere la modale di ricarica nel template**
+- [x] **Step 2: Aggiungere la modale di ricarica nel template**
 
 In `app/pages/pacchetti/index.vue`, subito DOPO la `</UModal>` della modale pagamento, aggiungere:
 
@@ -1107,7 +1107,7 @@ In `app/pages/pacchetti/index.vue`, subito DOPO la `</UModal>` della modale paga
     </UModal>
 ```
 
-- [ ] **Step 3: Aggiungere lo stato e le funzioni della ricarica nello script**
+- [x] **Step 3: Aggiungere lo stato e le funzioni della ricarica nello script**
 
 In `app/pages/pacchetti/index.vue`, subito dopo le funzioni della modale pagamento (`salvaPagamento`), aggiungere:
 
@@ -1169,7 +1169,7 @@ async function salvaRicarica() {
 }
 ```
 
-- [ ] **Step 4: Verifica manuale (ricarica)**
+- [x] **Step 4: Verifica manuale (ricarica)**
 
 Run (PowerShell):
 ```powershell
@@ -1177,7 +1177,7 @@ npm run dev
 ```
 Aprire `http://localhost:3000/pacchetti` → sul pacchetto A_CONSUMO creato, menu "⋮" → "Ricarica ore" → aggiungi 10 ore (totale 130 €), metodo Contanti → "Ricarica". Expected: toast verde, e nella lista le ore residue del pacchetto salgono di 10. Fermare con `Ctrl+C`.
 
-- [ ] **Step 5: Mostrare il libretto ricariche nella scheda studente**
+- [x] **Step 5: Mostrare il libretto ricariche nella scheda studente**
 
 In `app/pages/studenti/[id].vue`, dentro il ciclo `v-for="pkg in pacchetti"` della sezione pacchetti, subito dopo il blocco `<div class="text-xs text-slate-400 text-right ...">` (la colonna date) e prima della chiusura del `<div>` riga, NON basta: serve un'area espandibile sotto. Sostituire l'INTERO blocco `<div v-for="pkg in pacchetti" ...> ... </div>` con:
 
@@ -1249,7 +1249,7 @@ In `app/pages/studenti/[id].vue`, dentro il ciclo `v-for="pkg in pacchetti"` del
           </div>
 ```
 
-- [ ] **Step 6: Aggiungere la logica del libretto nello script**
+- [x] **Step 6: Aggiungere la logica del libretto nello script**
 
 In `app/pages/studenti/[id].vue`, nel `<script setup>`, dopo la dichiarazione di `pacchetti` (il `computed`), aggiungere:
 
@@ -1278,7 +1278,7 @@ async function toggleLibretto(packageId: string) {
 }
 ```
 
-- [ ] **Step 7: Verifica manuale (libretto)**
+- [x] **Step 7: Verifica manuale (libretto)**
 
 Run (PowerShell):
 ```powershell
@@ -1291,7 +1291,7 @@ Aprire la scheda dello studente che ha il pacchetto A_CONSUMO (`/studenti/<id>`)
 
 Expected: lo storico è corretto e coerente con le ricariche fatte. Fermare con `Ctrl+C`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```powershell
 git add app/pages/pacchetti/index.vue app/pages/studenti/[id].vue

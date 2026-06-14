@@ -569,6 +569,23 @@ export const systemConfigs = pgTable('system_configs', {
 }))
 
 // ─────────────────────────────────────────────
+// TABELLA: contact_requests (richieste dal form pubblico /prenota)
+// ─────────────────────────────────────────────
+export const contactRequestStatusEnum = pgEnum('contact_request_status', ['PENDING', 'READ', 'RESOLVED'])
+
+export const contactRequests = pgTable('contact_requests', {
+  id:        text('id').primaryKey().$defaultFn(cuid),
+  name:      varchar('name', { length: 150 }).notNull(),
+  email:     varchar('email', { length: 255 }).notNull(),
+  phone:     varchar('phone', { length: 20 }),
+  message:   text('message').notNull(),
+  status:    contactRequestStatusEnum('status').notNull().default('PENDING'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+})
+
+
+// ─────────────────────────────────────────────
 // RELAZIONI (per query con join automatici)
 // ─────────────────────────────────────────────
 

@@ -1,13 +1,13 @@
-import { eq, desc } from 'drizzle-orm'
+import { eq, desc, arrayContains, not, inArray, and } from 'drizzle-orm'
 import { db } from '../database/client'
-import { students, studentNotes } from '../database/schema'
+import { students, studentNotes, packages } from '../database/schema'
 
 // Carica tutti gli studenti collegati a un GENITORE
 export async function getPortalStudents(linkedStudentIds: string[]) {
   if (linkedStudentIds.length === 0) return []
 
   const result = await db.query.students.findMany({
-    where: (s, { inArray }) => inArray(s.id, linkedStudentIds),
+    where: inArray(students.id, linkedStudentIds),
     columns: {
       id: true,
       firstName: true,
@@ -26,9 +26,8 @@ export async function getPortalStudents(linkedStudentIds: string[]) {
           stati: true,
           dataScadenza: true,
         },
-        where: (p, { not, arrayContains }) =>
-          not(arrayContains(p.stati, ['CHIUSO'])),
-        orderBy: (p, { desc }) => [desc(p.createdAt)],
+        where: not(arrayContains(packages.stati, ['CHIUSO'])),
+        orderBy: [desc(packages.createdAt)],
         limit: 1,
       }
     }
@@ -42,10 +41,9 @@ export async function getPortalNotes(linkedStudentIds: string[]) {
   if (linkedStudentIds.length === 0) return []
 
   const result = await db.query.studentNotes.findMany({
-    where: (n, { inArray, and, eq }) =>
-      and(
-        inArray(n.studentId, linkedStudentIds),
-        eq(n.visibilita, 'FAMIGLIA')
+    where: and(
+        inArray(studentNotes.studentId, linkedStudentIds),
+        eq(studentNotes.visibilita, 'FAMIGLIA')
       ),
     orderBy: [desc(studentNotes.createdAt)],
     with: {
@@ -74,7 +72,7 @@ export async function checkPrenotazioneAbilitata(linkedStudentIds: string[]): Pr
         packages: {
           columns: { stati: true },
           limit: 1,
-          where: (p, { arrayContains }) => arrayContains(p.stati, ['ATTIVO']),
+          where: arrayContains(packages.stati, ['ATTIVO']),
         }
       }
     })

@@ -6,6 +6,7 @@ export default defineEventHandler(async (event) => {
   const parsed = CreateTutorSchema.safeParse(body)
 
   if (!parsed.success) {
+    console.error('[Tutor Create] Validation Error:', parsed.error.flatten().fieldErrors)
     throw createError({
       statusCode: 422,
       statusMessage: 'Dati non validi',

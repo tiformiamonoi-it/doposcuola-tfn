@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Proposte fedeli UI attuale - Ti Formiamo Noi</title>
+  <style>
+    :root {
+      --tfn-50:#f0f7ff;
+      --tfn-100:#dff0ff;
+      --tfn-500:#0063a6;
+      --tfn-600:#00558a;
+      --tfn-700:#00476e;
+      --slate-50:#f8fafc;
+      --slate-100:#f1f5f9;
+      --slate-200:#e2e8f0;
+      --slate-300:#cbd5e1;
+      --slate-400:#94a3b8;
+      --slate-500:#64748b;
+      --slate-600:#475569;
+      --slate-700:#334155;
+      --slate-800:#1e293b;
+      --slate-900:#0f172a;
+      --green-50:#ecfdf5;
+      --green-600:#059669;
+      --orange-50:#fff7ed;
+      --orange-600:#e74c1b;
+      --yellow-50:#fffbeb;
+      --yellow-600:#d97706;
+      --white:#fff;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--slate-900);
+      background: #eef3f8;
+    }
+
+    .wrap {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .page-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.15;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      max-width: 760px;
+      margin: 8px 0 0;
+      color: var(--slate-600);
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    .note {
+      max-width: 360px;
+      border: 1px solid var(--slate-200);
+      background: var(--white);
+      border-radius: 10px;
+      padding: 11px 13px;
+      color: var(--slate-600);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .options {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .option {
+      border: 1px solid var(--slate-200);
+      background: var(--white);
+      border-radius: 12px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+    }
+
+    .option:hover {
+      transform: translateY(-2px);
+      border-color: #b9c7d8;
+      box-shadow: 0 16px 32px rgba(15,23,42,.10);
+    }
+
+    .option.selected {
+      border-color: var(--tfn-500);
+      box-shadow: 0 0 0 3px rgba(0,99,166,.15), 0 16px 32px rgba(15,23,42,.10);
+    }
+
+    .option-top {
+      display: flex;
+      gap: 12px;
+      padding: 15px 15px 13px;
+      border-bottom: 1px solid var(--slate-200);
+      background: linear-gradient(#fff, #fbfdff);
+    }
+
+    .letter {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: var(--tfn-50);
+      color: var(--tfn-600);
+      font-weight: 800;
+      flex: none;
+    }
+
+    .option h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 760;
+    }
+
+    .option p {
+      margin: 4px 0 0;
+      color: var(--slate-600);
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
+
+    .mock {
+      height: 640px;
+      background: var(--slate-50);
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      background: var(--white);
+      border-right: 1px solid var(--slate-200);
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .logo {
+      height: 56px;
+      border-bottom: 1px solid var(--slate-200);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+      min-width: 0;
+    }
+
+    .book {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: var(--tfn-500);
+      color: white;
+      display: grid;
+      place-items: center;
+      font-size: 16px;
+      line-height: 1;
+      flex: none;
+    }
+
+    .brand {
+      font-family: Montserrat, Inter, sans-serif;
+      font-size: 13px;
+      font-weight: 760;
+      color: var(--slate-900);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .collapse {
+      margin-left: auto;
+      color: var(--slate-400);
+      font-size: 16px;
+    }
+
+    .nav {
+      padding: 12px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      flex: 1;
+    }
+
+    .nav-item {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 10px;
+      border-radius: 9px;
+      color: var(--slate-500);
+      font-size: 13px;
+      font-weight: 650;
+      position: relative;
+    }
+
+    .nav-item.active {
+      background: var(--tfn-50);
+      color: var(--tfn-600);
+    }
+
+    .nav-item.active::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 8px;
+      bottom: 8px;
+      width: 3px;
+      border-radius: 0 3px 3px 0;
+      background: var(--tfn-500);
+    }
+
+    .ico {
+      width: 19px;
+      text-align: center;
+      font-size: 16px;
+      line-height: 1;
+      flex: none;
+    }
+
+    .portal {
+      padding: 10px;
+      border-top: 1px solid var(--slate-200);
+    }
+
+    .portal-label {
+      padding: 0 10px 7px;
+      color: var(--slate-400);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      font-weight: 700;
+    }
+
+    .user {
+      border-top: 1px solid var(--slate-200);
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--tfn-500);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      font-weight: 800;
+      flex: none;
+    }
+
+    .user b {
+      display: block;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .user span {
+      display: block;
+      margin-top: 2px;
+      color: var(--slate-400);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      font-weight: 700;
+    }
+
+    .main {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      height: 56px;
+      border-bottom: 1px solid var(--slate-200);
+      background: rgba(255,255,255,.92);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 22px;
+    }
+
+    .header-title {
+      font-size: 14px;
+      font-weight: 760;
+      color: var(--slate-900);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .search {
+      width: 210px;
+      height: 34px;
+      border: 1px solid var(--slate-200);
+      border-radius: 8px;
+      background: var(--slate-50);
+      color: var(--slate-400);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 10px;
+      font-size: 12px;
+    }
+
+    .body {
+      padding: 22px;
+      min-width: 0;
+    }
+
+    .title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .title-row h3 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 780;
+      letter-spacing: 0;
+    }
+
+    .title-row small {
+      display: block;
+      margin-top: 4px;
+      color: var(--slate-500);
+      font-size: 13px;
+    }
+
+    .btn {
+      height: 36px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--tfn-500);
+      color: white;
+      font-size: 13px;
+      font-weight: 760;
+      padding: 0 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .btn.secondary {
+      background: white;
+      color: var(--slate-700);
+      border: 1px solid var(--slate-200);
+    }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .kpi {
+      background: white;
+      border: 1px solid var(--slate-200);
+      border-radius: 12px;
+      padding: 14px;
+      min-width: 0;
+    }
+
+    .kpi-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--slate-500);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+      margin-bottom: 10px;
+    }
+
+    .kpi-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: var(--tfn-50);
+      color: var(--tfn-600);
+      font-size: 15px;
+    }
+
+    .kpi-value {
+      font-size: 26px;
+      line-height: 1;
+      font-weight: 800;
+      color: var(--slate-900);
+    }
+
+    .kpi-foot {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--slate-500);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.35fr .65fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .panel {
+      background: white;
+      border: 1px solid var(--slate-200);
+      border-radius: 12px;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .panel-head {
+      min-height: 54px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--slate-200);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-head b {
+      font-size: 14px;
+    }
+
+    .panel-head span {
+      color: var(--slate-500);
+      font-size: 12px;
+    }
+
+    .switches {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .chip {
+      border: 1px solid var(--slate-200);
+      border-radius: 999px;
+      padding: 4px 8px;
+      color: var(--slate-600);
+      background: var(--slate-50);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .chip.active {
+      background: var(--tfn-50);
+      border-color: var(--tfn-100);
+      color: var(--tfn-700);
+    }
+
+    .calendar {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0,1fr));
+      border-top: 0;
+    }
+
+    .day {
+      min-height: 322px;
+      border-right: 1px solid var(--slate-200);
+      background: #fff;
+    }
+
+    .day:last-child { border-right: 0; }
+
+    .day-head {
+      height: 48px;
+      border-bottom: 1px solid var(--slate-200);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0 10px;
+      background: #fbfdff;
+    }
+
+    .day-head b {
+      font-size: 12px;
+      color: var(--slate-800);
+    }
+
+    .day-head span {
+      color: var(--slate-400);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .today .day-head {
+      background: var(--tfn-50);
+      color: var(--tfn-700);
+    }
+
+    .lessons {
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .lesson {
+      border: 1px solid #d9e8f7;
+      background: #f8fbff;
+      border-radius: 9px;
+      padding: 8px;
+      min-width: 0;
+    }
+
+    .lesson-time {
+      color: var(--tfn-700);
+      font-size: 11px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .lesson-title {
+      color: var(--slate-900);
+      font-size: 12px;
+      font-weight: 760;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .lesson-meta {
+      margin-top: 4px;
+      color: var(--slate-500);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .empty {
+      border: 1px dashed var(--slate-200);
+      color: var(--slate-400);
+      background: var(--slate-50);
+      border-radius: 9px;
+      padding: 10px 8px;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .rows { padding: 4px 0; }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 48px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--slate-200);
+    }
+
+    .row:last-child { border-bottom: 0; }
+
+    .row-main {
+      min-width: 0;
+    }
+
+    .row-main b {
+      display: block;
+      font-size: 12px;
+      color: var(--slate-800);
+    }
+
+    .row-main span {
+      display: block;
+      margin-top: 2px;
+      color: var(--slate-500);
+      font-size: 11px;
+    }
+
+    .badge {
+      border-radius: 999px;
+      padding: 4px 7px;
+      font-size: 10.5px;
+      font-weight: 800;
+      flex: none;
+    }
+
+    .badge.warn { background: var(--yellow-50); color: var(--yellow-600); }
+    .badge.danger { background: var(--orange-50); color: var(--orange-600); }
+    .badge.ok { background: var(--green-50); color: var(--green-600); }
+    .badge.info { background: var(--tfn-50); color: var(--tfn-700); }
+
+    .option-foot {
+      display: grid;
+      grid-template-columns: repeat(3,1fr);
+      gap: 10px;
+      padding: 13px 15px 15px;
+      border-top: 1px solid var(--slate-200);
+      background: #fbfdff;
+    }
+
+    .option-foot b {
+      display: block;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+
+    .option-foot span {
+      color: var(--slate-600);
+      font-size: 11.5px;
+      line-height: 1.4;
+    }
+
+    .variant-polish .kpi {
+      box-shadow: 0 1px 2px rgba(15,23,42,.04);
+    }
+
+    .variant-brand .sidebar {
+      border-right-color: #d4e6f5;
+      background: linear-gradient(180deg,#ffffff 0%,#f8fcff 100%);
+    }
+
+    .variant-brand .logo {
+      background: var(--tfn-50);
+      border-bottom-color: #cfe5f7;
+    }
+
+    .variant-brand .book {
+      background: var(--tfn-700);
+    }
+
+    .variant-brand .header {
+      background: linear-gradient(90deg,#ffffff 0%,#f4faff 100%);
+    }
+
+    .variant-brand .kpi:first-child {
+      background: var(--tfn-50);
+      border-color: var(--tfn-100);
+    }
+
+    .variant-brand .lesson {
+      border-left: 3px solid var(--tfn-500);
+      padding-left: 7px;
+    }
+
+    .variant-calendar .mock {
+      grid-template-columns: 72px 1fr;
+    }
+
+    .variant-calendar .brand,
+    .variant-calendar .collapse,
+    .variant-calendar .nav-item span,
+    .variant-calendar .portal,
+    .variant-calendar .user div {
+      display: none;
+    }
+
+    .variant-calendar .logo {
+      justify-content: center;
+      padding: 0;
+    }
+
+    .variant-calendar .nav {
+      align-items: center;
+    }
+
+    .variant-calendar .nav-item {
+      width: 44px;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .variant-calendar .nav-item.active::before {
+      left: -10px;
+    }
+
+    .variant-calendar .user {
+      justify-content: center;
+    }
+
+    .variant-calendar .body {
+      padding: 18px;
+    }
+
+    .variant-calendar .kpis {
+      grid-template-columns: repeat(5, minmax(0,1fr));
+    }
+
+    .variant-calendar .grid {
+      grid-template-columns: 1fr;
+    }
+
+    .variant-calendar .calendar {
+      grid-template-columns: 88px repeat(6,minmax(0,1fr));
+    }
+
+    .timecol {
+      border-right: 1px solid var(--slate-200);
+      background: #fbfdff;
+    }
+
+    .time {
+      height: 68px;
+      border-bottom: 1px solid var(--slate-200);
+      color: var(--slate-500);
+      font-size: 11px;
+      font-weight: 760;
+      padding: 10px;
+    }
+
+    .variant-calendar .day {
+      min-height: 408px;
+    }
+
+    .variant-calendar .lesson {
+      min-height: 60px;
+    }
+
+    @media (max-width: 1220px) {
+      .options { grid-template-columns: 1fr; }
+      .mock { height: 620px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="page-head">
+      <div>
+        <h1>Seconda iterazione: più fedele all’app attuale</h1>
+        <p class="subtitle">Ho rimesso icone, sidebar vera, badge, bottoni, card, calendario settimanale e gerarchia Nuxt UI. Qui scegliamo quanto “polish” aggiungere, non un redesign da zero.</p>
+      </div>
+      <div class="note">Metafora: non stiamo cambiando casa, stiamo ordinando le stanze, migliorando luci, etichette e percorsi. <b>Cosa significa in pratica per te:</b> chi usa già il gestionale non si sentirà spaesato.</div>
+    </header>
+
+    <section class="options">
+      <article class="option variant-polish" data-choice="A - Attuale Rifinita" onclick="selectOption(this)">
+        <div class="option-top">
+          <div class="letter">A</div>
+          <div>
+            <h2>Attuale Rifinita</h2>
+            <p>La più vicina a quello che hai ora: sidebar bianca, icone, header, card e calendario. Migliora solo proporzioni, stati e chiarezza.</p>
+          </div>
+        </div>
+        <div class="mock">
+          <aside class="sidebar">
+            <div class="logo"><div class="book">▥</div><div class="brand">Ti Formiamo Noi</div><div class="collapse">☰</div></div>
+            <nav class="nav">
+              <div class="nav-item active"><div class="ico">▦</div><span>Dashboard</span></div>
+              <div class="nav-item"><div class="ico">◷</div><span>Calendario</span></div>
+              <div class="nav-item"><div class="ico">👥</div><span>Studenti</span></div>
+              <div class="nav-item"><div class="ico">◫</div><span>Pacchetti</span></div>
+              <div class="nav-item"><div class="ico">☰</div><span>Lezioni</span></div>
+              <div class="nav-item"><div class="ico">♙</div><span>Tutor</span></div>
+              <div class="nav-item"><div class="ico">€</div><span>Contabilità</span></div>
+              <div class="nav-item"><div class="ico">⚙</div><span>Impostazioni</span></div>
+            </nav>
+            <div class="portal"><div class="portal-label">Portali</div><div class="nav-item"><div class="ico">◎</div><span>Portale Famiglie</span></div></div>
+            <div class="user"><div class="avatar">AR</div><div><b>Admin Rossi</b><span>ADMIN</span></div></div>
+          </aside>
+          <section class="main">
+            <div class="header"><div class="header-title">Dashboard</div><div class="header-actions"><div class="search">⌕ Cerca studente...</div><div class="avatar">AR</div></div></div>
+            <div class="body">
+              <div class="title-row">
+                <div><h3>Gestionale Ti Formiamo Noi</h3><small>Oggi, 14 giugno · panoramica operativa</small></div>
+                <div><button class="btn secondary">↻ Aggiorna</button> <button class="btn">+ Nuova lezione</button></div>
+              </div>
+              <div class="kpis">
+                <div class="kpi"><div class="kpi-head">Lezioni oggi <span class="kpi-icon">◷</span></div><div class="kpi-value">18</div><div class="kpi-foot">6 ancora da svolgere</div></div>
+                <div class="kpi"><div class="kpi-head">Studenti attivi <span class="kpi-icon">👥</span></div><div class="kpi-value">142</div><div class="kpi-foot">+4 questo mese</div></div>
+                <div class="kpi"><div class="kpi-head">Da rinnovare <span class="kpi-icon">!</span></div><div class="kpi-value">9</div><div class="kpi-foot">priorità alta</div></div>
+                <div class="kpi"><div class="kpi-head">Da incassare <span class="kpi-icon">€</span></div><div class="kpi-value">1.240</div><div class="kpi-foot">4 famiglie</div></div>
+              </div>
+              <div class="grid">
+                <div class="panel">
+                  <div class="panel-head"><div><b>Calendario lezioni</b><br><span>Settimana 15-21 giugno</span></div><div class="switches"><span class="chip">←</span><span class="chip active">Questa settimana</span><span class="chip">→</span></div></div>
+                  <div class="calendar">
+                    <div class="day"><div class="day-head"><b>Lun</b><span>15</span></div><div class="lessons"><div class="lesson"><div class="lesson-time">15:30 - 16:30</div><div class="lesson-title">Matematica</div><div class="lesson-meta">Rizzo · 3 studenti</div></div><div class="lesson"><div class="lesson-time">17:00</div><div class="lesson-title">Inglese</div><div class="lesson-meta">Martina · singola</div></div></div></div>
+                    <div class="day today"><div class="day-head"><b>Mar</b><span>16</span></div><div class="lessons"><div class="lesson"><div class="lesson-time">16:00</div><div class="lesson-title">Fisica</div><div class="lesson-meta">Lo Bue · gruppo</div></div></div></div>
+                    <div class="day"><div class="day-head"><b>Mer</b><span>17</span></div><div class="lessons"><div class="empty">Slot libero</div><div class="lesson"><div class="lesson-time">18:00</div><div class="lesson-title">Gruppo medie</div><div class="lesson-meta">Greco · 4 studenti</div></div></div></div>
+                    <div class="day"><div class="day-head"><b>Gio</b><span>18</span></div><div class="lessons"><div class="lesson"><div class="lesson-time">17:00</div><div class="lesson-title">Latino</div><div class="lesson-meta">Ferrara · singola</div></div></div></div>
+                    <div class="day"><div class="day-head"><b>Ven</b><span>19</span></div><div class="lessons"><div class="lesson"><div class="lesson-time">16:30</div><div class="lesson-title">Matematica</div><div class="lesson-meta">3 studenti</div></div></div></div>
+                    <div class="day"><div class="day-head"><b>Sab</b><span>20</span></div><div class="lessons"><div class="empty">Nessuna lezione</div></div></div>
+                    <div class="day"><div class="day-head"><b>Dom</b><span>21</span></div><div class="lessons"><div class="empty">Chiuso</div></div></div>
+                  </div>
+                </div>
+                <div class="panel">
+                  <div class="panel-head"><div><b>Azioni prioritarie</b><br><span>Da controllare oggi</span></div><span class="chip active">9 alert</span></div>
+                  <div class="rows">
+                    <div class="row"><div class="row-main"><b>Pacchetti in scadenza</b><span>5 studenti entro 3 giorni</span></div><span class="badge warn">5</span></div>
+                    <div class="row"><div class="row-main"><b>Pagamenti pendenti</b><span>€ 1.240 da incassare</span></div><span class="badge danger">4</span></div>
+                    <div class="row"><div class="row-main"><b>Slot liberi oggi</b><span>2 fasce riempibili</span></div><span class="badge info">2</span></div>
+                    <div class="row"><div class="row-main"><b>Tutor da confermare</b><span>1 disponibilità mancante</span></div><span class="badge ok">1</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+        <div class="option-foot"><div><b>Perché sì</b><span>Rispetta di più l’attuale app.</span></div><div><b>Cambia</b><span>Più ordine, meno confusione.</span></div><div><b>Rischio</b><span>Meno “wow”, più gestionale.</span></div></div>
+      </article>
+
+      <article class="option variant-brand" data-choice="B - Attuale con Brand" onclick="selectOption(this)">
+        <div class="option-top">
+          <div class="letter">B</div>
+          <div>
+            <h2>Attuale con Brand</h2>
+            <p>Stessa struttura attuale, ma con più presenza TFN: blu usato in sidebar, header, primo KPI e lezioni principali.</p>
+          </div>
+        </div>
+        <div class="mock">
+          <aside class="sidebar">
+            <div class="logo"><div class="book">▥</div><div class="brand">Ti Formiamo Noi</div><div class="collapse">☰</div></div>
+            <nav class="nav">
+              <div class="nav-item active"><div class="ico">▦</div><span>Dashboard</span></div>
+              <div class="nav-item"><div class="ico">◷</div><span>Calendario</span></div>
+              <div class="nav-item"><div class="ico">👥</div><span>Studenti</span></div>
+              <div class="nav-item"><div class="ico">◫</div><span>Pacchetti</span></div>
+              <div class="nav-item"><div class="ico">☰</div><span>Lezioni</span></div>
+              <div class="nav-item"><div class="ico">♙</div><span>Tutor</span></div>
+              <div class="nav-item"><div class="ico">€</div><span>Contabilità</span></div>
+              <div class="nav-item"><div class="ico">⚙</div><span>Impostazioni</span></div>
+            </nav>
+            <div class="portal"><div class="portal-label">Portali</div><div class="nav-item"><div class="ico">◎</div><span>Portale Famiglie</span></div></div>
+            <div class="user"><div class="avatar">AR</div><div><b>Admin Rossi</b><span>ADMIN</span></div></div>
+          </aside>
+          <section class="main">
+            <div class="header"><div class="header-title">Dashboard</div><div class="header-actions"><div class="search">⌕ Cerca studente...</div><button class="btn">+ Nuova</button><div class="avatar">AR</div></div></div>
+            <div class="body">
+              <div class="title-row">
+                <div><h3>Dashboard operativa</h3><small>Il blu TFN aiuta a riconoscere area attiva e priorità.</small></div>
+                <div><button class="btn secondary">Filtri</button> <button class="btn">Nuova lezione</button></div>
+              </div>
+              <div class="kpis">
+                <div class="kpi"><div class="kpi-head">Lezioni oggi <span class="kpi-icon">◷</span></div><div class="kpi-value">18</div><div class="kpi-foot">6 ancora da svolgere</div></div>
+                <div class="kpi"><div class="kpi-head">Studenti attivi <span class="kpi-icon">👥</span></div><div class="kpi-value">142</div><div class="kpi-foot">+4 questo mese</div></div>
+                <div class="kpi"><div class="kpi-head">Da rinnovare <span class="kpi-icon">!</span></div><div class="kpi-value">9</div><div class="kpi-foot">priorità alta</div></div>
+                <div class="kpi"><div class="kpi-head">Da incassare <span class="kpi-icon">€</span></div><div class="kpi-value">1.240</div><div class="kpi-foot">4 famiglie</div></div>
+              </div>
+              <div class="grid">
+                <div class="panel">
+                  <div class="panel-head"><div><b>Calendario lezioni</b><br><span>Settimana 15-21 giugno</span></div><div class="switches"><span class="chip">Giorno</span><span class="chip active">Settimana</span><span class="chip">Mese</span></div></div>
+                  <div class="calendar">
+                    <div class="day"><div class="day-head"><b>Lun</b><span>15</span></div><div class="lessons"><div class="lesson"><div class="lesson-time">15:30</div><div class="lesson-title">Matematica</div><div class="lesson-meta">Rizzo · 3 studenti</div></div><div class="lesson"><div class="lesson-time">17:00</div><div class="lesson-title">Inglese</div><div class="lesson-meta">Martina</div></div></div></div>
+                    <div class="day today"><div class="day-head"><b>Mar</b><span>16</span></div><div class="lessons"><div class="lesson"><div class="lesson-time">16:00</div><div class="lesson-title">Fisica</div><div class="lesson-meta">Lo Bue · gruppo</div></div></div></div>
+                    <div class="day"><div class="day-head"><b>Mer</b><span>17</span></div><div class="lessons"><div class="empty">Slot libero</div><div class="lesson"><div class="lesson-time">18:00</div><div class="lesson-title">Gruppo medie</div><div class="lesson-meta">Greco</div></div></div></div>
+                    <div class="day"><div class="day-head"><b>Gio</b><span>18</span></div><div class="lessons"><div class="lesson"><div class="lesson-time">17:00</div><div class="lesson-title">Latino</div><div class="lesson-meta">Ferrara</div></div></div></div>
+                    <div class="day"><div class="day-head"><b>Ven</b><span>19</span></div><div class="lessons"><div class="lesson"><div class="lesson-time">16:30</div><div class="lesson-title">Matematica</div><div class="lesson-meta">3 studenti</div></div></div></div>
+                    <div class="day"><div class="day-head"><b>Sab</b><span>20</span></div><div class="lessons"><div class="empty">Nessuna lezione</div></div></div>
+                    <div class="day"><div class="day-head"><b>Dom</b><span>21</span></div><div class="lessons"><div class="empty">Chiuso</div></div></div>
+                  </div>
+                </div>
+                <div class="panel"><div class="panel-head"><div><b>Priorità</b><br><span>Badge più leggibili</span></div><span class="chip active">Oggi</span></div><div class="rows"><div class="row"><div class="row-main"><b>Da rinnovare</b><span>Pacchetti quasi finiti</span></div><span class="badge warn">5</span></div><div class="row"><div class="row-main"><b>Da pagare</b><span>Saldare prima della lezione</span></div><span class="badge danger">4</span></div><div class="row"><div class="row-main"><b>Slot liberi</b><span>Possibili recuperi</span></div><span class="badge info">2</span></div><div class="row"><div class="row-main"><b>Tutto ok</b><span>Lezioni confermate</span></div><span class="badge ok">18</span></div></div></div>
+              </div>
+            </div>
+          </section>
+        </div>
+        <div class="option-foot"><div><b>Perché sì</b><span>Più identità, meno anonima.</span></div><div><b>Cambia</b><span>Il blu guida meglio lo sguardo.</span></div><div><b>Rischio</b><span>Se esagerato può diventare pesante.</span></div></div>
+      </article>
+
+      <article class="option variant-calendar" data-choice="C - Attuale Calendar First" onclick="selectOption(this)">
+        <div class="option-top">
+          <div class="letter">C</div>
+          <div>
+            <h2>Attuale Calendar First</h2>
+            <p>Per tenere il calendario lezioni come schermata principale: sidebar collassata, più spazio orario, KPI sempre presenti.</p>
+          </div>
+        </div>
+        <div class="mock">
+          <aside class="sidebar">
+            <div class="logo"><div class="book">▥</div><div class="brand">Ti Formiamo Noi</div><div class="collapse">☰</div></div>
+            <nav class="nav">
+              <div class="nav-item"><div class="ico">▦</div><span>Dashboard</span></div>
+              <div class="nav-item active"><div class="ico">◷</div><span>Calendario</span></div>
+              <div class="nav-item"><div class="ico">👥</div><span>Studenti</span></div>
+              <div class="nav-item"><div class="ico">◫</div><span>Pacchetti</span></div>
+              <div class="nav-item"><div class="ico">€</div><span>Contabilità</span></div>
+            </nav>
+            <div class="portal"><div class="portal-label">Portali</div></div>
+            <div class="user"><div class="avatar">AR</div><div><b>Admin Rossi</b><span>ADMIN</span></div></div>
+          </aside>
+          <section class="main">
+            <div class="header"><div class="header-title">Calendario lezioni</div><div class="header-actions"><div class="search">⌕ Tutor o studente...</div><button class="btn">+ Nuova lezione</button><div class="avatar">AR</div></div></div>
+            <div class="body">
+              <div class="title-row"><div><h3>Calendario lezioni</h3><small>Vista settimanale con slot orari più chiari</small></div><div><button class="btn secondary">← Settimana</button> <button class="btn secondary">Oggi</button> <button class="btn">Prossima →</button></div></div>
+              <div class="kpis">
+                <div class="kpi"><div class="kpi-head">Oggi <span class="kpi-icon">◷</span></div><div class="kpi-value">18</div><div class="kpi-foot">lezioni</div></div>
+                <div class="kpi"><div class="kpi-head">Slot liberi <span class="kpi-icon">□</span></div><div class="kpi-value">6</div><div class="kpi-foot">riempibili</div></div>
+                <div class="kpi"><div class="kpi-head">Tutor <span class="kpi-icon">♙</span></div><div class="kpi-value">11</div><div class="kpi-foot">attivi</div></div>
+                <div class="kpi"><div class="kpi-head">Alert <span class="kpi-icon">!</span></div><div class="kpi-value">4</div><div class="kpi-foot">da vedere</div></div>
+                <div class="kpi"><div class="kpi-head">Gruppi <span class="kpi-icon">👥</span></div><div class="kpi-value">7</div><div class="kpi-foot">oggi</div></div>
+              </div>
+              <div class="grid">
+                <div class="panel">
+                  <div class="panel-head"><div><b>Settimana 15-21 giugno</b><br><span>Layout calendario più ampio, vicino a un'agenda vera</span></div><div class="switches"><span class="chip">Tutor</span><span class="chip active">Tutti</span><span class="chip">Slot liberi</span></div></div>
+                  <div class="calendar">
+                    <div class="timecol"><div class="day-head"><b>Ora</b><span></span></div><div class="time">15:30</div><div class="time">16:30</div><div class="time">17:30</div><div class="time">18:30</div><div class="time">19:30</div></div>
+                    <div class="day"><div class="day-head"><b>Lun</b><span>15</span></div><div class="lessons"><div class="lesson"><div class="lesson-time">15:30</div><div class="lesson-title">Matematica</div><div class="lesson-meta">Rizzo · 3 studenti</div></div><div class="lesson"><div class="lesson-time">17:00</div><div class="lesson-title">Inglese</div><div class="lesson-meta">Martina</div></div></div></div>
+                    <div class="day today"><div class="day-head"><b>Mar</b><span>16</span></div><div class="lessons"><div class="lesson"><div class="lesson-time">16:00</div><div class="lesson-title">Fisica</div><div class="lesson-meta">Lo Bue · gruppo</div></div><div class="empty">17:30 libero</div></div></div>
+                    <div class="day"><div class="day-head"><b>Mer</b><span>17</span></div><div class="lessons"><div class="empty">15:30 libero</div><div class="lesson"><div class="lesson-time">18:00</div><div class="lesson-title">Gruppo medie</div><div class="lesson-meta">Greco · 4 studenti</div></div></div></div>
+                    <div class="day"><div class="day-head"><b>Gio</b><span>18</span></div><div class="lessons"><div class="lesson"><div class="lesson-time">17:00</div><div class="lesson-title">Latino</div><div class="lesson-meta">Ferrara</div></div></div></div>
+                    <div class="day"><div class="day-head"><b>Ven</b><span>19</span></div><div class="lessons"><div class="lesson"><div class="lesson-time">16:30</div><div class="lesson-title">Matematica</div><div class="lesson-meta">3 studenti</div></div><div class="empty">18:30 libero</div></div></div>
+                    <div class="day"><div class="day-head"><b>Sab</b><span>20</span></div><div class="lessons"><div class="empty">Nessuna lezione</div></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+        <div class="option-foot"><div><b>Perché sì</b><span>Il calendario respira molto di più.</span></div><div><b>Cambia</b><span>Sidebar collassata di default.</span></div><div><b>Rischio</b><span>Meno immediata per dashboard economica.</span></div></div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    function selectOption(el) {
+      document.querySelectorAll('.option').forEach(x => x.classList.remove('selected'));
+      el.classList.add('selected');
+      const payload = {
+        type: 'click',
+        choice: el.dataset.choice,
+        text: el.querySelector('h2')?.textContent || el.dataset.choice,
+        timestamp: Date.now()
+      };
+      try {
+        if (window.__brainstormSend) window.__brainstormSend(payload);
+        else {
+          const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
+          ws.addEventListener('open', () => { ws.send(JSON.stringify(payload)); ws.close(); });
+        }
+      } catch (e) {}
+    }
+  </script>
+</body>
+</html>

@@ -1,3 +1,6 @@
+@import 'tailwindcss';
+@import '@nuxt/ui';
+
 @theme {
   /* ─── Palette TFN (Blue Trust #0063A6) ─── */
   --color-tfn-50:  #f0f7ff;

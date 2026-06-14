@@ -184,16 +184,25 @@ const portalLinks = [
   { icon: 'i-heroicons-document-text', label: 'Form Contatto',  route: '/prenota' },
 ]
 
-const navItems = [
-  { icon: 'i-heroicons-squares-2x2',  label: 'Dashboard',    route: '/' },
-  { icon: 'i-heroicons-calendar',      label: 'Calendario',   route: '/calendario' },
-  { icon: 'i-heroicons-users',         label: 'Studenti',     route: '/studenti' },
-  { icon: 'i-heroicons-cube',          label: 'Pacchetti',    route: '/pacchetti' },
-  { icon: 'i-heroicons-list-bullet',   label: 'Lezioni',      route: '/lezioni' },
-  { icon: 'i-heroicons-academic-cap',  label: 'Tutor',        route: '/tutor' },
-  { icon: 'i-heroicons-banknotes',     label: 'Contabilità',  route: '/contabilita' },
-  { icon: 'i-heroicons-cog-6-tooth',   label: 'Impostazioni', route: '/impostazioni' },
-]
+const navItems = computed(() => {
+  if (user.value?.role === 'TUTOR') {
+    return [
+      { icon: 'i-heroicons-user', label: 'Area Tutor', route: '/area-tutor' }
+    ]
+  }
+  return [
+    { icon: 'i-heroicons-squares-2x2',  label: 'Dashboard',    route: '/' },
+    { icon: 'i-heroicons-calendar',      label: 'Calendario',   route: '/calendario' },
+    { icon: 'i-heroicons-users',         label: 'Studenti',     route: '/studenti' },
+    { icon: 'i-heroicons-cube',          label: 'Pacchetti',    route: '/pacchetti' },
+    { icon: 'i-heroicons-list-bullet',   label: 'Lezioni',      route: '/lezioni' },
+    { icon: 'i-heroicons-academic-cap',  label: 'Tutor',        route: '/tutor' },
+    { icon: 'i-heroicons-banknotes',     label: 'Contabilità',  route: '/contabilita' },
+    { icon: 'i-heroicons-document-check',label: 'Matching',     route: '/matching' },
+    { icon: 'i-heroicons-user',          label: 'Area Tutor',   route: '/area-tutor' },
+    { icon: 'i-heroicons-cog-6-tooth',   label: 'Impostazioni', route: '/impostazioni' },
+  ]
+})
 
 function isActive(path: string) {
   if (path === '/') return route.path === '/'
@@ -201,7 +210,7 @@ function isActive(path: string) {
 }
 
 const pageTitle = computed(() => {
-  const item = navItems.find(n =>
+  const item = navItems.value.find(n =>
     n.route === '/' ? route.path === '/' : route.path.startsWith(n.route)
   )
   return item?.label ?? 'Gestionale'

@@ -12,6 +12,8 @@
     "@nuxt/ui": "latest",
     "@nuxtjs/google-fonts": "latest",
     "@paralleldrive/cuid2": "^3.3.0",
+    "bcryptjs": "^3.0.3",
+    "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.2",
     "nuxt": "latest",
     "nuxt-auth-utils": "^0.5.29",

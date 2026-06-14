@@ -9,7 +9,7 @@ export const CreateTutorSchema = z.object({
   password:          z.string({ message: 'Password obbligatoria' }).min(8, 'Password: almeno 8 caratteri'),
   phone:             z.string().regex(/^[\d\s+\-().]{7,20}$/, 'Telefono non valido').optional().nullable(),
   modalitaPagamento: z.enum(['ORE', 'FORFAIT']).default('ORE'),
-  importoForfait:    z.string().optional().nullable(),
+  importoForfait:    z.coerce.string().optional().nullable(),
 })
 export type CreateTutorInput = z.infer<typeof CreateTutorSchema>
 
@@ -27,7 +27,7 @@ export const UpdateTutorSchema = z.object({
   materie:           z.array(z.string()).optional(),
   noteInterne:       z.string().optional().nullable(),
   modalitaPagamento: z.enum(['ORE', 'FORFAIT']).optional(),
-  importoForfait:    z.string().optional().nullable(),
+  importoForfait:    z.coerce.string().optional().nullable(),
   active:            z.boolean().optional(),
 })
 export type UpdateTutorInput = z.infer<typeof UpdateTutorSchema>
