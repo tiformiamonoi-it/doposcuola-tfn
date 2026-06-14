@@ -372,6 +372,7 @@ export async function payTutor(tutorId: string, data: PayTutorInput) {
         descrizione:     `Compenso tutor — ${meseDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}`,
         categoria:       'compenso_tutor',
         metodoPagamento: data.metodo,
+        tutorPaymentId:  payment.id,
         note:            `tutorPaymentId:${payment.id} tutorId:${tutorId}`,
       })
     }
@@ -563,6 +564,7 @@ export async function payReimbursement(reimbursementId: string, data: PayReimbur
       descrizione:     `Rimborso spese: ${current.descrizione}`,
       categoria:       'rimborso_tutor',
       metodoPagamento: data.metodo,
+      reimbursementId: reimbursementId,
       note:            `rimborsoId:${reimbursementId} tutorId:${current.tutor_id}`,
     })
 
