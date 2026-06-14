@@ -170,3 +170,45 @@ export async function listPayments(query: PaymentQuery) {
     },
   }
 }
+
+// ─────────────────────────────────────────────
+// DELETE — elimina un pagamento studente
+// Ripristina il saldo del pacchetto (importoPagato/importoResiduo + stati)
+// e poi elimina il pagamento: la scrittura contabile collegata sparisce
+// automaticamente via ON DELETE CASCADE su accounting_entries.paymentId.
+// ─────────────────────────────────────────────
+
+export async function deletePayment(paymentId: string) {
+  return await db.transaction(async (tx) => {
+    const [pay] = await tx.select().from(payments).where(eq(payments.id, paymentId)).limit(1)
+    if (!pay) throw createError({ statusCode: 404, statusMessage: 'Pagamento non trovato' })
+
+    // Ripristina il saldo del pacchetto (atomico)
+    await tx
+      .update(packages)
+      .set({
+        importoPagato:  sql`GREATEST(0, ${packages.importoPagato} - ${pay.importo})`,
+        importoResiduo: sql`${packages.importoResiduo} + ${pay.importo}`,
+        updatedAt:      new Date(),
+      })
+      .where(eq(packages.id, pay.packageId))
+
+    // Ricalcola gli stati con i valori aggiornati
+    const [pkg] = await tx.select().from(packages).where(eq(packages.id, pay.packageId)).limit(1)
+    if (pkg) {
+      const stati = computePackageStates({
+        oreAcquistate:  pkg.oreAcquistate,
+        oreResiduo:     pkg.oreResiduo,
+        importoResiduo: pkg.importoResiduo,
+        dataScadenza:   pkg.dataScadenza,
+        giorniResiduo:  pkg.giorniResiduo,
+      })
+      await tx.update(packages).set({ stati, updatedAt: new Date() }).where(eq(packages.id, pkg.id))
+    }
+
+    // Elimina il pagamento → la scrittura contabile sparisce via CASCADE
+    await tx.delete(payments).where(eq(payments.id, paymentId))
+
+    return { ok: true }
+  })
+}
