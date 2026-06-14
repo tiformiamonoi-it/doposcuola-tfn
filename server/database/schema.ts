@@ -393,7 +393,11 @@ export const accountingEntries = pgTable('accounting_entries', {
   // Relazioni opzionali (movimento può essere collegato a uno di questi)
   packageId:      text('package_id').references(() => packages.id, { onDelete: 'set null' }),
   lessonId:       text('lesson_id').references(() => lessons.id, { onDelete: 'set null' }),
-  paymentId:      text('payment_id').references(() => payments.id, { onDelete: 'set null' }).unique(),
+  // Collegamenti "graffetta solida" alle sorgenti dei pagamenti — onDelete cascade:
+  // eliminata la sorgente, sparisce la scrittura contabile.
+  paymentId:       text('payment_id').references(() => payments.id, { onDelete: 'cascade' }).unique(),
+  tutorPaymentId:  text('tutor_payment_id').references(() => tutorPayments.id, { onDelete: 'cascade' }).unique(),
+  reimbursementId: text('reimbursement_id').references(() => tutorReimbursements.id, { onDelete: 'cascade' }),
 
   metodoPagamento: paymentMethodEnum('metodo_pagamento'),
   fatturaEmessa:   boolean('fattura_emessa').notNull().default(false),
@@ -405,6 +409,8 @@ export const accountingEntries = pgTable('accounting_entries', {
   tipoDataIdx:    index('acc_tipo_data_idx').on(t.tipo, t.data),
   categoriaIdx:   index('acc_categoria_idx').on(t.categoria),
   metodoIdx:      index('acc_metodo_idx').on(t.metodoPagamento),
+  tutorPaymentIdx:  index('acc_tutor_payment_idx').on(t.tutorPaymentId),
+  reimbursementIdx: index('acc_reimbursement_idx').on(t.reimbursementId),
 }))
 
 // ─────────────────────────────────────────────

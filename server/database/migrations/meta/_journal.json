@@ -43,6 +43,13 @@
       "when": 1781433012594,
       "tag": "0005_pretty_northstar",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781441259531,
+      "tag": "0006_past_quentin_quire",
+      "breakpoints": true
     }
   ]
 }
