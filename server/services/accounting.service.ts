@@ -1,6 +1,8 @@
 import { db } from '../database/client'
 import { accountingEntries, payments } from '../database/schema'
 import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm'
+import { deletePayment } from './payment.service'
+import { deleteTutorPayment, reduceReimbursementOnEntryDelete } from './tutor.service'
 
 // ─────────────────────────────────────────────
 // REGOLA FONDAMENTALE — PENNA INDELEBILE
@@ -216,4 +218,86 @@ export async function getDashboard() {
     },
     margineUltimi30Giorni: margine30,
   }
+}
+
+// ─────────────────────────────────────────────
+// Un movimento è AUTOMATICO se collegato a una sorgente (pagamento/compenso/rimborso).
+// Altrimenti è MANUALE (Credito/Debito/Nota inseriti a mano).
+// ─────────────────────────────────────────────
+function isAutoEntry(e: { paymentId: string | null; tutorPaymentId: string | null; reimbursementId: string | null }) {
+  return !!(e.paymentId || e.tutorPaymentId || e.reimbursementId)
+}
+
+// ─────────────────────────────────────────────
+// DELETE intelligente di una scrittura contabile.
+//   mode = 'storno' → crea un movimento opposto, mantiene lo storico (best practice)
+//   mode = 'delete' → eliminazione vera:
+//       - se automatica: elimina la SORGENTE (pagamento/compenso/rimborso),
+//         che a cascata rimuove anche la scrittura e ricalcola i saldi
+//       - se manuale: elimina solo la riga
+// ─────────────────────────────────────────────
+export async function deleteAccountingEntry(
+  entryId: string,
+  mode: 'delete' | 'storno',
+  motivo = 'Eliminazione manuale',
+) {
+  const [entry] = await db.select().from(accountingEntries).where(eq(accountingEntries.id, entryId)).limit(1)
+  if (!entry) throw createError({ statusCode: 404, statusMessage: 'Movimento non trovato' })
+
+  if (mode === 'storno') {
+    return await reverseTransaction(entryId, motivo)
+  }
+
+  // mode === 'delete'
+  if (entry.paymentId) {
+    return await deletePayment(entry.paymentId)
+  }
+  if (entry.tutorPaymentId) {
+    return await deleteTutorPayment(entry.tutorPaymentId)
+  }
+  if (entry.reimbursementId) {
+    // Scrittura parziale di rimborso: prima riduci l'importo pagato, poi elimina la riga
+    await reduceReimbursementOnEntryDelete(entry.reimbursementId, entry.importo)
+    await db.delete(accountingEntries).where(eq(accountingEntries.id, entryId))
+    return { ok: true }
+  }
+  // Movimento manuale
+  await db.delete(accountingEntries).where(eq(accountingEntries.id, entryId))
+  return { ok: true }
+}
+
+// ─────────────────────────────────────────────
+// UPDATE consentito SOLO sui movimenti manuali.
+// I movimenti automatici vanno corretti dal pagamento di origine (o eliminati).
+// ─────────────────────────────────────────────
+export async function updateAccountingEntry(
+  entryId: string,
+  data: {
+    tipo?: string
+    importo?: number
+    descrizione?: string
+    categoria?: string | null
+    metodoPagamento?: string | null
+    data?: string
+  },
+) {
+  const [entry] = await db.select().from(accountingEntries).where(eq(accountingEntries.id, entryId)).limit(1)
+  if (!entry) throw createError({ statusCode: 404, statusMessage: 'Movimento non trovato' })
+  if (isAutoEntry(entry)) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'Questo movimento è automatico: modificalo dal pagamento di origine (oppure eliminalo).',
+    })
+  }
+
+  const changes: Record<string, unknown> = { updatedAt: new Date() }
+  if (data.tipo !== undefined)            changes.tipo            = data.tipo
+  if (data.importo !== undefined)         changes.importo         = String(data.importo)
+  if (data.descrizione !== undefined)     changes.descrizione     = data.descrizione
+  if (data.categoria !== undefined)       changes.categoria       = data.categoria
+  if (data.metodoPagamento !== undefined) changes.metodoPagamento = data.metodoPagamento
+  if (data.data !== undefined)            changes.data            = new Date(data.data)
+
+  const [updated] = await db.update(accountingEntries).set(changes as any).where(eq(accountingEntries.id, entryId)).returning()
+  return updated
 }
