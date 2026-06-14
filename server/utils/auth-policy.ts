@@ -18,7 +18,8 @@ export const PUBLIC_API_PREFIXES = [
 // Regole ordinate: la PRIMA che matcha decide i ruoli ammessi
 export const API_POLICY: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: '/api/accounting',              roles: ADMIN_ONLY },
-  { prefix: '/api/portal',                  roles: GENITORE_ONLY },
+  // Portale: GENITORE + ADMIN/SUPER in preview (gli handler restituiscono [] ai non-genitori)
+  { prefix: '/api/portal',                  roles: ['GENITORE', 'ADMIN', 'SUPER_TUTOR'] },
   { prefix: '/api/admin',                   roles: ADMIN_SUPER },
   { prefix: '/api/tutors/availabilities',   roles: STAFF },
   { prefix: '/api/notes',                   roles: STAFF },
