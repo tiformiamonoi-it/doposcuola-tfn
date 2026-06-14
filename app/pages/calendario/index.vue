@@ -1,364 +1,491 @@
 <template>
   <div class="space-y-6">
-    <!-- Header -->
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <!-- Intestazione pagina -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <h2 class="text-xl font-semibold text-slate-900">Calendario Lezioni</h2>
-        <p class="text-sm text-slate-500 mt-0.5">Visualizza e inserisci le lezioni settimanali</p>
+        <p class="text-sm text-slate-500 mt-0.5">Gestisci le lezioni e gli slot orari dei tutor</p>
       </div>
-      <div class="flex items-center gap-3">
-        <UButton color="white" variant="solid" icon="i-heroicons-chevron-left" @click="cambiaSettimana(-1)" />
-        <span class="font-medium text-slate-700 min-w-[200px] text-center">
-          {{ formatDataRange(inizioSettimana, fineSettimana) }}
-        </span>
-        <UButton color="white" variant="solid" icon="i-heroicons-chevron-right" @click="cambiaSettimana(1)" />
-        <UButton color="primary" icon="i-heroicons-plus" @click="apriNuovaLezione">Nuova Lezione</UButton>
+      
+      <!-- Navigazione Mese e Azioni -->
+      <div class="flex flex-col sm:flex-row items-center gap-4">
+        <div class="flex items-center bg-white rounded-xl ring-1 ring-slate-200 shadow-sm p-1">
+          <UButton color="gray" variant="ghost" icon="i-heroicons-chevron-left" @click="previousMonth" />
+          <div class="flex flex-col items-center min-w-[140px] px-2">
+            <span class="text-sm font-semibold text-slate-800 capitalize">{{ nomeMeseAnno }}</span>
+            <UButton size="2xs" variant="link" color="primary" @click="goToToday" :padded="false" class="mt-0.5">Torna a Oggi</UButton>
+          </div>
+          <UButton color="gray" variant="ghost" icon="i-heroicons-chevron-right" @click="nextMonth" />
+        </div>
+        <UButton color="primary" icon="i-heroicons-plus" @click="openNuovaLezione" class="w-full sm:w-auto justify-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary-500/30">
+          Nuova Lezione
+        </UButton>
       </div>
     </div>
 
-    <!-- Griglia Settimanale -->
-    <UCard :ui="{ body: { padding: 'p-0 sm:p-0' } }">
-      <div class="grid grid-cols-1 lg:grid-cols-7 divide-y lg:divide-y-0 lg:divide-x divide-slate-200">
-        <div v-for="giorno in giorniSettimana" :key="giorno.dateStr" class="flex flex-col h-full bg-slate-50/50">
-          <!-- Intestazione Giorno -->
-          <div class="p-3 text-center border-b border-slate-200" :class="{ 'bg-primary-50': isOggi(giorno.date) }">
-            <div class="text-xs font-semibold text-slate-500 uppercase">{{ giorno.nome }}</div>
-            <div class="text-lg font-bold text-slate-800" :class="{ 'text-primary-600': isOggi(giorno.date) }">{{ giorno.numero }}</div>
-          </div>
-          
-          <!-- Lezioni del Giorno -->
-          <div class="p-2 flex-1 space-y-2 min-h-[300px]">
-            <div v-if="pending" class="space-y-2">
-              <USkeleton v-for="i in 2" :key="i" class="h-20 w-full" />
+    <!-- Filtri e Azioni globali -->
+    <div class="flex flex-col sm:flex-row gap-3 items-center">
+      <USelectMenu
+        v-model="filtroTutor"
+        :items="tutorsOptions"
+        placeholder="Filtra per tutor"
+        icon="i-heroicons-funnel"
+        searchable
+        clearable
+        class="w-full sm:w-64"
+      />
+      <UButton color="gray" variant="soft" :icon="allExpanded ? 'i-heroicons-arrows-pointing-in' : 'i-heroicons-arrows-pointing-out'" @click="toggleAllDays" class="w-full sm:w-auto justify-center">
+        {{ allExpanded ? 'Comprimi Tutti' : 'Espandi Tutti' }}
+      </UButton>
+    </div>
+
+    <!-- Loading State -->
+    <div v-if="pending" class="py-12 flex justify-center bg-white rounded-2xl border border-slate-200">
+      <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 text-slate-300 animate-spin" />
+    </div>
+
+    <!-- Lista Giorni Mensile -->
+    <div v-else-if="giorniVisibili.length > 0" class="space-y-5">
+      <div
+        v-for="giorno in giorniVisibili"
+        :key="giorno.dateStr"
+        class="bg-white rounded-2xl ring-1 ring-slate-200 shadow-md overflow-hidden transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 border-l-4"
+        :class="isToday(giorno.dateStr) ? 'ring-2 ring-primary-500 shadow-lg border-l-primary-500' : 'border-l-transparent'"
+      >
+        <!-- Header Giorno (Cliccabile) -->
+        <div
+          class="flex flex-col sm:flex-row sm:items-center justify-between p-4 cursor-pointer transition-colors gap-4"
+          :class="isToday(giorno.dateStr) ? 'bg-primary-50/40' : 'hover:bg-slate-50'"
+          @click="toggleDay(giorno.dateStr)"
+        >
+          <div class="flex items-center gap-4">
+            <!-- Riquadro Data -->
+            <div
+              class="w-14 h-14 rounded-xl flex flex-col items-center justify-center flex-shrink-0 ring-1"
+              :class="isToday(giorno.dateStr) ? 'bg-primary-100 text-primary-700 ring-primary-300' : 'bg-sky-50 text-sky-700 ring-sky-200'"
+            >
+              <span class="text-xl font-bold leading-none">{{ giorno.giornoNumero }}</span>
+              <span class="text-[10px] font-semibold uppercase tracking-wider mt-1">{{ giorno.giornoNomeCorto }}</span>
             </div>
-            <template v-else>
-              <div v-for="lez in getLezioniByDate(giorno.dateStr)" :key="lez.id" 
-                   class="bg-white border border-slate-200 rounded-md p-2 shadow-sm text-sm hover:border-primary-300 transition-colors cursor-pointer"
-                   @click="apriDettaglio(lez)">
-                <div class="flex justify-between items-start mb-1">
-                  <span class="font-bold text-slate-700">{{ lez.timeSlot?.oraInizio }} - {{ lez.timeSlot?.oraFine }}</span>
-                  <UBadge size="xs" :color="lez.tipo === 'SINGOLA' ? 'info' : 'warning'">{{ lez.tipo }}</UBadge>
-                </div>
-                <div class="text-slate-600 text-xs font-medium truncate mb-1">
-                  <UIcon name="i-heroicons-user" class="inline w-3 h-3 align-text-bottom mr-1"/>
-                  {{ lez.tutor?.firstName }} {{ lez.tutor?.lastName }}
-                </div>
-                <div class="text-slate-500 text-xs mt-1">
-                  {{ lez.lessonStudents?.length || 0 }} student{{ lez.lessonStudents?.length === 1 ? 'e' : 'i' }}
-                </div>
+            
+            <!-- Info Riassuntive -->
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <p class="text-base font-semibold text-slate-900 capitalize">{{ giorno.giornoNomeLungo }}</p>
+                <UBadge v-if="isToday(giorno.dateStr)" color="primary" variant="subtle" size="xs" class="uppercase tracking-wide">Oggi</UBadge>
               </div>
-              
-              <div v-if="getLezioniByDate(giorno.dateStr).length === 0" class="h-full flex items-center justify-center">
-                <span class="text-xs text-slate-400">Nessuna lezione</span>
+              <div class="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                <span class="flex items-center gap-1"><UIcon name="i-heroicons-academic-cap" class="w-3.5 h-3.5" /> <strong class="text-slate-700">{{ giorno.numeroLezioni }}</strong> lezioni</span>
+                <span class="flex items-center gap-1"><UIcon name="i-heroicons-users" class="w-3.5 h-3.5" /> <strong class="text-slate-700">{{ giorno.numeroStudenti }}</strong> studenti</span>
               </div>
-            </template>
+            </div>
           </div>
+
+          <div class="flex items-center gap-4">
+            <!-- Ricavo stimato della giornata -->
+            <div v-if="giorno.numeroLezioni > 0" class="text-right">
+              <p class="text-[10px] uppercase tracking-wider text-slate-400 leading-none">Ricavo stim.</p>
+              <p class="text-base font-bold leading-tight mt-0.5" :class="giorno.ricavo >= 0 ? 'text-emerald-600' : 'text-rose-600'">
+                € {{ giorno.ricavo.toFixed(2) }}
+              </p>
+            </div>
+            <UButton
+              color="gray"
+              variant="ghost"
+              :icon="isDayExpanded(giorno.dateStr) ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
+              class="pointer-events-none"
+            />
+          </div>
+        </div>
+
+        <!-- Corpo Giorno Espanso -->
+        <div v-if="isDayExpanded(giorno.dateStr)" class="border-t border-slate-100">
+
+          <!-- Caso: giornata di chiusura o domenica (senza lezioni) -->
+          <div v-if="(giorno.isChiusura || giorno.isDomenica) && giorno.numeroLezioni === 0" class="p-10 text-center flex flex-col items-center">
+            <div class="w-14 h-14 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center mb-3">
+              <UIcon name="i-heroicons-sun" class="w-7 h-7" />
+            </div>
+            <h4 class="text-base font-semibold text-slate-700">
+              {{ giorno.isChiusura ? 'Giornata di chiusura' : 'Oggi è domenica' }}
+            </h4>
+            <p class="text-sm text-slate-400 mt-1">Il centro è chiuso, nessuna lezione prevista.</p>
+          </div>
+
+          <!-- Caso: giorno senza lezioni (es. oggi ancora vuoto) -->
+          <div v-else-if="giorno.numeroLezioni === 0" class="p-10 text-center flex flex-col items-center bg-slate-50/30">
+            <div class="w-14 h-14 rounded-2xl bg-primary-50 text-primary-500 flex items-center justify-center mb-3">
+              <UIcon name="i-heroicons-sparkles" class="w-7 h-7" />
+            </div>
+            <h4 class="text-base font-semibold text-slate-700">
+              {{ isToday(giorno.dateStr) ? 'Buona giornata! Ancora nessuna lezione per oggi' : 'Nessuna lezione in questo giorno' }}
+            </h4>
+            <p class="text-sm text-slate-400 mt-1 max-w-sm">Aggiungi un tutor con i suoi studenti per iniziare a riempire la griglia.</p>
+            <div class="flex flex-wrap items-center justify-center gap-2 mt-5">
+              <UButton color="primary" icon="i-heroicons-plus" @click="openLezioneRapida(giorno.dateStr)">Aggiungi lezione</UButton>
+              <UButton color="gray" variant="soft" icon="i-heroicons-queue-list" @click="openNuovaLezione">Creazione multipla</UButton>
+            </div>
+          </div>
+
+          <!-- Caso: griglia oraria normale -->
+          <div v-else class="bg-slate-50/30">
+            <div class="p-4 flex items-center justify-between border-b border-slate-100 bg-white">
+              <h4 class="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                <UIcon name="i-heroicons-squares-2x2" class="w-4 h-4 text-slate-400" />
+                Griglia Oraria
+              </h4>
+              <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-plus" @click="openLezioneRapida(giorno.dateStr)">
+                Aggiungi Tutor in questo giorno
+              </UButton>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse min-w-[600px]">
+                <thead>
+                  <tr class="bg-sky-50">
+                    <th class="py-3.5 px-5 text-xs font-bold text-sky-700 border-r-2 border-slate-300 border-b-2 border-sky-200 w-48 uppercase tracking-wider sticky left-0 z-20 bg-sky-50">Tutor</th>
+                    <th v-for="slot in getActiveSlotsForDay(giorno)" :key="slot.id" class="py-3.5 px-2 text-xs font-bold text-sky-700 text-center border-l-2 border-b-2 border-sky-200 min-w-[150px] uppercase tracking-wider">
+                      {{ slot.label }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white">
+                  <tr v-for="tutorData in giorno.tutorsRecap" :key="tutorData.tutor.id" class="border-t-2 border-slate-200 first:border-t-0 hover:bg-slate-50/60 transition-colors">
+                    <!-- Colonna tutor: neutra, in grassetto, fissa allo scorrimento -->
+                    <td class="py-3 px-5 text-sm font-semibold text-slate-800 border-r-2 border-slate-300 sticky left-0 z-10 bg-white">
+                      <div class="flex items-center gap-2.5">
+                        <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 bg-slate-100 text-slate-600">
+                          {{ tutorData.tutor.firstName.charAt(0) }}{{ tutorData.tutor.lastName.charAt(0) }}
+                        </div>
+                        <span class="truncate">{{ tutorData.tutor.firstName }} {{ tutorData.tutor.lastName.charAt(0) }}.</span>
+                      </div>
+                    </td>
+
+                    <td
+                      v-for="slot in getActiveSlotsForDay(giorno)"
+                      :key="slot.id"
+                      class="p-0 border-l-2 border-slate-200 relative cursor-pointer hover:bg-sky-100/60 transition-colors group align-top"
+                      :class="getStudentsInSlot(giorno, tutorData.tutor.id, slot.id).length > 0 ? 'bg-sky-50/60' : ''"
+                      @click="openGestisciSlot(giorno.dateStr, tutorData.tutor.id, tutorData.tutor.firstName + ' ' + tutorData.tutor.lastName, slot)"
+                    >
+                      <!-- Cella piena: targhette studenti neutre, in fila (vanno a capo da sole) -->
+                      <div v-if="getStudentsInSlot(giorno, tutorData.tutor.id, slot.id).length > 0" class="min-h-[52px] p-2.5 flex flex-wrap gap-2 items-start content-start">
+                        <div
+                          v-for="stu in getStudentsInSlot(giorno, tutorData.tutor.id, slot.id)"
+                          :key="stu.id"
+                          class="text-xs font-semibold rounded-lg px-2.5 py-1 shadow-sm ring-1 ring-slate-300 bg-white text-slate-700 inline-flex items-center gap-1 whitespace-nowrap"
+                        >
+                          <span>{{ stu.firstName || '?' }} {{ stu.lastName ? stu.lastName.charAt(0) + '.' : '' }}</span>
+                          <span v-if="stu.mezzaLezione" class="font-bold text-amber-600" title="Mezza Lezione">½</span>
+                        </div>
+                      </div>
+                      <!-- Cella vuota -->
+                      <div v-else class="min-h-[52px] flex items-center justify-center text-slate-200 group-hover:text-primary-400 transition-colors">
+                        <UIcon name="i-heroicons-plus" class="w-5 h-5 opacity-0 group-hover:opacity-100" />
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
         </div>
       </div>
-    </UCard>
+    </div>
 
-    <!-- MODAL INSERIMENTO LEZIONE -->
-    <UModal v-model:open="modalNuovaAperto" title="Nuova Lezione">
-      <template #body>
-        <form @submit.prevent="creaLezione" class="space-y-4">
-          <div class="grid grid-cols-2 gap-4">
-            <UFormField label="Data" required>
-              <UInput v-model="nuovaLezione.data" type="date" class="w-full" />
-            </UFormField>
-            <UFormField label="Slot Orario" required>
-              <USelectMenu 
-                v-model="nuovaLezione.timeSlotItem" 
-                :items="timeslotsOptions" 
-                placeholder="Seleziona orario..."
-                class="w-full"
-              />
-            </UFormField>
-          </div>
+    <!-- Empty State -->
+    <div v-else class="py-16 text-center bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm flex flex-col items-center">
+      <UIcon name="i-heroicons-calendar" class="w-16 h-16 text-slate-300 mb-4" />
+      <h3 class="text-lg font-bold text-slate-700">Nessuna lezione trovata</h3>
+      <p class="text-slate-500 mt-1 max-w-sm">In questo mese non sono presenti lezioni programmate, oppure sono state filtrate.</p>
+      <UButton color="primary" variant="soft" icon="i-heroicons-plus" class="mt-6" @click="openNuovaLezione">
+        Crea la prima lezione
+      </UButton>
+    </div>
 
-          <UFormField label="Tutor" required>
-            <USelectMenu 
-              v-model="nuovaLezione.tutorItem" 
-              :items="tutorsOptions" 
-              placeholder="Cerca tutor..."
-              searchable
-              class="w-full"
-            />
-          </UFormField>
-
-          <UFormField label="Studenti" required>
-            <div class="border border-slate-200 rounded-md p-3 space-y-3 bg-slate-50">
-              <div v-for="(stu, index) in nuovaLezione.studenti" :key="index" class="flex flex-col gap-2 p-2 bg-white rounded border border-slate-100 shadow-sm relative">
-                <UButton icon="i-heroicons-x-mark" size="2xs" color="gray" variant="ghost" class="absolute top-1 right-1" @click="rimuoviStudente(index)" />
-                <USelectMenu
-                  v-model="stu.studentItem"
-                  :items="getAvailableStudents(index)"
-                  placeholder="Cerca studente..."
-                  searchable
-                  class="w-full pr-6"
-                  @update:model-value="(val) => onStudenteSelezionato(index, val)"
-                />
-                <USelectMenu
-                  v-if="stu.studentItem"
-                  v-model="stu.packageItem"
-                  :items="stu.packageOptions || []"
-                  :loading="stu.loadingPackages"
-                  placeholder="Da quale pacchetto?"
-                  class="w-full"
-                />
-                </div>
-              <UButton size="sm" variant="soft" icon="i-heroicons-plus" @click="aggiungiStudente">Aggiungi studente</UButton>
-            </div>
-          </UFormField>
-
-          <UFormField label="Opzioni aggiuntive">
-            <div class="space-y-2">
-              <UCheckbox v-model="nuovaLezione.mezzaLezione" label="Mezza Lezione (per tutti gli studenti)" />
-              <UCheckbox v-model="nuovaLezione.forzaGruppo" :disabled="nuovaLezione.studenti.length > 1" label="Forza tariffa GRUPPO (anche per 1 studente)" />
-            </div>
-          </UFormField>
-
-          <UFormField label="Note">
-            <UTextarea v-model="nuovaLezione.note" placeholder="Opzionale..." />
-          </UFormField>
-        </form>
-      </template>
-      <template #footer>
-        <div class="flex justify-end gap-3">
-          <UButton variant="ghost" @click="modalNuovaAperto = false">Annulla</UButton>
-          <UButton :loading="salvando" @click="creaLezione">Salva Lezione</UButton>
-        </div>
-      </template>
-    </UModal>
+    <!-- Modali -->
+    <ModalNuovaLezione v-model:open="modaleNuovaAperto" @refresh="refreshData" />
+    
+    <ModalLezioneRapida 
+      v-if="modaleRapidaData"
+      v-model:open="modaleRapidaAperto" 
+      :date="modaleRapidaData" 
+      @refresh="refreshData" 
+    />
+    
+    <ModalGestisciSlot
+      v-if="modaleGestisciProps"
+      v-model:open="modaleGestisciAperto"
+      v-bind="modaleGestisciProps"
+      @refresh="refreshData"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { startOfWeek, endOfWeek, addDays, addWeeks, format, isSameDay } from 'date-fns'
+import { ref, computed } from 'vue'
+import { startOfMonth, endOfMonth, addMonths, subMonths, format, isSameDay, getDaysInMonth, setDate } from 'date-fns'
 import { it } from 'date-fns/locale'
+import { corsiaTutor } from '~/utils/coloriTutor'
+import { coloreGiorno } from '~/utils/coloreGiorno'
+import ModalNuovaLezione from '~/components/calendario/ModalNuovaLezione.vue'
+import ModalLezioneRapida from '~/components/calendario/ModalLezioneRapida.vue'
+import ModalGestisciSlot from '~/components/calendario/ModalGestisciSlot.vue'
 
 definePageMeta({ middleware: ['admin-or-super'] })
 
-const toast = useToast()
+// ==========================================
+// STATE
+// ==========================================
+const currentDate = ref(new Date())
 
-// ─── GESTIONE DATE ───
-const dataRiferimento = ref(new Date())
-const inizioSettimana = computed(() => startOfWeek(dataRiferimento.value, { weekStartsOn: 1 }))
-const fineSettimana = computed(() => endOfWeek(dataRiferimento.value, { weekStartsOn: 1 }))
+// Oggi parte già espanso (atterraggio diretto sulla griglia di oggi).
+const expandedDays = ref<Set<string>>(new Set([format(new Date(), 'yyyy-MM-dd')]))
+const allExpanded = ref(false)
+const filtroTutor = ref<any>(null)
 
-const giorniSettimana = computed(() => {
-  const days = []
-  let curr = inizioSettimana.value
-  for (let i = 0; i < 7; i++) {
-    days.push({
-      date: curr,
-      dateStr: format(curr, 'yyyy-MM-dd'),
-      nome: format(curr, 'EEEE', { locale: it }),
-      numero: format(curr, 'd')
-    })
-    curr = addDays(curr, 1)
-  }
-  return days
-})
+// ==========================================
+// DATA FETCHING
+// ==========================================
+const dateInizio = computed(() => format(startOfMonth(currentDate.value), 'yyyy-MM-dd'))
+const dateFine = computed(() => format(endOfMonth(currentDate.value), 'yyyy-MM-dd'))
 
-function cambiaSettimana(dir: number) {
-  dataRiferimento.value = addWeeks(dataRiferimento.value, dir)
-}
-
-function formatDataRange(start: Date, end: Date) {
-  const s = format(start, 'd MMM', { locale: it })
-  const e = format(end, 'd MMM yyyy', { locale: it })
-  return `${s} - ${e}`
-}
-
-function isOggi(d: Date) {
-  return isSameDay(d, new Date())
-}
-
-// ─── FETCH LEZIONI ───
-const { data: lezioniData, pending, refresh } = useFetch('/api/lessons', {
-  lazy: true,
-  query: computed(() => ({
-    dataInizio: format(inizioSettimana.value, 'yyyy-MM-dd'),
-    dataFine: format(fineSettimana.value, 'yyyy-MM-dd')
-  })),
-  watch: [inizioSettimana, fineSettimana]
-})
-
-const lezioni = computed(() => lezioniData.value?.data ?? [])
-
-function getLezioniByDate(dateStr: string) {
-  return lezioni.value.filter((l: any) => l.data.startsWith(dateStr)).sort((a: any, b: any) => {
-    return (a.timeSlot?.oraInizio || '').localeCompare(b.timeSlot?.oraInizio || '')
-  })
-}
-
-// ─── CREAZIONE LEZIONE ───
-const modalNuovaAperto = ref(false)
-const salvando = ref(false)
-
-const nuovaLezione = reactive({
-  data: format(new Date(), 'yyyy-MM-dd'),
-  tutorItem: null as any,
-  timeSlotItem: null as any,
-  mezzaLezione: false,
-  studenti: [{ studentItem: null as any, packageItem: null as any, packageOptions: [], loadingPackages: false }],
-  forzaGruppo: false,
-  note: ''
-})
-
-function apriNuovaLezione() {
-  nuovaLezione.data = format(new Date(), 'yyyy-MM-dd')
-  nuovaLezione.tutorItem = null
-  nuovaLezione.timeSlotItem = null
-  nuovaLezione.mezzaLezione = false
-  nuovaLezione.studenti = [{ studentItem: null, packageItem: null, packageOptions: [], loadingPackages: false }]
-  nuovaLezione.forzaGruppo = false
-  nuovaLezione.note = ''
-  modalNuovaAperto.value = true
-}
-
-function aggiungiStudente() {
-  nuovaLezione.studenti.push({ studentItem: null, packageItem: null, packageOptions: [], loadingPackages: false })
-}
-
-function rimuoviStudente(idx: number) {
-  nuovaLezione.studenti.splice(idx, 1)
-}
-
-// Fetch base data
-const { data: slotsRes } = useFetch('/api/settings/timeslots', { lazy: true })
-const timeslotsOptions = computed(() => {
-  const slots = slotsRes.value ?? []
-  return slots.filter((s: any) => s.active).map((s: any) => ({
-    label: `${s.oraInizio} - ${s.oraFine}`,
-    value: s.id
+const { data: timeslotsRes } = useFetch('/api/settings/timeslots', { lazy: true })
+const timeSlots = computed(() => {
+  return (timeslotsRes.value || []).map((s: any) => ({
+    id: s.id,
+    start: s.oraInizio,
+    end: s.oraFine,
+    label: `${s.oraInizio.substring(0,5)}-${s.oraFine.substring(0,5)}`
   }))
 })
 
+const { data: closuresRes } = useFetch('/api/settings/closures', { lazy: true })
+const dateChiusure = computed(() => {
+  return (closuresRes.value || []).map((c: any) => c.data)
+})
+
+const STANDARD_SLOTS = ['15:30', '16:30', '17:30']
+
 const { data: tutorsRes } = useFetch('/api/tutors?active=true', { lazy: true })
 const tutorsOptions = computed(() => {
-  const tutors = tutorsRes.value?.data ?? []
-  return tutors.map((t: any) => ({
+  return (tutorsRes.value?.data || []).map((t: any) => ({
     label: `${t.firstName} ${t.lastName}`,
     value: t.id
   }))
 })
 
-const { data: studentsRes } = useFetch('/api/students?active=true&limit=100', { lazy: true })
-const studentsOptions = computed(() => {
-  const students = studentsRes.value?.data ?? []
-  return students.map((s: any) => ({
-    label: `${s.firstName} ${s.lastName}`,
-    value: s.id
-  }))
+const { data: lezioniRes, pending, refresh } = useFetch('/api/lessons', {
+  lazy: true,
+  query: computed(() => {
+    const q: any = { dataInizio: dateInizio.value, dataFine: dateFine.value, limit: 500 }
+    if (filtroTutor.value?.value) q.tutorId = filtroTutor.value.value
+    return q
+  }),
+  watch: [currentDate, filtroTutor]
 })
 
-function getAvailableStudents(currentIndex: number) {
-  const selectedIds = nuovaLezione.studenti
-    .map((s, idx) => idx !== currentIndex ? s.studentItem?.value : null)
-    .filter(Boolean)
-  
-  return studentsOptions.value.filter(opt => !selectedIds.includes(opt.value))
+function refreshData() {
+  refresh()
 }
 
-async function onStudenteSelezionato(idx: number, newVal?: any) {
-  const stu = nuovaLezione.studenti[idx]
-  const targetObject = newVal || stu.studentItem
-  const targetStudentId = targetObject?.value
-  
-  if (!targetStudentId) {
-    stu.packageOptions = []
-    stu.packageItem = null
-    return
+// ==========================================
+// COMPUTED MESE
+// ==========================================
+const nomeMeseAnno = computed(() => format(currentDate.value, 'MMMM yyyy', { locale: it }))
+
+const giorniDelMese = computed(() => {
+  const days = []
+  const numDays = getDaysInMonth(currentDate.value)
+  for (let i = 1; i <= numDays; i++) {
+    const d = setDate(currentDate.value, i)
+    days.push(format(d, 'yyyy-MM-dd'))
   }
-  
-  stu.loadingPackages = true
-  try {
-    const res = await $fetch(`/api/packages?studentId=${targetStudentId}&stati=ATTIVO`)
+  return days
+})
+
+const giorniWithTutorRecap = computed(() => {
+  const lezioni = lezioniRes.value?.data || []
+
+  return giorniDelMese.value.map(dateStr => {
+    // Filtra lezioni per questo giorno
+    const lezioniGiorno = lezioni.filter((l: any) => l.data.startsWith(dateStr))
     
-    const pkgs = res.data ?? []
-    
-    // Ordina dal meno recente al più recente
-    pkgs.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-    
-    stu.packageOptions = pkgs.map((p: any) => {
-      const option = {
-        label: `${p.nome || 'Pacchetto'} (${p.tipo === 'MENSILE' ? (p.giorniAcquistati + 'gg') : (parseFloat(p.oreAcquistate) + 'h')}) - Rim: ${p.tipo === 'MENSILE' ? p.giorniResiduo : parseFloat(p.oreResiduo)}`,
-        value: p.id
+    // Raggruppa per tutor
+    const tutorsMap = new Map()
+    lezioniGiorno.forEach((lezione: any) => {
+      const tId = lezione.tutorId
+      if (!tutorsMap.has(tId)) {
+        tutorsMap.set(tId, {
+          tutor: { ...lezione.tutor, id: tId },
+          lezioni: [],
+          studentiUnici: new Set()
+        })
       }
-      return option
+      
+      const tData = tutorsMap.get(tId)
+      tData.lezioni.push(lezione)
+      lezione.lessonStudents?.forEach((ls: any) => tData.studentiUnici.add(ls.studentId))
     })
-    
-    if (stu.packageOptions.length > 0) {
-      stu.packageItem = stu.packageOptions[0]
-    } else {
-      stu.packageItem = null
-    }
-  } catch (err) {
-    console.error('Errore fetching pacchetti:', err)
-  } finally {
-    stu.loadingPackages = false
-  }
-}
 
-async function creaLezione() {
-  const tutorIdStr = nuovaLezione.tutorItem?.value
-  const timeSlotIdStr = nuovaLezione.timeSlotItem?.value
-
-  if (!tutorIdStr || !timeSlotIdStr || !nuovaLezione.data) {
-    toast.add({ title: 'Compila tutti i campi obbligatori', color: 'warning' })
-    return
-  }
-  
-  // Check per evitare di inserire lo stesso alunno più volte
-  const studentIds = nuovaLezione.studenti.map(s => s.studentItem?.value).filter(Boolean)
-  const uniqueStudentIds = new Set(studentIds)
-  if (studentIds.length !== uniqueStudentIds.size) {
-    toast.add({ title: 'Hai inserito lo stesso studente più volte', color: 'warning' })
-    return
-  }
-  
-  const validStudents = nuovaLezione.studenti
-    .map(s => ({
-      studentId: s.studentItem?.value,
-      packageId: s.packageItem?.value
+    const tutorsRecap = Array.from(tutorsMap.values()).map(tData => ({
+      tutor: tData.tutor,
+      numeroLezioni: tData.lezioni.length,
+      numeroStudenti: tData.studentiUnici.size,
+      lezioni: tData.lezioni,
+      colore: corsiaTutor(tData.tutor.id)
     }))
-    .filter(s => s.studentId && s.packageId)
 
-  if (validStudents.length === 0) {
-    toast.add({ title: 'Aggiungi almeno uno studente con un pacchetto valido', color: 'warning' })
-    return
-  }
+    // Calcolo totali giorno + RICAVO STIMATO (ipotetico)
+    // ricavo = Σ lezioni [ Σ alunni (prezzo÷ore × ore scalate) − compenso tutor ]
+    let totalLez = 0
+    let studentiUniciGiorno = new Set()
+    let ricavoGiorno = 0
+    lezioniGiorno.forEach((l: any) => {
+      totalLez++
+      let incasso = 0
+      l.lessonStudents?.forEach((ls: any) => {
+        studentiUniciGiorno.add(ls.studentId)
+        const prezzo = parseFloat(ls.package?.prezzoTotale ?? '0')
+        const ore = parseFloat(ls.package?.oreAcquistate ?? '0')
+        const costoOrario = ore > 0 ? prezzo / ore : 0
+        const oreScalate = parseFloat(ls.oreScalate ?? '1')
+        incasso += costoOrario * oreScalate
+      })
+      ricavoGiorno += incasso - parseFloat(l.compensoTutor ?? '0')
+    })
 
-  salvando.value = true
-  try {
-    const payload = {
-      ...nuovaLezione,
-      tutorId: tutorIdStr,
-      timeSlotId: timeSlotIdStr,
-      studenti: validStudents
+    const dateObj = new Date(dateStr)
+    return {
+      dateStr,
+      giornoNumero: format(dateObj, 'd'),
+      giornoNomeCorto: format(dateObj, 'EEE', { locale: it }),
+      giornoNomeLungo: format(dateObj, 'EEEE', { locale: it }),
+      numeroLezioni: totalLez,
+      numeroStudenti: studentiUniciGiorno.size,
+      ricavo: Number(ricavoGiorno.toFixed(2)),
+      tutorsRecap,
+      lezioniBase: lezioniGiorno,
+      isDomenica: dateObj.getDay() === 0,
+      isChiusura: dateChiusure.value.includes(dateStr),
+      tema: coloreGiorno(dateStr)
     }
-    
-    // Rimuoviamo i campi "*Item" e altri non necessari che potrebbero confondere Zod
-    delete (payload as any).tutorItem
-    delete (payload as any).timeSlotItem
-    delete (payload as any).studentiItems
-    
-    await $fetch('/api/lessons', { method: 'POST', body: payload })
-    toast.add({ title: 'Lezione creata', color: 'success' })
-    modalNuovaAperto.value = false
-    refresh()
-  } catch (err: any) {
-    const msg = err.data?.statusMessage ?? 'Errore creazione'
-    toast.add({ title: msg, color: 'error' })
-    console.error('Errore validazione o salvataggio:', err.data?.data?.errors || err)
-  } finally {
-    salvando.value = false
-  }
+  })
+})
+
+const giorniVisibili = computed(() => {
+  return giorniWithTutorRecap.value.filter(g => {
+    // Oggi è SEMPRE visibile, anche se vuoto / domenica / chiusura.
+    if (isToday(g.dateStr)) return true
+    if (g.isDomenica) return false
+    if (g.isChiusura) return false
+    if (g.lezioniBase.length === 0) return false
+    return true
+  })
+})
+
+// ==========================================
+// NAVIGATION
+// ==========================================
+function previousMonth() { currentDate.value = subMonths(currentDate.value, 1) }
+function nextMonth() { currentDate.value = addMonths(currentDate.value, 1) }
+function goToToday() { currentDate.value = new Date() }
+function isToday(dateStr: string) { return isSameDay(new Date(dateStr), new Date()) }
+
+// ==========================================
+// ESPANSIONE GIORNI
+// ==========================================
+function toggleDay(dateStr: string) {
+  const newSet = new Set(expandedDays.value)
+  if (newSet.has(dateStr)) newSet.delete(dateStr)
+  else newSet.add(dateStr)
+  expandedDays.value = newSet
 }
 
-function apriDettaglio(lez: any) {
-  // TODO: modal dettaglio lezione, per ora blando
-  toast.add({ title: `Lezione di ${lez.tutor?.firstName}`, description: 'Funzione di dettaglio in arrivo.' })
+function isDayExpanded(dateStr: string) {
+  // Per default, apri oggi. Oppure se esplicitamente nel set.
+  if (expandedDays.value.has(dateStr)) return true
+  // if (isToday(dateStr) && !allExpanded.value) return true // Opzionale auto-expand oggi
+  return false
+}
+
+function toggleAllDays() {
+  if (allExpanded.value) {
+    expandedDays.value = new Set()
+  } else {
+    expandedDays.value = new Set(giorniDelMese.value)
+  }
+  allExpanded.value = !allExpanded.value
+}
+
+// ==========================================
+// LOGICA GRIGLIA
+// ==========================================
+function getActiveSlotsForDay(giorno: any) {
+  if (giorno.lezioniBase.length === 0) {
+    return timeSlots.value.filter(s => STANDARD_SLOTS.includes(s.start))
+  }
+  const usedIds = new Set(giorno.lezioniBase.map((l: any) => l.timeSlotId))
+  return timeSlots.value.filter(s => STANDARD_SLOTS.includes(s.start) || usedIds.has(s.id))
+}
+
+function getStudentsInSlot(giorno: any, tutorId: string, slotId: string) {
+  const lessons = giorno.lezioniBase.filter((l: any) => l.tutorId === tutorId && l.timeSlotId === slotId)
+  const studentsMap = new Map()
+  
+  lessons.forEach((l: any) => {
+    l.lessonStudents?.forEach((ls: any) => {
+      if (!studentsMap.has(ls.studentId)) {
+        studentsMap.set(ls.studentId, {
+          id: ls.studentId,
+          firstName: ls.student?.firstName,
+          lastName: ls.student?.lastName,
+          mezzaLezione: ls.mezzaLezione
+        })
+      }
+    })
+  })
+  
+  return Array.from(studentsMap.values())
+}
+
+// ==========================================
+// MODALI
+// ==========================================
+const modaleNuovaAperto = ref(false)
+function openNuovaLezione() {
+  modaleNuovaAperto.value = true
+}
+
+const modaleRapidaAperto = ref(false)
+const modaleRapidaData = ref<string | null>(null)
+function openLezioneRapida(dateStr: string) {
+  modaleRapidaData.value = dateStr
+  modaleRapidaAperto.value = true
+}
+
+const modaleGestisciAperto = ref(false)
+const modaleGestisciProps = ref<any>(null)
+function openGestisciSlot(dateStr: string, tutorId: string | null, tutorName: string | null, slot: any) {
+  if (!tutorId) {
+    // Se clicco su una cella vuota della riga "placeholder" apro il modale rapida
+    openLezioneRapida(dateStr)
+    return
+  }
+  
+  const giorno = giorniWithTutorRecap.value.find(g => g.dateStr === dateStr)
+  const existingLessonsInSlot = giorno?.lezioniBase.filter((l: any) => l.tutorId === tutorId && l.timeSlotId === slot.id) || []
+
+  modaleGestisciProps.value = {
+    date: dateStr,
+    tutorId,
+    tutorName,
+    timeSlotId: slot.id,
+    slotStart: slot.start.substring(0,5),
+    slotEnd: slot.end.substring(0,5),
+    existingLessonsInSlot
+  }
+  modaleGestisciAperto.value = true
 }
 </script>

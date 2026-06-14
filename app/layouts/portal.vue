@@ -5,7 +5,7 @@
     <header class="fixed top-0 left-0 right-0 h-16 bg-tfn-500 flex items-center justify-between px-4 z-40">
       <div class="w-8" />
       <span class="font-heading font-semibold text-white text-base tracking-tight">
-        Ti Formiamo Noi
+        tiformiamonoi.it
       </span>
       <div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
         <span class="text-white text-xs font-semibold">

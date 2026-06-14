@@ -10,7 +10,7 @@
     </div>
 
     <!-- Filtri -->
-    <div class="flex flex-wrap gap-3 items-end">
+    <div class="flex flex-wrap gap-3 items-end bg-white p-4 rounded-2xl ring-1 ring-slate-200 shadow-sm">
       <UFormField label="Dal">
         <UInput v-model="filtroDataInizio" type="date" class="w-40" @change="caricaLezioni" />
       </UFormField>
@@ -43,59 +43,78 @@
     </div>
 
     <!-- Tabella lezioni -->
-    <UCard :ui="{ body: 'p-0' }">
+    <div class="bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm overflow-hidden">
       <UTable
         :data="lezioni"
         :columns="colonne"
         :loading="pending"
+        class="w-full"
       >
-        <!-- Colonna Data -->
+        <!-- Colonna Data e Ora -->
         <template #data-cell="{ row }">
-          <span class="font-medium text-slate-800">{{ formatData(row.original.data) }}</span>
+          <div class="flex flex-col">
+            <span class="font-medium text-slate-800">{{ formatData(row.original.data) }}</span>
+            <span class="text-xs text-slate-500" v-if="row.original.timeSlot">
+              <UIcon name="i-heroicons-clock" class="w-3 h-3 inline-block mr-0.5 align-text-bottom" />
+              {{ row.original.timeSlot.oraInizio.substring(0,5) }} - {{ row.original.timeSlot.oraFine.substring(0,5) }}
+            </span>
+          </div>
+        </template>
+
+        <!-- Colonna Tutor -->
+        <template #tutor-cell="{ row }">
+          <div class="flex items-center gap-2">
+            <UAvatar :alt="row.original.tutor?.firstName" size="xs" class="bg-primary-100 text-primary-600 font-bold" />
+            <span class="font-medium text-slate-800">{{ row.original.tutor?.firstName }} {{ row.original.tutor?.lastName }}</span>
+          </div>
         </template>
 
         <!-- Colonna Tipo -->
         <template #tipo-cell="{ row }">
-          <UBadge :color="coloreTipo(row.original.tipo)" variant="subtle" size="sm">
+          <UBadge :color="coloreTipo(row.original.tipo)" variant="subtle" size="sm" class="font-medium uppercase tracking-wide text-xs">
             {{ row.original.tipo }}
           </UBadge>
         </template>
 
         <!-- Colonna Studenti -->
         <template #studenti-cell="{ row }">
-          <div class="text-sm text-slate-700">
-            <span v-if="row.original.lessonStudents && row.original.lessonStudents.length > 0">
-              {{ row.original.lessonStudents.length }} studente{{ row.original.lessonStudents.length > 1 ? 'i' : '' }}
+          <div class="text-sm text-slate-700 font-medium">
+            <span v-if="row.original.lessonStudents && row.original.lessonStudents.length > 0" class="flex items-center gap-1.5">
+              <UIcon name="i-heroicons-users" class="w-4 h-4 text-slate-400" />
+              {{ row.original.lessonStudents.length }}
             </span>
-            <span v-else>—</span>
+            <span v-else class="text-slate-400">—</span>
           </div>
         </template>
 
         <!-- Colonna Compenso tutor -->
         <template #compenso-cell="{ row }">
-          <span class="text-slate-700">
+          <span class="font-bold text-emerald-600">
             € {{ row.original.compensoTutor ? parseFloat(row.original.compensoTutor).toFixed(2) : '—' }}
           </span>
         </template>
 
         <!-- Colonna Note -->
         <template #note-cell="{ row }">
-          <span class="text-slate-500 text-xs truncate max-w-[160px] block">{{ row.original.note ?? '—' }}</span>
+          <span class="text-slate-500 text-xs truncate max-w-[160px] block" :title="row.original.note">{{ row.original.note ?? '—' }}</span>
         </template>
 
         <!-- Colonna Dettaglio -->
         <template #dettaglio-cell="{ row }">
-          <UButton
-            icon="i-heroicons-arrow-right"
-            variant="ghost"
-            size="xs"
-            @click="apriDettaglio(row.original)"
-          />
+          <div class="flex justify-end">
+            <UButton
+              icon="i-heroicons-chevron-right"
+              color="gray"
+              variant="ghost"
+              size="sm"
+              @click="apriDettaglio(row.original)"
+            />
+          </div>
         </template>
       </UTable>
 
       <!-- Paginazione -->
-      <div v-if="meta && meta.totalPages > 1" class="flex justify-center py-4 border-t border-slate-100">
+      <div v-if="meta && meta.totalPages > 1" class="flex justify-center py-4 border-t border-slate-100 bg-slate-50">
         <UPagination
           v-model:page="pagina"
           :total="meta.total"
@@ -104,22 +123,31 @@
         />
       </div>
 
-      <div v-if="!pending && lezioni.length === 0" class="py-12 text-center">
-        <UIcon name="i-heroicons-calendar-days" class="w-10 h-10 text-slate-300 mx-auto mb-3" />
-        <p class="text-slate-500 text-sm">Nessuna lezione nel periodo selezionato</p>
+      <div v-if="!pending && lezioni.length === 0" class="py-16 text-center">
+        <UIcon name="i-heroicons-calendar-days" class="w-12 h-12 text-slate-300 mx-auto mb-3" />
+        <h3 class="text-lg font-bold text-slate-700">Nessuna lezione</h3>
+        <p class="text-slate-500 text-sm mt-1">Non ci sono lezioni nel periodo o coi filtri selezionati.</p>
       </div>
-    </UCard>
+    </div>
 
     <!-- ─── MODAL DETTAGLIO LEZIONE ─── -->
     <UModal v-model:open="modalDettaglioAperto" :title="lezioneSelezionata ? `Lezione del ${formatData(lezioneSelezionata.data)}` : ''">
       <template v-if="lezioneSelezionata" #body>
         <dl class="space-y-3 text-sm">
           <div class="flex gap-2">
+            <dt class="w-32 text-slate-400">Tutor</dt>
+            <dd class="font-medium text-slate-800">{{ lezioneSelezionata.tutor?.firstName }} {{ lezioneSelezionata.tutor?.lastName }}</dd>
+          </div>
+          <div v-if="lezioneSelezionata.timeSlot" class="flex gap-2">
+            <dt class="w-32 text-slate-400">Orario</dt>
+            <dd>{{ lezioneSelezionata.timeSlot.oraInizio.substring(0,5) }} - {{ lezioneSelezionata.timeSlot.oraFine.substring(0,5) }}</dd>
+          </div>
+          <div class="flex gap-2">
             <dt class="w-32 text-slate-400">Tipo</dt>
             <dd><UBadge :color="coloreTipo(lezioneSelezionata.tipo)" variant="subtle">{{ lezioneSelezionata.tipo }}</UBadge></dd>
           </div>
           <div class="flex gap-2">
-            <dt class="w-32 text-slate-400">Compenso tutor</dt>
+            <dt class="w-32 text-slate-400">Compenso</dt>
             <dd class="font-medium">€ {{ lezioneSelezionata.compensoTutor ? parseFloat(lezioneSelezionata.compensoTutor).toFixed(2) : '—' }}</dd>
           </div>
           <div v-if="lezioneSelezionata.mezzaLezione" class="flex gap-2">
@@ -135,9 +163,9 @@
             <p class="text-slate-400 mb-2">Studenti ({{ lezioneSelezionata.lessonStudents.length }})</p>
             <ul class="space-y-1">
               <li v-for="ls in lezioneSelezionata.lessonStudents" :key="ls.studentId" class="flex items-center gap-2">
-                <UIcon name="i-heroicons-user-circle" class="w-4 h-4 text-slate-400" />
+                <UIcon name="i-heroicons-user-circle" class="w-4 h-4 text-primary-500" />
                 <span class="text-slate-700 font-medium">{{ ls.student?.firstName }} {{ ls.student?.lastName }}</span>
-                <span class="text-slate-400 text-xs ml-auto">{{ ls.oreScalate }} ore scalate</span>
+                <span class="text-slate-400 text-xs ml-auto">{{ ls.oreScalate }}h scalate</span>
               </li>
             </ul>
           </div>
@@ -163,6 +191,8 @@
 </template>
 
 <script setup lang="ts">
+import { ref, computed } from 'vue'
+
 definePageMeta({ middleware: ['admin-or-super'] })
 
 // ─── Filtri ───
@@ -206,9 +236,10 @@ function caricaLezioni() { pagina.value = 1; refresh() }
 // ─── Colonne ───
 const colonne = [
   { accessorKey: 'data',             header: 'Data' },
+  { accessorKey: 'tutor',            header: 'Tutor' },
   { accessorKey: 'tipo',             header: 'Tipo' },
   { id: 'studenti', accessorKey: 'lessonStudents', header: 'Studenti' },
-  { id: 'compenso', accessorKey: 'compensoTutor',  header: 'Compenso tutor' },
+  { id: 'compenso', accessorKey: 'compensoTutor',  header: 'Compenso' },
   { accessorKey: 'note',             header: 'Note' },
   { id: 'dettaglio', accessorKey: 'id',            header: '' },
 ]
@@ -253,4 +284,3 @@ async function eliminaLezioneSelezionata() {
   }
 }
 </script>
-

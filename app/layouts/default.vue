@@ -1,10 +1,10 @@
 <template>
-  <div class="min-h-screen bg-slate-50">
+  <div class="min-h-screen bg-slate-50" :style="{ '--sb': collapsed ? '64px' : '240px' }">
 
-    <!-- ═══ SIDEBAR ═══ -->
+    <!-- ═══ SIDEBAR (solo desktop) ═══ -->
     <aside
       :style="{ width: collapsed ? '64px' : '240px' }"
-      class="fixed left-0 top-0 h-screen bg-white border-r border-slate-200 flex flex-col z-40 overflow-hidden"
+      class="fixed left-0 top-0 h-screen bg-white border-r border-slate-200 hidden lg:flex lg:flex-col z-40 overflow-hidden"
       style="transition: width 300ms ease"
     >
 
@@ -15,7 +15,7 @@
           v-if="!collapsed"
           class="font-heading font-semibold text-slate-900 text-sm truncate flex-1"
         >
-          Ti Formiamo Noi
+          tiformiamonoi.it
         </span>
         <button
           @click="toggleSidebar"
@@ -114,9 +114,7 @@
 
     <!-- ═══ HEADER ═══ -->
     <header
-      :style="{ left: collapsed ? '64px' : '240px' }"
-      class="fixed top-0 right-0 h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-30"
-      style="transition: left 300ms ease"
+      class="fixed top-0 right-0 left-0 lg:left-[var(--sb)] h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-6 z-30 transition-all duration-300"
     >
       <h1 class="text-sm font-semibold text-slate-900">{{ pageTitle }}</h1>
       <div class="w-7 h-7 rounded-full bg-tfn-500 flex items-center justify-center">
@@ -126,12 +124,92 @@
 
     <!-- ═══ MAIN CONTENT ═══ -->
     <main
-      :style="{ marginLeft: collapsed ? '64px' : '240px' }"
-      class="mt-14 min-h-[calc(100vh-3.5rem)] bg-slate-50 p-6"
-      style="transition: margin-left 300ms ease"
+      class="mt-14 min-h-[calc(100vh-3.5rem)] bg-slate-50 p-4 lg:p-6 pb-24 lg:pb-6 ml-0 lg:ml-[var(--sb)] transition-all duration-300"
     >
-      <slot />
+      <!-- "Boxatura" su desktop: tetto di larghezza, con respiro a destra -->
+      <div class="max-w-[1500px]">
+        <slot />
+      </div>
     </main>
+
+    <!-- ═══ BOTTOM NAV (solo mobile) ═══ -->
+    <nav class="lg:hidden fixed bottom-0 inset-x-0 h-16 bg-white border-t border-slate-200 flex items-stretch z-40">
+      <NuxtLink
+        v-for="item in bottomNavItems"
+        :key="item.route"
+        :to="item.route"
+        class="flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors"
+        :class="isActive(item.route) ? 'text-tfn-600' : 'text-slate-400'"
+      >
+        <UIcon :name="item.icon" class="w-6 h-6" />
+        <span class="text-[11px] font-medium">{{ item.label }}</span>
+      </NuxtLink>
+      <button
+        v-if="navItems.length > bottomNavItems.length"
+        type="button"
+        @click="menuMobileAperto = true"
+        class="flex-1 flex flex-col items-center justify-center gap-0.5 text-slate-400"
+      >
+        <UIcon name="i-heroicons-bars-3" class="w-6 h-6" />
+        <span class="text-[11px] font-medium">Menu</span>
+      </button>
+    </nav>
+
+    <!-- ═══ MENU MOBILE (foglio dal basso) ═══ -->
+    <div v-if="menuMobileAperto" class="lg:hidden fixed inset-0 z-50">
+      <div class="absolute inset-0 bg-black/40" @click="menuMobileAperto = false"></div>
+      <div class="absolute bottom-0 inset-x-0 bg-white rounded-t-2xl max-h-[80vh] overflow-y-auto p-4 pb-6">
+        <div class="flex items-center justify-between mb-3">
+          <p class="font-heading font-semibold text-slate-900">Menu</p>
+          <button
+            @click="menuMobileAperto = false"
+            class="w-8 h-8 flex items-center justify-center rounded-md hover:bg-slate-100 text-slate-400"
+          >
+            <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
+          </button>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+          <NuxtLink
+            v-for="item in navItems"
+            :key="item.route"
+            :to="item.route"
+            @click="menuMobileAperto = false"
+            class="flex flex-col items-center gap-1.5 p-3 rounded-xl text-center transition-colors"
+            :class="isActive(item.route) ? 'bg-tfn-50 text-tfn-600' : 'text-slate-600 hover:bg-slate-100'"
+          >
+            <UIcon :name="item.icon" class="w-6 h-6" />
+            <span class="text-xs font-medium leading-tight">{{ item.label }}</span>
+          </NuxtLink>
+        </div>
+
+        <div v-if="isAdminOrSuperTutor" class="border-t border-slate-200 mt-4 pt-3">
+          <p class="text-[10px] text-slate-400 uppercase tracking-wider mb-2">Portali</p>
+          <div class="grid grid-cols-2 gap-2">
+            <a
+              v-for="portal in portalLinks"
+              :key="portal.route"
+              :href="portal.route"
+              target="_blank"
+              rel="noopener"
+              class="flex items-center gap-2 p-2.5 rounded-xl text-sm text-slate-600 hover:bg-slate-100"
+            >
+              <UIcon :name="portal.icon" class="w-5 h-5 flex-shrink-0" />
+              <span class="truncate">{{ portal.label }}</span>
+            </a>
+          </div>
+        </div>
+
+        <button
+          @click="logout"
+          :disabled="uscendo"
+          class="w-full flex items-center justify-center gap-2 mt-4 py-2.5 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 disabled:opacity-50"
+        >
+          <UIcon name="i-heroicons-arrow-right-on-rectangle" class="w-5 h-5" />
+          {{ uscendo ? 'Uscita...' : 'Esci' }}
+        </button>
+      </div>
+    </div>
 
   </div>
 </template>
@@ -207,6 +285,14 @@ function isActive(path: string) {
   if (path === '/') return route.path === '/'
   return route.path.startsWith(path)
 }
+
+// ─── Navigazione mobile ───
+// In basso mostriamo solo le prime 4 voci; il resto va nel foglio "Menu".
+const bottomNavItems = computed(() => navItems.value.slice(0, 4))
+const menuMobileAperto = ref(false)
+
+// Cambiando pagina, il foglio Menu si chiude da solo.
+watch(() => route.path, () => { menuMobileAperto.value = false })
 
 const pageTitle = computed(() => {
   const item = navItems.value.find(n =>

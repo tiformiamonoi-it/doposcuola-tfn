@@ -450,3 +450,47 @@ La migrazione `0002_mushy_raider.sql` È applicata. La precedente nota in ADL-01
 3. **Cut-off Cancellazione:** Dal portale e' possibile cancellare o modificare una prenotazione per il giorno stesso solo fino alle 12:30.
 4. **Blocco Festivita:** Non e' possibile prenotare la Domenica e nelle date configurate in closure_dates.
 5. **Reset Matching:** Qualsiasi modifica effettuata dal genitore via portale su una lezione (che era gia' stata matchata) cancella automaticamente assignedTutorId e assignedSlot in modo che la lezione torni "da matchare" nel tabellone senza creare inconsistenze.
+
+---
+
+## [2026-06-15] KPI — Ricavo Giornaliero (Calendario → Dashboard)
+
+KPI fondamentale per l'andamento dei ricavi. Da mostrare per ogni giornata nel calendario
+(come il "Margine" della vecchia webapp) e aggregare in dashboard.
+
+### Formula
+**Ricavo giornata = Σ (per ogni lezione del giorno) [ incasso alunni − compenso tutor ]**
+
+Per ogni lezione (slot):
+- **incasso alunni** = Σ (per ogni alunno nello slot) `costo_orario_alunno × ore_scalate`
+- **costo_orario_alunno** = `package.prezzoTotale ÷ package.oreAcquistate`
+  (prezzo del pacchetto diviso le ore acquistate — CONFERMATO 2026-06-15)
+- **ore_scalate** = `lessonStudents.oreScalate` (1 lezione piena, 0.5 mezza lezione)
+- **compenso tutor** = `lessons.compensoTutor` (già calcolato e salvato sulla lezione:
+  Singola €5/h, Gruppo €8/h, Maxi €8,5/h; dimezzato se mezza lezione)
+
+`ricavo_lezione = incasso_alunni − compenso_tutor` → si sommano tutte le lezioni del giorno.
+
+### Esempio canonico
+Tutor Luca, 3 lezioni **singole** con il solo Alessandro.
+Pacchetto Alessandro 100€ / 10h ⇒ costo orario **10€/h**. Tutor singola 5€/h.
+→ `(10 − 5) × 3 = €15` di ricavo per quella giornata.
+(Nell'esempio originale dell'utente il pacchetto era "150€/10h"; la regola è SEMPRE prezzo÷ore,
+quindi con 150€/10h il costo orario sarebbe 15€/h.)
+
+### Natura della KPI: STIMA, non valore reale
+Il ricavo mostrato nel calendario è una **stima ipotetica** (costo orario nominale = prezzo÷ore).
+Il valore **reale** si conosce solo a fine periodo: se un alunno consuma meno ore/giorni di quelli
+acquistati (pacchetto scaduto o concluso prima), il costo orario effettivo SALE (meglio per il centro).
+Questo calcolo reale sarà fatto in una **pagina dedicata di fine anno scolastico** (da implementare).
+
+### Pacchetti MENSILI (CONFERMATO 2026-06-15)
+Anche i mensili si trattano **ad ore**: `costo_orario = prezzoTotale ÷ oreAcquistate`, identico agli orari.
+La scadenza a giorni non entra nella stima (entrerà solo nel calcolo reale di fine anno).
+
+### Casi limite
+- **compensoTutor mancante** su una lezione vecchia: fallback al calcolo per tipo/mezza (o 0 nella stima).
+
+### Stato
+**Definizione approvata.** Badge "Ricavo stimato" per giorno nel calendario: in implementazione.
+Aggregato dashboard + pagina reale di fine anno: futuri.

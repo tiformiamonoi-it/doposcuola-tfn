@@ -320,13 +320,16 @@ export async function listLessons(query: LessonQuery) {
       offset: (query.page - 1) * query.limit,
       with: {
         tutor: {
-          columns: { firstName: true, lastName: true }
+          columns: { id: true, firstName: true, lastName: true }
         },
         timeSlot: true,
         lessonStudents: {
           with: {
             student: {
               columns: { id: true, firstName: true, lastName: true }
+            },
+            package: {
+              columns: { id: true, nome: true, prezzoTotale: true, oreAcquistate: true }
             }
           }
         }

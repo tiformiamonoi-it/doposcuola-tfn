@@ -1,11 +1,21 @@
 <template>
-  <UBadge :color="colore" variant="subtle" size="xs">{{ stato }}</UBadge>
+  <UBadge 
+    :color="colore" 
+    variant="soft" 
+    size="md"
+    :ui="{ rounded: 'rounded-lg', font: 'font-medium tracking-wide text-sm px-3 py-1' }"
+  >
+    {{ etichetta }}
+  </UBadge>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 
 const props = defineProps<{ stato: string, pacchetto?: any }>()
+
+// Etichetta mostrata: maiuscolo come l'enum, ma senza trattini bassi (DA_PAGARE → "DA PAGARE")
+const etichetta = computed(() => props.stato.replace(/_/g, ' '))
 
 const progresso = computed(() => {
   if (!props.pacchetto) return 0
@@ -32,7 +42,7 @@ const colore = computed(() => {
       // Se il pacchetto ha più del 90% rimanente, il badge "Da PAGARE" è neutro (meno allarmante)
       if (props.pacchetto && progresso.value > 90) return 'neutral'
       return 'warning'
-    case 'PAGATO':       return 'success'
+    case 'PAGATO':       return 'info'
     case 'CHIUSO':       return 'neutral'
     default:             return 'neutral'
   }

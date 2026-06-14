@@ -1,7 +1,7 @@
 <template>
   <div>
     <h1 class="font-heading text-2xl font-bold text-slate-900 mb-1">
-      Gestionale Ti Formiamo Noi
+      Gestionale tiformiamonoi.it
     </h1>
     <p class="text-slate-500 text-sm mb-6">
       Fase 7 completata — layout e design system attivi
@@ -35,5 +35,5 @@
 
 <script setup lang="ts">
 definePageMeta({ middleware: ['admin-or-super'] })
-useHead({ title: 'Dashboard — Ti Formiamo Noi' })
+useHead({ title: 'Dashboard — tiformiamonoi.it' })
 </script>

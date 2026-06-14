@@ -46,6 +46,35 @@ export function buildMezzaLezioneMap(lessonStudents: Row[]): Map<string, boolean
   return m
 }
 
+/**
+ * Nel vecchio gestionale il metodo di pagamento (CONTANTI/POS/BONIFICO/ASSEGNO) veniva
+ * salvato sulla SORGENTE (pagamento, compenso tutor, rimborso) ma NON sul movimento
+ * contabile collegato (colonna vuota). Costruiamo le mappe id-sorgente → metodo per
+ * poter "riempire" il metodo mancante sui movimenti durante l'import.
+ */
+export type MetodoMaps = {
+  payment: Map<string, string>
+  tutorPayment: Map<string, string>
+  reimbursement: Map<string, string>
+}
+
+export function buildMetodoMaps(
+  payments: Row[],
+  tutorPayments: Row[],
+  reimbursements: Row[],
+): MetodoMaps {
+  const payment = new Map<string, string>()
+  for (const p of payments) if (p.id && p.metodoPagamento) payment.set(p.id, p.metodoPagamento)
+
+  const tutorPayment = new Map<string, string>()
+  for (const t of tutorPayments) if (t.id && t.metodo) tutorPayment.set(t.id, t.metodo)
+
+  const reimbursement = new Map<string, string>()
+  for (const r of reimbursements) if (r.id && r.metodo) reimbursement.set(r.id, r.metodo)
+
+  return { payment, tutorPayment, reimbursement }
+}
+
 export const tx = {
   users: (r: Row) => ({
     id: r.id!, email: r.email!, password: r.password ?? '',
@@ -128,14 +157,23 @@ export const tx = {
     oreScalate: r.oreScalate ?? '1.0', createdAt: toDateReq(r.createdAt),
   }),
 
-  accounting_entries: (r: Row) => ({
-    id: r.id!, tipo: r.tipo as any, importo: r.importo!, descrizione: r.descrizione!,
-    categoria: r.categoria, data: toDateReq(r.data),
-    packageId: r.packageId, lessonId: r.lessonId,
-    paymentId: r.paymentId, tutorPaymentId: r.tutorPaymentId, reimbursementId: r.reimbursementId,
-    metodoPagamento: r.metodoPagamento as any, fatturaEmessa: toBool(r.fatturaEmessa), note: r.note,
-    createdAt: toDateReq(r.createdAt), updatedAt: toDateReq(r.updatedAt),
-  }),
+  accounting_entries: (r: Row, maps?: MetodoMaps) => {
+    // Riempi il metodo mancante recuperandolo dalla sorgente (pagamento/compenso/rimborso).
+    let metodo = r.metodoPagamento
+    if (!metodo && maps) {
+      if (r.paymentId)            metodo = maps.payment.get(r.paymentId) ?? null
+      else if (r.tutorPaymentId)  metodo = maps.tutorPayment.get(r.tutorPaymentId) ?? null
+      else if (r.reimbursementId) metodo = maps.reimbursement.get(r.reimbursementId) ?? null
+    }
+    return {
+      id: r.id!, tipo: r.tipo as any, importo: r.importo!, descrizione: r.descrizione!,
+      categoria: r.categoria, data: toDateReq(r.data),
+      packageId: r.packageId, lessonId: r.lessonId,
+      paymentId: r.paymentId, tutorPaymentId: r.tutorPaymentId, reimbursementId: r.reimbursementId,
+      metodoPagamento: metodo as any, fatturaEmessa: toBool(r.fatturaEmessa), note: r.note,
+      createdAt: toDateReq(r.createdAt), updatedAt: toDateReq(r.updatedAt),
+    }
+  },
 
   tutor_payments: (r: Row) => ({
     id: r.id!, tutorId: r.tutorId!, mese: toDateReq(r.mese), importo: r.importo!,

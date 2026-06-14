@@ -185,38 +185,104 @@ export async function getPrevisioni(startDate?: Date, endDate?: Date) {
 }
 
 // ─────────────────────────────────────────────
-// DASHBOARD — GET /api/accounting/dashboard
-// Aggregato completo per il cruscotto finanziario:
-// - Cassa vs Banca (ultimi 30 giorni e totale)
-// - Previsioni (Crediti e Debiti totali)
-// - Fatture da emettere (count + lista)
-// - Margine netto ultimi 30 giorni
+// MOVIMENTI PER METODO — Entrate E Uscite separate per ogni metodo, nel periodo.
+// Serve alle card "per metodo": ognuna mostra quanto è entrato e quanto è uscito.
 // ─────────────────────────────────────────────
 
-export async function getDashboard() {
-  const ora    = new Date()
-  const trenta = new Date(ora)
-  trenta.setDate(trenta.getDate() - 30)
+type EntrateUscite = { entrate: number; uscite: number }
 
-  const [cashFlowTotale, cashFlow30, fattureInAttesa, margine30, previsioni] = await Promise.all([
-    getCashFlow(),
-    getCashFlow(trenta, ora),
+export async function getMovimentiPerMetodo(startDate?: Date, endDate?: Date) {
+  const conditions = [inArray(accountingEntries.tipo, ['ENTRATA', 'USCITA']) as any]
+  if (startDate) conditions.push(gte(accountingEntries.data, startDate) as any)
+  if (endDate)   conditions.push(lte(accountingEntries.data, endDate) as any)
+
+  const rows = await db
+    .select({
+      metodo: accountingEntries.metodoPagamento,
+      tipo:   accountingEntries.tipo,
+      totale: sql<string>`COALESCE(SUM(${accountingEntries.importo}::numeric), 0)::text`,
+    })
+    .from(accountingEntries)
+    .where(and(...(conditions as [any, ...any[]])))
+    .groupBy(accountingEntries.metodoPagamento, accountingEntries.tipo)
+
+  const vuoto = (): EntrateUscite => ({ entrate: 0, uscite: 0 })
+  const acc: Record<string, EntrateUscite> = {
+    CONTANTI: vuoto(), BONIFICO: vuoto(), POS: vuoto(), ASSEGNO: vuoto(), ALTRO: vuoto(),
+  }
+
+  for (const row of rows) {
+    const metodo = (row.metodo && acc[row.metodo]) ? row.metodo : 'ALTRO'
+    const val = parseFloat(row.totale)
+    if (row.tipo === 'ENTRATA')     acc[metodo]!.entrate += val
+    else if (row.tipo === 'USCITA') acc[metodo]!.uscite  += val
+  }
+
+  const r2 = (n: number) => Number(n.toFixed(2))
+  const totale: EntrateUscite = { entrate: 0, uscite: 0 }
+  for (const k of Object.keys(acc)) {
+    totale.entrate += acc[k]!.entrate
+    totale.uscite  += acc[k]!.uscite
+  }
+
+  const conv = (e: EntrateUscite): EntrateUscite => ({ entrate: r2(e.entrate), uscite: r2(e.uscite) })
+
+  return {
+    contanti: conv(acc.CONTANTI!),
+    bonifico: conv(acc.BONIFICO!),
+    pos:      conv(acc.POS!),
+    assegno:  conv(acc.ASSEGNO!),
+    altro:    conv(acc.ALTRO!),
+    totale:   conv(totale),
+  }
+}
+
+// ─────────────────────────────────────────────
+// SALDI DI CASSA — Rimanenze REALI (sempre dall'inizio attività, non per periodo).
+//   contanti = entrate − uscite in CONTANTI (quanto c'è nel cassetto)
+//   banca    = entrate − uscite di POS + BONIFICO + ASSEGNO (quanto c'è in banca)
+// ─────────────────────────────────────────────
+
+export async function getSaldiCassa() {
+  const pm = await getMovimentiPerMetodo() // tutto lo storico
+
+  const contanti = Number((pm.contanti.entrate - pm.contanti.uscite).toFixed(2))
+
+  const bancaEntrate = pm.pos.entrate + pm.bonifico.entrate + pm.assegno.entrate
+  const bancaUscite  = pm.pos.uscite  + pm.bonifico.uscite  + pm.assegno.uscite
+  const banca = Number((bancaEntrate - bancaUscite).toFixed(2))
+
+  return { contanti, banca }
+}
+
+// ─────────────────────────────────────────────
+// DASHBOARD — GET /api/accounting/dashboard
+// Aggregato per il cruscotto finanziario, sul PERIODO selezionato:
+// - periodo      — entrate, uscite, margine netto nel periodo
+// - perMetodo    — entrate e uscite per ciascun metodo nel periodo
+// - saldiCassa   — rimanenze reali di cassa/banca (sempre dall'inizio, NON per periodo)
+// - previsioni   — crediti e debiti (dall'inizio)
+// - fattureInAttesa — fatture richieste ma non emesse (dall'inizio)
+// ─────────────────────────────────────────────
+
+export async function getDashboard(startDate: Date, endDate: Date) {
+  const [periodo, perMetodo, saldiCassa, fattureInAttesa, previsioni] = await Promise.all([
+    getNetMargin(startDate, endDate),
+    getMovimentiPerMetodo(startDate, endDate),
+    getSaldiCassa(),
     getPendingInvoices(),
-    getNetMargin(trenta, ora),
     getPrevisioni(),
   ])
 
   return {
-    cashFlow: {
-      totale:        cashFlowTotale,
-      ultimi30Giorni: cashFlow30,
-    },
+    periodo,
+    perMetodo,
+    saldiCassa,
     previsioni,
     fattureInAttesa: {
       count: fattureInAttesa.length,
       lista: fattureInAttesa,
     },
-    margineUltimi30Giorni: margine30,
   }
 }
 

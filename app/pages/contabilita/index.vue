@@ -17,6 +17,22 @@
       </div>
     </div>
 
+    <!-- ─── BARRA PERIODO (comanda card + lista movimenti) ─── -->
+    <div class="flex flex-wrap items-end gap-3 bg-white rounded-xl ring-1 ring-slate-200 shadow-sm p-4">
+      <UFormField label="Dal">
+        <UInput type="date" v-model="periodo.dataInizio" @change="onPeriodoChange" />
+      </UFormField>
+      <UFormField label="Al">
+        <UInput type="date" v-model="periodo.dataFine" @change="onPeriodoChange" />
+      </UFormField>
+      <UButton icon="i-heroicons-arrow-uturn-left" variant="soft" color="neutral" @click="azzeraFiltri">
+        Azzera filtri
+      </UButton>
+      <p class="text-xs text-slate-400 ml-auto self-center">
+        Di default: dal 1° gennaio {{ annoCorrente }} a oggi
+      </p>
+    </div>
+
     <!-- Skeleton caricamento -->
     <template v-if="pending">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -27,9 +43,9 @@
 
     <template v-else-if="dash">
 
-      <!-- ─── ULTIMI 30 GIORNI ─── -->
+      <!-- ─── PERIODO SELEZIONATO ─── -->
       <div>
-        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Ultimi 30 giorni</p>
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Periodo selezionato</p>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
           <UCard class="bg-green-50 border-green-100">
@@ -37,7 +53,7 @@
               <div>
                 <p class="text-xs text-green-600 font-medium uppercase tracking-wide">Entrate</p>
                 <p class="text-2xl font-bold text-green-700 mt-1">
-                  € {{ fmt(dash.margineUltimi30Giorni.entrate) }}
+                  € {{ fmt(dash.periodo.entrate) }}
                 </p>
               </div>
               <UIcon name="i-heroicons-arrow-trending-up" class="w-6 h-6 text-green-400" />
@@ -49,24 +65,24 @@
               <div>
                 <p class="text-xs text-red-600 font-medium uppercase tracking-wide">Uscite</p>
                 <p class="text-2xl font-bold text-red-700 mt-1">
-                  € {{ fmt(dash.margineUltimi30Giorni.uscite) }}
+                  € {{ fmt(dash.periodo.uscite) }}
                 </p>
               </div>
               <UIcon name="i-heroicons-arrow-trending-down" class="w-6 h-6 text-red-400" />
             </div>
           </UCard>
 
-          <UCard :class="dash.margineUltimi30Giorni.margine >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'">
+          <UCard :class="dash.periodo.margine >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'">
             <div class="flex items-start justify-between">
               <div>
-                <p class="text-xs font-medium uppercase tracking-wide" :class="dash.margineUltimi30Giorni.margine >= 0 ? 'text-blue-600' : 'text-orange-600'">
+                <p class="text-xs font-medium uppercase tracking-wide" :class="dash.periodo.margine >= 0 ? 'text-blue-600' : 'text-orange-600'">
                   Margine netto
                 </p>
-                <p class="text-2xl font-bold mt-1" :class="dash.margineUltimi30Giorni.margine >= 0 ? 'text-blue-700' : 'text-orange-700'">
-                  € {{ fmt(dash.margineUltimi30Giorni.margine) }}
+                <p class="text-2xl font-bold mt-1" :class="dash.periodo.margine >= 0 ? 'text-blue-700' : 'text-orange-700'">
+                  € {{ fmt(dash.periodo.margine) }}
                 </p>
               </div>
-              <UIcon name="i-heroicons-scale" class="w-6 h-6" :class="dash.margineUltimi30Giorni.margine >= 0 ? 'text-blue-400' : 'text-orange-400'" />
+              <UIcon name="i-heroicons-scale" class="w-6 h-6" :class="dash.periodo.margine >= 0 ? 'text-blue-400' : 'text-orange-400'" />
             </div>
           </UCard>
 
@@ -87,68 +103,85 @@
         </div>
       </div>
 
-      <!-- ─── TOTALI DALL'INIZIO ─── -->
+      <!-- ─── MOVIMENTI PER METODO (NEL PERIODO) ─── -->
       <div>
-        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Totali dall'inizio attività</p>
-        <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Movimenti per metodo (nel periodo)</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
 
-          <UCard>
-            <div class="flex items-center gap-3">
-              <div class="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center shrink-0">
-                <UIcon name="i-heroicons-banknotes" class="w-4 h-4 text-green-600" />
+          <UCard v-for="m in cardsMetodo" :key="m.key">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0" :class="m.iconBg">
+                <UIcon :name="m.icon" class="w-4 h-4" :class="m.iconText" />
               </div>
-              <div>
-                <p class="text-xs text-slate-400">Contanti</p>
-                <p class="text-base font-bold text-slate-800">€ {{ fmt(dash.cashFlow.totale.contanti) }}</p>
+              <p class="text-sm font-semibold text-slate-700">{{ m.label }}</p>
+            </div>
+            <div class="space-y-1">
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-green-600">Entrate</span>
+                <span class="text-sm font-bold text-green-700">€ {{ fmt(m.dati.entrate) }}</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-red-600">Uscite</span>
+                <span class="text-sm font-bold text-red-700">− € {{ fmt(m.dati.uscite) }}</span>
               </div>
             </div>
           </UCard>
 
-          <UCard>
-            <div class="flex items-center gap-3">
-              <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                <UIcon name="i-heroicons-building-library" class="w-4 h-4 text-blue-600" />
-              </div>
-              <div>
-                <p class="text-xs text-slate-400">Bonifici</p>
-                <p class="text-base font-bold text-slate-800">€ {{ fmt(dash.cashFlow.totale.bonifico) }}</p>
-              </div>
-            </div>
-          </UCard>
-
-          <UCard>
-            <div class="flex items-center gap-3">
-              <div class="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
-                <UIcon name="i-heroicons-credit-card" class="w-4 h-4 text-purple-600" />
-              </div>
-              <div>
-                <p class="text-xs text-slate-400">POS</p>
-                <p class="text-base font-bold text-slate-800">€ {{ fmt(dash.cashFlow.totale.pos) }}</p>
-              </div>
-            </div>
-          </UCard>
-
-          <UCard>
-            <div class="flex items-center gap-3">
-              <div class="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center shrink-0">
-                <UIcon name="i-heroicons-document" class="w-4 h-4 text-yellow-600" />
-              </div>
-              <div>
-                <p class="text-xs text-slate-400">Assegni</p>
-                <p class="text-base font-bold text-slate-800">€ {{ fmt(dash.cashFlow.totale.assegno) }}</p>
-              </div>
-            </div>
-          </UCard>
-
-          <UCard>
-            <div class="flex items-center gap-3">
+          <!-- Totale del periodo -->
+          <UCard class="bg-tfn-50 border-tfn-100">
+            <div class="flex items-center gap-3 mb-3">
               <div class="w-8 h-8 rounded-full bg-tfn-100 flex items-center justify-center shrink-0">
                 <UIcon name="i-heroicons-circle-stack" class="w-4 h-4 text-tfn-600" />
               </div>
-              <div>
-                <p class="text-xs text-slate-400">Totale</p>
-                <p class="text-base font-bold text-tfn-700">€ {{ fmt(dash.cashFlow.totale.totale) }}</p>
+              <p class="text-sm font-semibold text-tfn-700">Totale</p>
+            </div>
+            <div class="space-y-1">
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-green-600">Entrate</span>
+                <span class="text-sm font-bold text-green-700">€ {{ fmt(dash.perMetodo.totale.entrate) }}</span>
               </div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-red-600">Uscite</span>
+                <span class="text-sm font-bold text-red-700">− € {{ fmt(dash.perMetodo.totale.uscite) }}</span>
+              </div>
+            </div>
+          </UCard>
+
+        </div>
+      </div>
+
+      <!-- ─── RIMANENZE (SALDO REALE ATTUALE) ─── -->
+      <div>
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Rimanenze di cassa (saldo attuale, dall'inizio attività)</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+          <UCard :class="dash.saldiCassa.contanti >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-xs font-medium uppercase tracking-wide" :class="dash.saldiCassa.contanti >= 0 ? 'text-emerald-600' : 'text-red-600'">
+                  Cassa contanti
+                </p>
+                <p class="text-2xl font-bold mt-1" :class="dash.saldiCassa.contanti >= 0 ? 'text-emerald-700' : 'text-red-700'">
+                  € {{ fmt(dash.saldiCassa.contanti) }}
+                </p>
+                <p class="text-[11px] text-slate-400 mt-1">Entrate − uscite in contanti</p>
+              </div>
+              <UIcon name="i-heroicons-banknotes" class="w-7 h-7" :class="dash.saldiCassa.contanti >= 0 ? 'text-emerald-400' : 'text-red-400'" />
+            </div>
+          </UCard>
+
+          <UCard :class="dash.saldiCassa.banca >= 0 ? 'bg-sky-50 border-sky-100' : 'bg-red-50 border-red-100'">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-xs font-medium uppercase tracking-wide" :class="dash.saldiCassa.banca >= 0 ? 'text-sky-600' : 'text-red-600'">
+                  Cassa banca
+                </p>
+                <p class="text-2xl font-bold mt-1" :class="dash.saldiCassa.banca >= 0 ? 'text-sky-700' : 'text-red-700'">
+                  € {{ fmt(dash.saldiCassa.banca) }}
+                </p>
+                <p class="text-[11px] text-slate-400 mt-1">POS + bonifici + assegni (entrate − uscite)</p>
+              </div>
+              <UIcon name="i-heroicons-building-library" class="w-7 h-7" :class="dash.saldiCassa.banca >= 0 ? 'text-sky-400' : 'text-red-400'" />
             </div>
           </UCard>
 
@@ -196,12 +229,9 @@
         </template>
         
         <div class="flex flex-wrap gap-3 mb-4 items-end">
-          <UFormField label="Dal">
-            <UInput type="date" v-model="filtroEntries.dataInizio" @change="caricaEntries" />
-          </UFormField>
-          <UFormField label="Al">
-            <UInput type="date" v-model="filtroEntries.dataFine" @change="caricaEntries" />
-          </UFormField>
+          <p class="text-xs text-slate-400 self-center mr-1">
+            Periodo: <strong class="text-slate-600">{{ formatData(periodo.dataInizio) }} → {{ formatData(periodo.dataFine) }}</strong> (modificalo dai filtri in alto)
+          </p>
           <UFormField label="Tipo">
             <USelect v-model="filtroEntries.tipo" :items="[{label: 'Tutti', value: 'TUTTI'}, {label: 'Entrata', value: 'ENTRATA'}, {label: 'Uscita', value: 'USCITA'}, {label: 'Credito', value: 'CREDITO'}, {label: 'Debito', value: 'DEBITO'}, {label: 'Nota/Atteso', value: 'NOTA'}, {label: 'Storno', value: 'STORNO'}]" @change="caricaEntries" class="w-40" />
           </UFormField>
@@ -250,7 +280,7 @@
           </template>
         </UTable>
         <div class="mt-4 flex justify-center border-t border-slate-100 pt-4" v-if="metaEntries && metaEntries.totalPages > 1">
-          <UPagination v-model:page="filtroEntries.page" :total="metaEntries.total" :items-per-page="filtroEntries.limit" @update:page="caricaEntries" />
+          <UPagination v-model:page="filtroEntries.page" :total="metaEntries.total" :items-per-page="filtroEntries.limit" @update:page="cambiaPagina" />
         </div>
       </UCard>
 
@@ -401,13 +431,27 @@ definePageMeta({ middleware: ['admin-only'] })
 
 const toast = useToast()
 
-// ─── Fetch dashboard ───
-const { data: dash, pending, refresh: refreshDash } = useLazyFetch('/api/accounting/dashboard')
+// ─── Periodo (default: dal 1° gennaio dell'anno corrente a oggi) ───
+const annoCorrente = new Date().getFullYear()
+const INIZIO_ANNO = `${annoCorrente}-01-01`
+const OGGI_ISO = new Date().toISOString().substring(0, 10)
 
-// ─── Lista Movimenti ───
+const periodo = reactive({
+  dataInizio: INIZIO_ANNO,
+  dataFine: OGGI_ISO,
+})
+
+// ─── Fetch dashboard (reattiva al periodo) ───
+const { data: dash, pending, refresh: refreshDash } = useLazyFetch('/api/accounting/dashboard', {
+  query: computed(() => ({
+    dataInizio: periodo.dataInizio || undefined,
+    dataFine: periodo.dataFine || undefined,
+  })),
+  watch: false,
+})
+
+// ─── Lista Movimenti (stesso periodo + filtri Tipo/Categoria) ───
 const filtroEntries = reactive({
-  dataInizio: '',
-  dataFine: '',
   tipo: 'TUTTI',
   categoria: '',
   page: 1,
@@ -415,12 +459,15 @@ const filtroEntries = reactive({
 })
 
 const { data: entriesData, pending: pendingEntries, refresh: refreshEntries } = useLazyFetch('/api/accounting/entries', {
-  query: computed(() => ({ 
-    ...filtroEntries,
+  query: computed(() => ({
+    dataInizio: periodo.dataInizio || undefined,
+    dataFine: periodo.dataFine || undefined,
     tipo: (filtroEntries.tipo && filtroEntries.tipo !== 'TUTTI') ? filtroEntries.tipo : undefined,
     categoria: filtroEntries.categoria || undefined,
+    page: filtroEntries.page,
+    limit: filtroEntries.limit,
   })),
-  watch: false
+  watch: false,
 })
 const entries = computed(() => entriesData.value?.data ?? [])
 const metaEntries = computed(() => entriesData.value?.meta)
@@ -430,10 +477,44 @@ function caricaEntries() {
   refreshEntries()
 }
 
+function cambiaPagina() {
+  refreshEntries()
+}
+
+// Cambio periodo → aggiorna SIA le card SIA la lista
+function onPeriodoChange() {
+  filtroEntries.page = 1
+  refreshDash()
+  refreshEntries()
+}
+
+// Azzera filtri → torna al 1° gennaio → oggi e pulisce Tipo/Categoria
+function azzeraFiltri() {
+  periodo.dataInizio = INIZIO_ANNO
+  periodo.dataFine = OGGI_ISO
+  filtroEntries.tipo = 'TUTTI'
+  filtroEntries.categoria = ''
+  filtroEntries.page = 1
+  refreshDash()
+  refreshEntries()
+}
+
 function refreshAll() {
   refreshDash()
   refreshEntries()
 }
+
+// ─── Card "per metodo": entrate e uscite del periodo, una card per metodo ───
+const cardsMetodo = computed(() => {
+  const pm = dash.value?.perMetodo
+  if (!pm) return []
+  return [
+    { key: 'contanti', label: 'Contanti', icon: 'i-heroicons-banknotes',        iconBg: 'bg-green-100',  iconText: 'text-green-600',  dati: pm.contanti },
+    { key: 'bonifico', label: 'Bonifici', icon: 'i-heroicons-building-library', iconBg: 'bg-blue-100',   iconText: 'text-blue-600',   dati: pm.bonifico },
+    { key: 'pos',      label: 'POS',      icon: 'i-heroicons-credit-card',      iconBg: 'bg-purple-100', iconText: 'text-purple-600', dati: pm.pos },
+    { key: 'assegno',  label: 'Assegni',  icon: 'i-heroicons-document',         iconBg: 'bg-yellow-100', iconText: 'text-yellow-600', dati: pm.assegno },
+  ]
+})
 
 // ─── Formato numeri ───
 function fmt(n: number) {

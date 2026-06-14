@@ -146,6 +146,8 @@ export const UpdateStudentSchema = StudentSchema.partial()
 export const StudentQuerySchema = z.object({
   search:   z.string().optional(),
   active:   z.enum(['true', 'false']).optional(),
+  packageStatus: z.enum(['DA_PAGARE', 'DA_RINNOVARE', 'SCADUTO', 'ATTIVO', 'NESSUNO', 'all']).optional(),
+  hideInactive: z.enum(['true', 'false']).optional(),
   classe:   z.string().optional(),
   page:     z.coerce.number().int().positive().default(1),
   limit:    z.coerce.number().int().positive().max(2000).default(20),

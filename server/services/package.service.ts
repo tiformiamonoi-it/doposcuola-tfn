@@ -1,5 +1,5 @@
 import { db } from '../database/client'
-import { accountingEntries, packages, packageRecharges, payments } from '../database/schema'
+import { accountingEntries, packages, packageRecharges, payments, students } from '../database/schema'
 import { and, count, desc, eq, sql } from 'drizzle-orm'
 import type { CreatePackageInput, PackageQuery, RechargePackageInput, UpdatePackageInput } from '../../shared/schemas/package.schema'
 
@@ -139,7 +139,34 @@ export async function listPackages(query: PackageQuery) {
   const where = conditions.length > 0 ? and(...(conditions as [ReturnType<typeof eq>, ...ReturnType<typeof eq>[]])) : undefined
 
   const [rows, [countRow]] = await Promise.all([
-    db.select().from(packages)
+    db.select({
+      id: packages.id,
+      studentId: packages.studentId,
+      standardPackageId: packages.standardPackageId,
+      nome: packages.nome,
+      tipo: packages.tipo,
+      oreAcquistate: packages.oreAcquistate,
+      oreResiduo: packages.oreResiduo,
+      orePerse: packages.orePerse,
+      giorniAcquistati: packages.giorniAcquistati,
+      giorniResiduo: packages.giorniResiduo,
+      orarioGiornaliero: packages.orarioGiornaliero,
+      tariffaOraria: packages.tariffaOraria,
+      prezzoTotale: packages.prezzoTotale,
+      importoPagato: packages.importoPagato,
+      importoResiduo: packages.importoResiduo,
+      dataInizio: packages.dataInizio,
+      dataScadenza: packages.dataScadenza,
+      stati: packages.stati,
+      note: packages.note,
+      createdAt: packages.createdAt,
+      updatedAt: packages.updatedAt,
+      // Dati dello studente joinati
+      studentFirstName: students.firstName,
+      studentLastName: students.lastName,
+    })
+      .from(packages)
+      .leftJoin(students, eq(packages.studentId, students.id))
       .where(where)
       .orderBy(desc(packages.createdAt))
       .limit(query.limit)

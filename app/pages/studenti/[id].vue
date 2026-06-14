@@ -118,7 +118,7 @@
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="font-medium text-sm text-slate-800">{{ pkg.nome }}</span>
                 <UBadge color="neutral" variant="outline" size="xs">{{ pkg.tipo }}</UBadge>
-                <StatoBadge v-for="s in pkg.stati" :key="s" :stato="s" :pacchetto="pkg" />
+                <StatoBadge v-for="s in riassumiStati(pkg.stati)" :key="s" :stato="s" :pacchetto="pkg" />
               </div>
               <div class="text-sm">
                 <div class="font-medium">
@@ -460,6 +460,7 @@
 <script setup lang="ts">
 import { UpdateStudentSchema } from '#shared/schemas/student.schema'
 import { normalizzaTelefono } from '~/utils/phone'
+import { riassumiStati } from '~/utils/statiPacchetto'
 
 definePageMeta({ middleware: ['admin-or-super'] })
 

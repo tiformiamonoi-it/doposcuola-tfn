@@ -119,7 +119,7 @@ export const LessonQuerySchema = z.object({
   dataFine:    z.coerce.date().optional(),
   tipo:        z.enum(['SINGOLA', 'GRUPPO', 'MAXI']).optional(),
   page:        z.coerce.number().int().positive().default(1),
-  limit:       z.coerce.number().int().positive().max(200).default(50),
+  limit:       z.coerce.number().int().positive().max(1000).default(50),
 })
 
 // ─────────────────────────────────────────────

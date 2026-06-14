@@ -41,17 +41,115 @@
       </div>
     </div>
 
-    <!-- Tabella pacchetti -->
-    <UCard :ui="{ body: 'p-0' }">
+    <div v-if="!pending && pacchetti.length === 0" class="py-12 text-center">
+      <UIcon name="i-heroicons-cube" class="w-10 h-10 text-slate-300 mx-auto mb-3" />
+      <p class="text-slate-500 text-sm">Nessun pacchetto trovato</p>
+    </div>
+
+    <div v-else-if="pacchetti.length > 0">
+
+    <!-- ─── MOBILE: cartoline verticali ─── -->
+    <div class="lg:hidden space-y-3">
+      <div
+        v-for="p in pacchetti"
+        :key="p.id"
+        class="block bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-4 relative"
+      >
+        <!-- Riga di stato colorata -->
+        <div class="absolute left-0 top-3 bottom-3 w-1 rounded-r-full" :class="{
+          'bg-emerald-500': pacchettoStatusColor(p.stati) === 'success',
+          'bg-amber-400':   pacchettoStatusColor(p.stati) === 'warning',
+          'bg-rose-500':    pacchettoStatusColor(p.stati) === 'error',
+          'bg-slate-300':   pacchettoStatusColor(p.stati) === 'neutral',
+        }"></div>
+
+        <!-- Header: Avatar + Studente + Dropdown Azioni -->
+        <div class="flex items-center justify-between gap-3 pl-2 mb-3">
+          <NuxtLink :to="`/studenti/${p.studentId}`" class="flex items-center gap-3">
+            <div
+              class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+              :class="[coloreAvatar(p.studentId || (p.studentLastName + p.studentFirstName)).bg, coloreAvatar(p.studentId || (p.studentLastName + p.studentFirstName)).text]"
+            >
+              {{ inizialiDa(p.studentFirstName, p.studentLastName) }}
+            </div>
+            <div class="min-w-0">
+              <p class="font-semibold text-slate-900 truncate">{{ p.studentLastName }} {{ p.studentFirstName }}</p>
+            </div>
+          </NuxtLink>
+          <UDropdownMenu :items="azioniPacchetto(p)">
+            <UButton icon="i-heroicons-ellipsis-vertical" variant="ghost" color="neutral" size="sm" />
+          </UDropdownMenu>
+        </div>
+
+        <!-- Info Pacchetto -->
+        <div class="pl-2 space-y-2">
+          <div class="flex justify-between items-start gap-2">
+            <div>
+              <div class="font-medium text-slate-800 text-sm">{{ p.nome }}</div>
+              <div class="text-xs text-slate-500">{{ p.tipo }}</div>
+            </div>
+            <!-- Stati -->
+            <div class="flex flex-wrap gap-1 justify-end">
+              <StatoBadge v-for="s in riassumiStati(p.stati)" :key="s" :stato="s" :pacchetto="p" />
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-2 text-sm mt-2 p-2 bg-slate-50 rounded-lg">
+            <div>
+              <span class="text-slate-500 text-[11px] uppercase tracking-wide block">Residuo</span>
+              <span class="font-medium text-slate-700">
+                <template v-if="p.tipo === 'ORE'">
+                  {{ parseFloat(p.oreResiduo) }} / {{ parseFloat(p.oreAcquistate) }} h
+                </template>
+                <template v-else-if="p.tipo === 'MENSILE'">
+                  {{ p.giorniResiduo ?? 0 }} / {{ p.giorniAcquistati ?? 0 }} gg
+                </template>
+                <template v-else-if="p.tipo === 'A_CONSUMO'">
+                  {{ parseFloat(p.oreResiduo) }} h
+                </template>
+              </span>
+            </div>
+            <div>
+              <span class="text-slate-500 text-[11px] uppercase tracking-wide block">Scadenza</span>
+              <span class="font-medium text-slate-700">{{ p.dataScadenza ? formatData(p.dataScadenza) : '—' }}</span>
+            </div>
+          </div>
+
+          <div v-if="parseFloat(p.importoResiduo) > 0" class="mt-2 text-sm flex items-center gap-2">
+            <UIcon name="i-heroicons-exclamation-circle" class="w-4 h-4 text-orange-500" />
+            <span class="text-orange-600 font-semibold">Da pagare: € {{ parseFloat(p.importoResiduo).toFixed(2) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── DESKTOP: Tabella pacchetti ─── -->
+    <UCard 
+      :ui="{ body: { padding: 'p-0' }, rounded: 'rounded-2xl', ring: 'ring-1 ring-slate-200', shadow: 'shadow-sm' }" 
+      class="overflow-hidden hidden lg:block"
+    >
       <UTable
         v-model:row-selection="rowSelection"
         :data="pacchetti"
         :columns="colonne"
         :loading="pending"
+        class="w-full"
+        :ui="{
+          th: 'bg-slate-50 text-slate-600 font-semibold py-3 px-4 text-sm',
+          td: 'py-3 px-4 relative align-middle',
+          tr: 'hover:bg-slate-50/80 transition-colors',
+        }"
       >
         <!-- Studente -->
         <template #studente-cell="{ row }">
-          <NuxtLink :to="`/studenti/${row.original.studentId}`" class="font-medium text-tfn-600 hover:underline text-sm" @click.stop>
+          <!-- Trattino di stato: sottile, arrotondato, uno per riga -->
+          <div class="absolute left-0 top-2 bottom-2 w-1 rounded-r-full" :class="{
+            'bg-emerald-500': pacchettoStatusColor(row.original.stati) === 'success',
+            'bg-amber-400':   pacchettoStatusColor(row.original.stati) === 'warning',
+            'bg-rose-500':    pacchettoStatusColor(row.original.stati) === 'error',
+            'bg-slate-300':   pacchettoStatusColor(row.original.stati) === 'neutral',
+          }"></div>
+          <NuxtLink :to="`/studenti/${row.original.studentId}`" class="font-semibold text-slate-900 hover:text-tfn-600 transition-colors truncate block pl-2" @click.stop>
             {{ row.original.studentLastName ?? '' }} {{ row.original.studentFirstName ?? '' }}
             <span v-if="!row.original.studentLastName" class="text-slate-400 font-mono text-xs">{{ row.original.studentId?.slice(0, 8) }}…</span>
           </NuxtLink>
@@ -104,7 +202,7 @@
         <!-- Stati -->
         <template #stati-cell="{ row }">
           <div class="flex flex-wrap gap-1">
-            <StatoBadge v-for="s in row.original.stati" :key="s" :stato="s" :pacchetto="row.original" />
+            <StatoBadge v-for="s in riassumiStati(row.original.stati)" :key="s" :stato="s" :pacchetto="row.original" />
           </div>
         </template>
 
@@ -116,8 +214,10 @@
         </template>
       </UTable>
 
-      <!-- Paginazione -->
-      <div v-if="meta && meta.totalPages > 1" class="flex justify-center py-4 border-t border-slate-100">
+      <div v-if="meta && meta.totalPages > 1" class="flex justify-between items-center py-4">
+        <div class="text-sm text-slate-500">
+          Pagina {{ meta.page }} di {{ meta.totalPages }} ({{ meta.total }} totali)
+        </div>
         <UPagination
           v-model:page="pagina"
           :total="meta.total"
@@ -125,12 +225,8 @@
           @update:page="caricaPacchetti"
         />
       </div>
-
-      <div v-if="!pending && pacchetti.length === 0" class="py-12 text-center">
-        <UIcon name="i-heroicons-cube" class="w-10 h-10 text-slate-300 mx-auto mb-3" />
-        <p class="text-slate-500 text-sm">Nessun pacchetto trovato</p>
-      </div>
     </UCard>
+    </div>
 
     <!-- ─── MODAL CREA PACCHETTO ─── -->
     <UModal v-model:open="modalCreaAperto" title="Nuovo Pacchetto" :ui="{ width: 'max-w-xl' }">
@@ -350,6 +446,16 @@
 definePageMeta({ middleware: ['admin-or-super'] })
 
 import { h, resolveComponent } from 'vue'
+import { riassumiStati } from '~/utils/statiPacchetto'
+import { inizialiDa, coloreAvatar } from '~/utils/avatar'
+
+function pacchettoStatusColor(stati: string[]) {
+  if (!stati || stati.length === 0) return 'neutral'
+  if (stati.includes('SCADUTO') || stati.includes('ESAURITO')) return 'error'
+  if (stati.includes('DA_RINNOVARE') || stati.includes('DA_PAGARE')) return 'warning'
+  if (stati.includes('ATTIVO')) return 'success'
+  return 'neutral'
+}
 
 const route = useRoute()
 const toast = useToast()
