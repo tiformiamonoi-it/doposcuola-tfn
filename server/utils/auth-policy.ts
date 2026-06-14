@@ -23,6 +23,7 @@ export const API_POLICY: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: '/api/portal',                  roles: ['GENITORE', 'ADMIN', 'SUPER_TUTOR'] },
   { prefix: '/api/admin',                   roles: ADMIN_SUPER },
   { prefix: '/api/tutors/availabilities',   roles: STAFF },
+  { prefix: '/api/tutor-payments',          roles: ADMIN_SUPER },
   { prefix: '/api/notes',                   roles: STAFF },
   { prefix: '/api/students',                roles: STAFF },
   { prefix: '/api/packages',                roles: ADMIN_SUPER },

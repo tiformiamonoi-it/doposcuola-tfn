@@ -1,12 +1,12 @@
 import { db } from '../../../database/client'
 import { accountingEntries } from '../../../database/schema'
-import { and, desc, eq, gte, lte, count } from 'drizzle-orm'
+import { and, desc, eq, gte, lte, count, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 const querySchema = z.object({
   page: z.coerce.number().default(1),
   limit: z.coerce.number().default(50),
-  tipo: z.enum(['ENTRATA', 'USCITA', 'NOTA', 'STORNO']).optional(),
+  tipo: z.enum(['ENTRATA', 'USCITA', 'NOTA', 'CREDITO', 'DEBITO', 'STORNO']).optional(),
   dataInizio: z.string().optional(),
   dataFine: z.string().optional(),
   categoria: z.string().optional(),
@@ -16,7 +16,12 @@ export default defineEventHandler(async (event) => {
   const query = await getValidatedQuery(event, querySchema.parse)
 
   const conditions = []
-  if (query.tipo) conditions.push(eq(accountingEntries.tipo, query.tipo))
+  // "STORNO" non è un tipo reale: gli storni sono movimenti con importo negativo
+  if (query.tipo === 'STORNO') {
+    conditions.push(sql`${accountingEntries.importo}::numeric < 0`)
+  } else if (query.tipo) {
+    conditions.push(eq(accountingEntries.tipo, query.tipo))
+  }
   if (query.dataInizio) conditions.push(gte(accountingEntries.data, new Date(query.dataInizio)))
   if (query.dataFine) {
     const end = new Date(query.dataFine)
