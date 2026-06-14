@@ -340,9 +340,9 @@ Il piano originale prevedeva un errore 409 se l'email era già in uso. L'impleme
 
 **Motivazione:** Un genitore con due figli nello stesso centro deve poter usare le stesse credenziali senza che il secondo collegamento resetti la password del primo figlio.
 
-**2. `bookings.userId` invece di `bookings.studentId` per filtrare prenotazioni admin**
+**2. Filtro prenotazioni admin** *(superato — vedi ADL-015)*
 
-La migrazione `0002_mushy_raider.sql` (che aggiunge `student_id` a `bookings`) non è ancora stata applicata a Supabase perché richiede la porta Direct Connection (5432). Per evitare errori 500, `listBookingsForAdmin` risolve `student.portalUserId` e filtra per `bookings.userId` — funziona con le colonne già esistenti.
+In origine `listBookingsForAdmin` usava un workaround via `portalUserId` perché si riteneva che la migrazione `0002_mushy_raider.sql` non fosse applicata. In realtà la 0002 È applicata (lo dimostra l'uso di `lessons.mezza_lezione`, anch'essa introdotta dalla 0002). Dall'ADL-015 `listBookingsForAdmin` filtra direttamente per `bookings.studentId`.
 
 **3. `portal-only` middleware espanso per ADMIN/SUPER_TUTOR**
 
