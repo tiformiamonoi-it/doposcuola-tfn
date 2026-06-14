@@ -203,7 +203,7 @@
             <UInput type="date" v-model="filtroEntries.dataFine" @change="caricaEntries" />
           </UFormField>
           <UFormField label="Tipo">
-            <USelect v-model="filtroEntries.tipo" :items="[{label: 'Tutti', value: ''}, {label: 'Entrata', value: 'ENTRATA'}, {label: 'Uscita', value: 'USCITA'}, {label: 'Credito', value: 'CREDITO'}, {label: 'Debito', value: 'DEBITO'}, {label: 'Nota/Atteso', value: 'NOTA'}, {label: 'Storno', value: 'STORNO'}]" @change="caricaEntries" class="w-40" />
+            <USelect v-model="filtroEntries.tipo" :items="[{label: 'Tutti', value: 'TUTTI'}, {label: 'Entrata', value: 'ENTRATA'}, {label: 'Uscita', value: 'USCITA'}, {label: 'Credito', value: 'CREDITO'}, {label: 'Debito', value: 'DEBITO'}, {label: 'Nota/Atteso', value: 'NOTA'}, {label: 'Storno', value: 'STORNO'}]" @change="caricaEntries" class="w-40" />
           </UFormField>
           <UFormField label="Categoria">
             <UInput v-model="filtroEntries.categoria" placeholder="Es. stipendi..." @change="caricaEntries" @keyup.enter="caricaEntries" />
@@ -325,7 +325,7 @@ const { data: dash, pending, refresh: refreshDash } = useLazyFetch('/api/account
 const filtroEntries = reactive({
   dataInizio: '',
   dataFine: '',
-  tipo: '',
+  tipo: 'TUTTI',
   categoria: '',
   page: 1,
   limit: 50,
@@ -333,8 +333,8 @@ const filtroEntries = reactive({
 
 const { data: entriesData, pending: pendingEntries, refresh: refreshEntries } = useLazyFetch('/api/accounting/entries', {
   query: computed(() => ({ 
-    ...filtroEntries, 
-    tipo: filtroEntries.tipo || undefined,
+    ...filtroEntries,
+    tipo: (filtroEntries.tipo && filtroEntries.tipo !== 'TUTTI') ? filtroEntries.tipo : undefined,
     categoria: filtroEntries.categoria || undefined,
   })),
   watch: false
