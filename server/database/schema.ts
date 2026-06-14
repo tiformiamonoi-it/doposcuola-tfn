@@ -74,6 +74,8 @@ export const accountingTypeEnum = pgEnum('accounting_type', [
   'ENTRATA', // Pagamento pacchetto
   'USCITA',  // Compenso tutor, spese
   'NOTA',    // Movimento informativo, non incide sul saldo
+  'CREDITO', // Da incassare
+  'DEBITO',  // Da pagare
 ])
 
 export const bookingStatusEnum = pgEnum('booking_status', [
@@ -266,6 +268,7 @@ export const packages = pgTable('packages', {
 }, (t) => ({
   studentStatiIdx: index('pkg_student_stati_idx').on(t.studentId, t.stati),
   tipoCreatedIdx:  index('pkg_tipo_created_idx').on(t.tipo, t.createdAt),
+  statiGinIdx:     index('pkg_stati_gin_idx').using('gin', t.stati),
 }))
 
 // ─────────────────────────────────────────────
@@ -638,4 +641,8 @@ export const studentNotesRelations = relations(studentNotes, ({ one }) => ({
 export const bookingSubjectsRelations = relations(bookingSubjects, ({ one }) => ({
   booking:       one(bookings, { fields: [bookingSubjects.bookingId], references: [bookings.id] }),
   assignedTutor: one(users, { fields: [bookingSubjects.assignedTutorId], references: [users.id] }),
+}))
+
+export const tutorAvailabilitiesRelations = relations(tutorAvailabilities, ({ one }) => ({
+  user: one(users, { fields: [tutorAvailabilities.userId], references: [users.id] }),
 }))

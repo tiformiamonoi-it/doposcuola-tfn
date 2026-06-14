@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1781328177342,
+      "tag": "0000_concerned_omega_flight",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1781341771132,
+      "tag": "0001_gifted_blonde_phantom",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781369286885,
+      "tag": "0002_mushy_raider",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781420136704,
+      "tag": "0003_medical_starfox",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781427549863,
+      "tag": "0004_careless_major_mapleleaf",
+      "breakpoints": true
+    }
+  ]
+}
