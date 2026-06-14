@@ -7,6 +7,17 @@ export default defineNuxtConfig({
 
   devtools: { enabled: true },
 
+  colorMode: {
+    preference: 'light',
+    fallback: 'light'
+  },
+
+  app: {
+    head: {
+      viewport: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no',
+    }
+  },
+
   modules: [
     '@nuxt/ui',
     '@nuxtjs/google-fonts',

@@ -69,6 +69,29 @@
       </template>
     </UCard>
 
+    <UCard>
+      <template #header>
+        <div class="flex items-center gap-2">
+          <UIcon name="i-heroicons-document-text" class="w-4 h-4 text-tfn-500" />
+          <span class="font-medium text-slate-800">Documentazione e Privacy</span>
+        </div>
+      </template>
+      <div class="space-y-2 text-sm">
+        <NuxtLink to="#" class="flex items-center justify-between py-2 border-b border-slate-100 text-slate-600 hover:text-indigo-600 transition-colors">
+          <span>Privacy Policy</span>
+          <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
+        </NuxtLink>
+        <NuxtLink to="#" class="flex items-center justify-between py-2 border-b border-slate-100 text-slate-600 hover:text-indigo-600 transition-colors">
+          <span>Cookie Policy</span>
+          <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
+        </NuxtLink>
+        <NuxtLink to="#" class="flex items-center justify-between py-2 text-slate-600 hover:text-indigo-600 transition-colors">
+          <span>Termini e Condizioni</span>
+          <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
+        </NuxtLink>
+      </div>
+    </UCard>
+
     <UButton
       block
       variant="outline"

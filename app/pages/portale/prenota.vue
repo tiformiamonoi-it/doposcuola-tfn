@@ -1,6 +1,13 @@
 <template>
   <div class="space-y-6">
-    <h2 class="font-heading text-xl font-bold text-slate-900">Richiedi una lezione</h2>
+    <div class="flex items-center justify-between">
+      <h2 class="font-heading text-xl font-bold text-slate-900">
+        {{ isEditMode ? 'Modifica la lezione' : 'Richiedi una lezione' }}
+      </h2>
+      <UButton v-if="isEditMode" size="xs" color="gray" variant="ghost" @click="resetForm">
+        Nuova richiesta
+      </UButton>
+    </div>
 
     <!-- Stepper -->
     <div class="flex items-center gap-2">
@@ -10,7 +17,7 @@
           :class="step > idx + 1
             ? 'bg-success-500 text-white'
             : step === idx + 1
-              ? 'bg-tfn-500 text-white'
+              ? (isEditMode ? 'bg-amber-500 text-white' : 'bg-tfn-500 text-white')
               : 'bg-slate-100 text-slate-400'"
         >
           <UIcon v-if="step > idx + 1" name="i-heroicons-check" class="w-4 h-4" />
@@ -33,24 +40,56 @@
           v-model="form.studentId"
           :items="students.map((s: any) => ({ label: `${s.firstName} ${s.lastName}`, value: s.id }))"
           placeholder="Seleziona figlio..."
+          @change="onStudentChange"
         />
       </div>
 
-      <div class="space-y-3">
-        <label class="block text-sm font-medium text-slate-700">Data desiderata</label>
-        <UInput
-          v-model="form.dataDesiderata"
-          type="date"
-          :min="minDate"
-          class="w-full"
-          @change="validaDataDesiderata"
-        />
-        <p class="text-xs text-slate-400">La segreteria assegnerà l'orario esatto.</p>
+      <!-- Custom Calendar -->
+      <div class="bg-white rounded-lg border border-slate-200 p-4 max-w-sm mx-auto">
+        <div class="flex items-center justify-between mb-4">
+          <UButton icon="i-heroicons-chevron-left" variant="ghost" size="sm" @click="prevMonth" />
+          <span class="font-bold text-slate-800 capitalize">{{ currentMonthName }} {{ currentYear }}</span>
+          <UButton icon="i-heroicons-chevron-right" variant="ghost" size="sm" @click="nextMonth" />
+        </div>
+        <div class="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-slate-400 mb-2">
+          <div>Lun</div><div>Mar</div><div>Mer</div><div>Gio</div><div>Ven</div><div>Sab</div><div class="text-red-400">Dom</div>
+        </div>
+        <div class="grid grid-cols-7 gap-1 text-center">
+          <div v-for="blank in blankDays" :key="'blank-'+blank" class="p-2"></div>
+          <button
+            v-for="day in daysInMonth" :key="'day-'+day"
+            @click="selectDate(day)"
+            :disabled="isDayDisabled(day)"
+            class="relative rounded-lg transition-all flex items-center justify-center w-9 h-9 mx-auto text-sm"
+            :class="[
+              form.dataDesiderata === getDateString(day) 
+                ? (isEditMode ? 'bg-amber-500 text-white font-bold shadow-md' : 'bg-tfn-500 text-white font-bold shadow-md')
+                : (isDayDisabled(day) ? 'opacity-30 cursor-not-allowed bg-slate-50 text-slate-400' : 'hover:bg-slate-100 text-slate-700 cursor-pointer font-medium'),
+            ]"
+          >
+            {{ day }}
+            <!-- Pallino lezione esistente -->
+            <span v-if="hasExistingLesson(day) && form.dataDesiderata !== getDateString(day)" class="absolute bottom-1 w-1 h-1 rounded-full bg-amber-500"></span>
+            <span v-if="isTodayString(getDateString(day)) && form.dataDesiderata !== getDateString(day)" class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-4 flex flex-col gap-2 text-xs text-slate-500 justify-center items-center">
+        <div class="flex items-center gap-4">
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Oggi</span>
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Lezione prenotata</span>
+        </div>
+        <p v-if="isEditMode" class="text-amber-600 font-medium bg-amber-50 px-3 py-1.5 rounded-md mt-2">
+          Hai già una lezione per questa data. Procedendo potrai modificarla.
+        </p>
+        <p v-else>La segreteria assegnerà l'orario esatto.</p>
       </div>
 
       <template #footer>
         <div class="flex justify-end">
           <UButton
+            :color="isEditMode ? 'amber' : 'primary'"
             :disabled="!form.dataDesiderata || !form.studentId"
             @click="step = 2"
           >
@@ -72,7 +111,7 @@
           :key="materia"
           class="px-3 py-2 text-sm rounded-lg border transition-colors text-left"
           :class="form.materie.includes(materia)
-            ? 'border-tfn-500 bg-tfn-50 text-tfn-700 font-medium'
+            ? (isEditMode ? 'border-amber-500 bg-amber-50 text-amber-700 font-medium' : 'border-tfn-500 bg-tfn-50 text-tfn-700 font-medium')
             : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'"
           @click="toggleMateria(materia)"
         >
@@ -87,7 +126,7 @@
       <template #footer>
         <div class="flex justify-between">
           <UButton variant="ghost" @click="step = 1">Indietro</UButton>
-          <UButton :disabled="form.materie.length === 0" @click="step = 3">Avanti</UButton>
+          <UButton :color="isEditMode ? 'amber' : 'primary'" :disabled="form.materie.length === 0" @click="step = 3">Avanti</UButton>
         </div>
       </template>
     </UCard>
@@ -101,12 +140,18 @@
       <div class="space-y-4">
         <UTextarea
           v-model="form.noteOrario"
-          placeholder="Es. preferisco dopo le 17, o il giovedì pomeriggio"
+          placeholder="(Avvisaci se fai tardi o hai qualche necessità)"
           :rows="3"
           class="w-full"
         />
 
         <div class="bg-slate-50 rounded-lg p-4 space-y-2 text-sm">
+          <div class="flex justify-between">
+            <span class="text-slate-500">Azione</span>
+            <span class="font-bold" :class="isEditMode ? 'text-amber-600' : 'text-tfn-600'">
+              {{ isEditMode ? 'Modifica Lezione Esistente' : 'Nuova Prenotazione' }}
+            </span>
+          </div>
           <div class="flex justify-between">
             <span class="text-slate-500">Studente</span>
             <span class="font-medium text-slate-800">{{ studentSelezionato }}</span>
@@ -125,8 +170,8 @@
       <template #footer>
         <div class="flex justify-between">
           <UButton variant="ghost" @click="step = 2">Indietro</UButton>
-          <UButton color="primary" :loading="loading" @click="inviaPrenotazione">
-            Conferma richiesta
+          <UButton :color="isEditMode ? 'amber' : 'primary'" :loading="loading" @click="inviaPrenotazione">
+            {{ isEditMode ? 'Salva Modifiche' : 'Conferma richiesta' }}
           </UButton>
         </div>
       </template>
@@ -135,13 +180,15 @@
     <!-- Step 4: Successo -->
     <UCard v-if="step === 4">
       <div class="text-center py-8 space-y-4">
-        <div class="w-16 h-16 rounded-full bg-success-100 flex items-center justify-center mx-auto">
-          <UIcon name="i-heroicons-check" class="w-8 h-8 text-success-600" />
+        <div class="w-16 h-16 rounded-full flex items-center justify-center mx-auto" :class="isEditMode ? 'bg-amber-100' : 'bg-success-100'">
+          <UIcon name="i-heroicons-check" class="w-8 h-8" :class="isEditMode ? 'text-amber-600' : 'text-success-600'" />
         </div>
         <div>
-          <h3 class="font-heading text-lg font-bold text-slate-900">Richiesta inviata!</h3>
+          <h3 class="font-heading text-lg font-bold text-slate-900">
+            {{ isEditMode ? 'Modifica salvata!' : 'Richiesta inviata!' }}
+          </h3>
           <p class="text-sm text-slate-500 mt-1">
-            La segreteria ti contatterà per confermare orario e tutor.
+            La segreteria elaborerà la tua richiesta al più presto.
           </p>
         </div>
         <UButton to="/portale" variant="ghost">Torna alla home</UButton>
@@ -151,6 +198,8 @@
 </template>
 
 <script setup lang="ts">
+import { ref, reactive, computed, watchEffect, onMounted } from 'vue'
+
 definePageMeta({
   layout: 'portal',
   middleware: ['portal-only'],
@@ -170,12 +219,22 @@ const steps = ['Data', 'Materie', 'Conferma']
 const { data: studentsData } = useLazyFetch('/api/portal/students')
 const students = computed(() => (studentsData.value as any[]) ?? [])
 
+const { data: closuresData } = useLazyFetch('/api/portal/closures')
+const closures = computed(() => (closuresData.value as any[]) ?? [])
+
+// Carichiamo le prenotazioni per sapere se ci sono doppioni
+const { data: bookingsData } = useLazyFetch('/api/portal/bookings')
+const bookings = computed(() => (bookingsData.value as any[]) ?? [])
+
 const form = reactive({
-  studentId:      '' as string,
+  studentId: '',
   dataDesiderata: '',
-  materie:        [] as string[],
-  noteOrario:     '',
+  materie: [] as string[],
+  noteOrario: '',
 })
+
+const isEditMode = ref(false)
+const editBookingId = ref<string | null>(null)
 
 watchEffect(() => {
   if (students.value.length >= 1 && !form.studentId) {
@@ -183,50 +242,144 @@ watchEffect(() => {
   }
 })
 
-const { data: closuresData } = useLazyFetch('/api/portal/closures')
-const closures = computed(() => (closuresData.value as any[]) ?? [])
+// --- CALENDAR LOGIC ---
+const currentDate = ref(new Date())
 
-const minDate = computed(() => {
-  const now = new Date()
-  // Se sono le 11:30 o più tardi, blocca la data di oggi e passa a domani
-  if (now.getHours() > 11 || (now.getHours() === 11 && now.getMinutes() >= 30)) {
-    const tomorrow = new Date(now)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    return tomorrow.toISOString().split('T')[0]
-  }
-  return now.toISOString().split('T')[0]
+const currentYear = computed(() => currentDate.value.getFullYear())
+const currentMonth = computed(() => currentDate.value.getMonth())
+const currentMonthName = computed(() => {
+  return currentDate.value.toLocaleString('it-IT', { month: 'long' })
 })
 
-function validaDataDesiderata() {
-  if (!form.dataDesiderata) return
-  
-  const selectedDate = new Date(form.dataDesiderata)
-  
-  // 1. Controllo Domenica (0 = Domenica)
-  if (selectedDate.getDay() === 0) {
-    toast.add({ title: 'Impossibile prenotare di Domenica', color: 'error' })
-    form.dataDesiderata = ''
-    return
-  }
+const daysInMonth = computed(() => {
+  return new Date(currentYear.value, currentMonth.value + 1, 0).getDate()
+})
 
-  // 2. Controllo chiusure
-  const isChiuso = closures.value.some((c: any) => c.date.split('T')[0] === form.dataDesiderata)
-  if (isChiuso) {
-    toast.add({ title: 'Il centro è chiuso in questa data', color: 'error' })
-    form.dataDesiderata = ''
-    return
-  }
+const blankDays = computed(() => {
+  let firstDay = new Date(currentYear.value, currentMonth.value, 1).getDay()
+  // Trasforma Domenica (0) in 7 per avere Lunedì come primo giorno
+  return firstDay === 0 ? 6 : firstDay - 1
+})
 
-  // 3. Controllo limite 11:30 per giorno stesso (doppia sicurezza in caso di minDate aggirato)
+function prevMonth() {
+  currentDate.value = new Date(currentYear.value, currentMonth.value - 1, 1)
+}
+
+function nextMonth() {
+  currentDate.value = new Date(currentYear.value, currentMonth.value + 1, 1)
+}
+
+function getDateString(day: number) {
+  const d = new Date(currentYear.value, currentMonth.value, day)
+  // Fix offset per ottenere YYYY-MM-DD corretto
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const date = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${date}`
+}
+
+function isTodayString(dateStr: string) {
   const now = new Date()
-  const todayStr = now.toISOString().split('T')[0]
-  if (form.dataDesiderata === todayStr) {
-    if (now.getHours() > 11 || (now.getHours() === 11 && now.getMinutes() >= 30)) {
-      toast.add({ title: 'Le lezioni per oggi si potevano prenotare solo entro le 11:30', color: 'error' })
-      form.dataDesiderata = ''
-      return
+  const formatter = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit'
+  })
+  const parts = formatter.formatToParts(now)
+  const p = (type: string) => parts.find(x => x.type === type)?.value
+  const todayStr = `${p('year')}-${p('month')}-${p('day')}`
+  return dateStr === todayStr
+}
+
+function getItalyNow() {
+  const now = new Date()
+  const formatter = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Rome',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  })
+  const parts = formatter.formatToParts(now)
+  const p = (type: string) => parts.find(x => x.type === type)?.value
+  return {
+    todayStr: `${p('year')}-${p('month')}-${p('day')}`,
+    hour: parseInt(p('hour') || '0', 10),
+    minute: parseInt(p('minute') || '0', 10),
+  }
+}
+
+function isDayDisabled(day: number) {
+  const dateStr = getDateString(day)
+  const d = new Date(dateStr)
+  
+  // 1. Passato
+  const itNow = getItalyNow()
+  if (dateStr < itNow.todayStr) return true
+  
+  // 2. Domenica
+  if (d.getDay() === 0) return true
+  
+  // 3. Chiusure
+  if (closures.value.some((c: any) => c.date.split('T')[0] === dateStr)) return true
+
+  // 4. Oggi se oltre orario limite (11:30)
+  if (dateStr === itNow.todayStr) {
+    if (itNow.hour > 11 || (itNow.hour === 11 && itNow.minute >= 30)) {
+      return true
     }
   }
+
+  return false
+}
+
+function hasExistingLesson(day: number) {
+  if (!form.studentId) return false
+  const dateStr = getDateString(day)
+  return bookings.value.some((b: any) => {
+    if (b.status === 'CANCELLED') return false
+    if (b.studentId !== form.studentId) return false
+    return b.requestedDate.split('T')[0] === dateStr
+  })
+}
+
+function selectDate(day: number) {
+  if (isDayDisabled(day)) return
+  
+  const dateStr = getDateString(day)
+  form.dataDesiderata = dateStr
+
+  // Check se entra in Edit Mode
+  const existing = bookings.value.find((b: any) => 
+    b.status !== 'CANCELLED' && 
+    b.studentId === form.studentId && 
+    b.requestedDate.split('T')[0] === dateStr
+  )
+
+  if (existing) {
+    isEditMode.value = true
+    editBookingId.value = existing.id
+    form.materie = existing.subjects ? existing.subjects.map((s: any) => s.name) : []
+    form.noteOrario = existing.notes || ''
+  } else {
+    isEditMode.value = false
+    editBookingId.value = null
+    form.materie = []
+    form.noteOrario = ''
+  }
+}
+
+function onStudentChange() {
+  // Ricalcola se la data selezionata ha una lezione per il nuovo figlio
+  if (form.dataDesiderata) {
+    const day = parseInt(form.dataDesiderata.split('-')[2], 10)
+    selectDate(day) // Rilancia la logica di selezione che imposterà l'edit mode corretto
+  }
+}
+
+function resetForm() {
+  form.dataDesiderata = ''
+  form.materie = []
+  form.noteOrario = ''
+  isEditMode.value = false
+  editBookingId.value = null
+  step.value = 1
 }
 
 const studentSelezionato = computed(() => {
@@ -250,20 +403,33 @@ function formatDateLong(dateStr: string) {
 async function inviaPrenotazione() {
   loading.value = true
   try {
-    await $fetch('/api/portal/bookings', {
-      method: 'POST',
-      body: {
-        studentId:      form.studentId,
-        dataDesiderata: form.dataDesiderata + 'T12:00:00.000Z',
-        materie:        form.materie,
-        noteOrario:     form.noteOrario || undefined,
-      },
-    })
+    if (isEditMode.value && editBookingId.value) {
+      // Chiamata PUT per la modifica
+      await $fetch(`/api/portal/bookings/${editBookingId.value}`, {
+        method: 'PUT',
+        body: {
+          dataDesiderata: form.dataDesiderata + 'T12:00:00.000Z',
+          materie:        form.materie,
+          noteOrario:     form.noteOrario || undefined,
+        },
+      })
+    } else {
+      // Chiamata POST standard
+      await $fetch('/api/portal/bookings', {
+        method: 'POST',
+        body: {
+          studentId:      form.studentId,
+          dataDesiderata: form.dataDesiderata + 'T12:00:00.000Z',
+          materie:        form.materie,
+          noteOrario:     form.noteOrario || undefined,
+        },
+      })
+    }
     step.value = 4
   } catch (e: any) {
     toast.add({
       title: 'Errore',
-      description: e?.data?.statusMessage ?? 'Impossibile inviare la richiesta. Riprova.',
+      description: e?.data?.statusMessage ?? 'Impossibile completare l\'operazione. Riprova.',
       color: 'error',
     })
   } finally {
@@ -271,4 +437,3 @@ async function inviaPrenotazione() {
   }
 }
 </script>
-

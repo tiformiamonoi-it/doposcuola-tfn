@@ -154,19 +154,6 @@
                 Nota: "{{ b.notes }}"
               </p>
 
-              <!-- Tutor e Slot se assegnato -->
-              <div v-if="b.status !== 'CANCELLED'" class="mt-2.5 pt-2 border-t border-slate-50 text-xs">
-                <div v-if="isAnySubjectMatched(b.subjects)" class="space-y-1">
-                  <div v-for="s in b.subjects" :key="s.name" class="flex items-center gap-1.5 text-success-700 font-medium">
-                    <UIcon name="i-heroicons-check-circle" class="w-4 h-4 text-success-600 shrink-0" />
-                    <span>{{ s.name }}: <strong>{{ s.assignedSlot }}</strong> con {{ s.assignedTutor ? `${s.assignedTutor.firstName} ${s.assignedTutor.lastName}` : 'Tutor assegnato' }}</span>
-                  </div>
-                </div>
-                <div v-else class="text-slate-400 flex items-center gap-1">
-                  <UIcon name="i-heroicons-clock" class="w-4 h-4" />
-                  <span>In attesa di abbinamento orario e tutor (confermata per oggi)</span>
-                </div>
-              </div>
             </div>
 
             <!-- Pulsanti di azione per il genitore -->
@@ -347,9 +334,6 @@ function formatDateLong(dateStr: string) {
   }).replace(/^\w/, c => c.toUpperCase())
 }
 
-function isAnySubjectMatched(subjects: any[]) {
-  return subjects && subjects.some(s => s.assignedSlot)
-}
 
 // ─── VERIFICA LIMITI TEMPORALI ───
 function isOggi(dateStr: string) {
@@ -361,12 +345,23 @@ function isOggi(dateStr: string) {
 function canModify(dateStr: string) {
   const reqDate = new Date(dateStr)
   const now = new Date()
-  const todayStr = now.toLocaleDateString('sv').split('T')[0]
+  
+  const formatter = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Rome',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  })
+  const parts = formatter.formatToParts(now)
+  const p = (type: string) => parts.find(x => x.type === type)?.value
+  const todayStr = `${p('year')}-${p('month')}-${p('day')}`
+  const italyHour = parseInt(p('hour') || '0', 10)
+  const italyMinute = parseInt(p('minute') || '0', 10)
+
   const reqStr = reqDate.toISOString().split('T')[0]
   
   if (reqStr === todayStr) {
     // Oggi: entro le 11:30
-    return now.getHours() < 11 || (now.getHours() === 11 && now.getMinutes() < 30)
+    return italyHour < 11 || (italyHour === 11 && italyMinute < 30)
   }
   return reqDate.getTime() > now.getTime()
 }
@@ -374,12 +369,23 @@ function canModify(dateStr: string) {
 function canCancel(dateStr: string) {
   const reqDate = new Date(dateStr)
   const now = new Date()
-  const todayStr = now.toLocaleDateString('sv').split('T')[0]
+  
+  const formatter = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Rome',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  })
+  const parts = formatter.formatToParts(now)
+  const p = (type: string) => parts.find(x => x.type === type)?.value
+  const todayStr = `${p('year')}-${p('month')}-${p('day')}`
+  const italyHour = parseInt(p('hour') || '0', 10)
+  const italyMinute = parseInt(p('minute') || '0', 10)
+
   const reqStr = reqDate.toISOString().split('T')[0]
   
   if (reqStr === todayStr) {
     // Oggi: entro le 12:30
-    return now.getHours() < 12 || (now.getHours() === 12 && now.getMinutes() < 30)
+    return italyHour < 12 || (italyHour === 12 && italyMinute < 30)
   }
   return reqDate.getTime() > now.getTime()
 }
@@ -417,13 +423,23 @@ const modificaForm = reactive({
 
 const minDate = computed(() => {
   const now = new Date()
+  const formatter = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Rome',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  })
+  const parts = formatter.formatToParts(now)
+  const p = (type: string) => parts.find(x => x.type === type)?.value
+  const italyHour = parseInt(p('hour') || '0', 10)
+  const italyMinute = parseInt(p('minute') || '0', 10)
+
   // Se dopo le 11:30, la prima data utile è domani
-  if (now.getHours() > 11 || (now.getHours() === 11 && now.getMinutes() >= 30)) {
-    const tomorrow = new Date(now)
+  if (italyHour > 11 || (italyHour === 11 && italyMinute >= 30)) {
+    const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
     return tomorrow.toISOString().split('T')[0]
   }
-  return now.toISOString().split('T')[0]
+  return new Date().toISOString().split('T')[0]
 })
 
 function apriModifica(booking: any) {
@@ -462,9 +478,19 @@ function validaDataModifica() {
 
   // 3. Controllo limite 11:30 per oggi stesso
   const now = new Date()
-  const todayStr = now.toISOString().split('T')[0]
+  const formatter = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Rome',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  })
+  const parts = formatter.formatToParts(now)
+  const p = (type: string) => parts.find(x => x.type === type)?.value
+  const todayStr = `${p('year')}-${p('month')}-${p('day')}`
+  const italyHour = parseInt(p('hour') || '0', 10)
+  const italyMinute = parseInt(p('minute') || '0', 10)
+
   if (modificaForm.dataDesiderata === todayStr) {
-    if (now.getHours() > 11 || (now.getHours() === 11 && now.getMinutes() >= 30)) {
+    if (italyHour > 11 || (italyHour === 11 && italyMinute >= 30)) {
       toast.add({ title: 'Le lezioni per oggi si potevano modificare o prenotare solo entro le 11:30', color: 'error' })
       modificaForm.dataDesiderata = ''
     }

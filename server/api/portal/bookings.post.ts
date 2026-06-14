@@ -19,16 +19,31 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 422, statusMessage: 'Dati non validi', data: result.error.format() })
   }
 
-  // Controlli temporali di sicurezza
+  // Controlli temporali di sicurezza (fuso orario italiano)
   const requestedDate = new Date(result.data.dataDesiderata)
   const now = new Date()
-  const todayStr = now.toLocaleDateString('sv').split('T')[0] // 'YYYY-MM-DD'
+  
+  // Otteniamo la data odierna in Italia come YYYY-MM-DD
+  const formatter = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Rome',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  })
+  
+  const formattedParts = formatter.formatToParts(now)
+  const p = (type: string) => formattedParts.find(x => x.type === type)?.value
+  const todayStr = `${p('year')}-${p('month')}-${p('day')}`
+  const italyHour = parseInt(p('hour') || '0', 10)
+  const italyMinute = parseInt(p('minute') || '0', 10)
+
   const requestedStr = requestedDate.toISOString().split('T')[0]
 
   if (requestedStr === todayStr) {
-    const limit = new Date(now)
-    limit.setHours(11, 30, 0, 0)
-    if (now.getTime() >= limit.getTime()) {
+    if (italyHour > 11 || (italyHour === 11 && italyMinute >= 30)) {
       throw createError({ statusCode: 400, statusMessage: 'Le prenotazioni per oggi si potevano effettuare solo entro le 11:30' })
     }
   } else if (requestedDate.getTime() < now.getTime() && requestedStr !== todayStr) {
@@ -73,6 +88,25 @@ export default defineEventHandler(async (event) => {
   const hasActive = studentPackages.some(p => p.stati && p.stati.includes('ATTIVO'))
   if (!hasActive) {
     throw createError({ statusCode: 403, statusMessage: 'Nessun pacchetto ATTIVO trovato per questo studente' })
+  }
+
+  // Verifica se esiste già una prenotazione per questo studente in questa data
+  // Carichiamo tutte le prenotazioni future o odierne dello studente per fare il controllo
+  // Importiamo bookings da schema se non l'abbiamo fatto
+  const { bookings } = await import('../../database/schema')
+  
+  const existingBookings = await db.select({ requestedDate: bookings.requestedDate, status: bookings.status })
+    .from(bookings)
+    .where(eq(bookings.studentId, result.data.studentId))
+  
+  const alreadyBooked = existingBookings.some(b => {
+    if (b.status === 'CANCELLED') return false
+    const bDateStr = new Date(b.requestedDate).toISOString().split('T')[0]
+    return bDateStr === requestedStr
+  })
+
+  if (alreadyBooked) {
+    throw createError({ statusCode: 409, statusMessage: 'Hai già una lezione prenotata per questa data. Vai alla dashboard per modificarla.' })
   }
 
   return await createBooking(result.data, user.id)
