@@ -5,7 +5,8 @@
     "preview": "nuxt preview",
     "prepare": "nuxt prepare",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed-import": "tsx server/database/seed-import.ts"
   },
   "dependencies": {
     "@iconify-json/heroicons": "latest",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.9.3",
-    "drizzle-kit": "^0.31.10"
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.22.4"
   }
 }
