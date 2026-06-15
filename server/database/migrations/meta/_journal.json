@@ -50,6 +50,13 @@
       "when": 1781441259531,
       "tag": "0006_past_quentin_quire",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781551028090,
+      "tag": "0007_jittery_yellowjacket",
+      "breakpoints": true
     }
   ]
 }

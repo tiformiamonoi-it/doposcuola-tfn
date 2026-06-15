@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "drizzle-best-practices": {
+      "source": "honra-io/drizzle-best-practices",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "646cfd3db3dbb28211f87112f53db3f5bfa8aea824e1d5214bcb0e09f16cb1bc"
+    },
     "nuxt": {
       "source": "onmax/nuxt-skills",
       "sourceType": "github",
