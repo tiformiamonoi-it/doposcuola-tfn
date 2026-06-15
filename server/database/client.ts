@@ -9,8 +9,13 @@ let _db: DrizzleDb | undefined
 function createDb(): DrizzleDb {
   const url = process.env.DATABASE_URL
   if (!url) throw new Error('DATABASE_URL non è definita nelle variabili d\'ambiente. Controlla il file .env')
-  // ssl: 'require' necessario per Supabase e altri provider cloud
-  return drizzle(postgres(url, { ssl: 'require' }), { schema })
+  
+  // Opzioni ottimizzate per ambienti serverless (Vercel) e Connection Pooling (Supabase)
+  return drizzle(postgres(url, { 
+    ssl: 'require',
+    max: 1, // In Vercel, ogni "funzione" deve usare al massimo 1 connessione per non intasare il database
+    prepare: false // Necessario quando si usa il Connection Pooler di Supabase in modalità transazione
+  }), { schema })
 }
 
 // Proxy lazy: si connette solo alla prima query, mai all'avvio del server.
