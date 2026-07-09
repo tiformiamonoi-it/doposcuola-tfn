@@ -36,20 +36,26 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 422, statusMessage: 'Dati non validi', data: result.error.format() })
   }
 
-  const outcome = await createPortalAccount(result.data, false)
+  try {
+    const outcome = await createPortalAccount(result.data, false)
 
-  // Caso: email già registrata come GENITORE → richiede conferma dal frontend
-  if ('requiresConfirmation' in outcome && outcome.requiresConfirmation) {
-    return outcome
-  }
-
-  if ('user' in outcome) {
-    return {
-      ok: true,
-      userId: outcome.user.id,
-      email: outcome.user.email,
-      tempPassword: outcome.tempPassword ?? null,
-      alreadyExisted: outcome.alreadyExisted,
+    // Caso: email già registrata come GENITORE → richiede conferma dal frontend
+    if ('requiresConfirmation' in outcome && outcome.requiresConfirmation) {
+      return outcome
     }
+
+    if ('user' in outcome) {
+      return {
+        ok: true,
+        userId: outcome.user.id,
+        email: outcome.user.email,
+        tempPassword: ('tempPassword' in outcome ? (outcome as any).tempPassword : null) ?? null,
+        alreadyExisted: outcome.alreadyExisted,
+      }
+    }
+  } catch (err: any) {
+    if (err.statusCode) throw err
+    const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('staff') ? 409 : 400
+    throw createError({ statusCode: code, statusMessage: err.message })
   }
 })

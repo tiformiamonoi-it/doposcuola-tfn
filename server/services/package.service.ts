@@ -1,6 +1,6 @@
 import { db } from '../database/client'
-import { accountingEntries, packages, packageRecharges, payments, students } from '../database/schema'
-import { and, count, desc, eq, sql } from 'drizzle-orm'
+import { accountingEntries, packages, packageRecharges, payments, students, lessonStudents } from '../database/schema'
+import { and, count, desc, eq, getTableColumns, sql } from 'drizzle-orm'
 import type { CreatePackageInput, PackageQuery, RechargePackageInput, UpdatePackageInput } from '../../shared/schemas/package.schema'
 
 // ─────────────────────────────────────────────
@@ -16,6 +16,7 @@ type PackageStatus =
   | 'DA_PAGARE'
   | 'PAGATO'
   | 'CHIUSO'
+  | 'SOSPESO'
 
 type PackageStateInput = {
   oreAcquistate: string
@@ -94,6 +95,9 @@ export async function recomputeAndSavePackageStates(packageId: string) {
   const pkg = await getPackageById(packageId)
   if (!pkg) throw new Error(`Pacchetto ${packageId} non trovato`)
 
+  // Se il pacchetto è sospeso, non ricalcoliamo gli stati automatici
+  if (pkg.sospeso) return
+
   const newStati = computePackageStates({
     oreAcquistate:  pkg!.oreAcquistate,
     oreResiduo:     pkg!.oreResiduo,
@@ -107,11 +111,38 @@ export async function recomputeAndSavePackageStates(packageId: string) {
     .where(eq(packages.id, packageId))
 }
 
+// Helper interno: verifica e aggiorna gli stati se la data odierna li ha cambiati
+async function refreshPackageStatesIfNeeded(pkg: any) {
+  // Se il pacchetto è sospeso, manteniamo lo stato SOSPESO e non ricalcoliamo
+  if (pkg.sospeso) {
+    if (!pkg.stati?.includes('SOSPESO')) {
+      const newStati: PackageStatus[] = ['SOSPESO']
+      await db.update(packages).set({ stati: newStati, updatedAt: new Date() }).where(eq(packages.id, pkg.id))
+      pkg.stati = newStati
+    }
+    return
+  }
+
+  const newStati = computePackageStates({
+    oreAcquistate:  pkg.oreAcquistate,
+    oreResiduo:     pkg.oreResiduo,
+    importoResiduo: pkg.importoResiduo,
+    dataScadenza:   pkg.dataScadenza,
+    giorniResiduo:  pkg.giorniResiduo,
+  })
+  const oldStati = (pkg.stati as string[]) ?? []
+  const same = newStati.length === oldStati.length && newStati.every(s => oldStati.includes(s))
+  if (!same) {
+    await db.update(packages).set({ stati: newStati, updatedAt: new Date() }).where(eq(packages.id, pkg.id))
+    pkg.stati = newStati
+  }
+}
+
 // ─────────────────────────────────────────────
 // LIST  — GET /api/packages
 // ─────────────────────────────────────────────
 
-const STATI_VALIDI = ['ATTIVO', 'DA_RINNOVARE', 'SCADUTO', 'ESAURITO', 'DA_PAGARE', 'PAGATO', 'CHIUSO']
+const STATI_VALIDI = ['ATTIVO', 'DA_RINNOVARE', 'SCADUTO', 'ESAURITO', 'DA_PAGARE', 'PAGATO', 'CHIUSO', 'SOSPESO']
 
 export async function listPackages(query: PackageQuery) {
   const conditions = [
@@ -158,10 +189,10 @@ export async function listPackages(query: PackageQuery) {
       dataInizio: packages.dataInizio,
       dataScadenza: packages.dataScadenza,
       stati: packages.stati,
+      sospeso: packages.sospeso,
       note: packages.note,
       createdAt: packages.createdAt,
       updatedAt: packages.updatedAt,
-      // Dati dello studente joinati
       studentFirstName: students.firstName,
       studentLastName: students.lastName,
     })
@@ -174,8 +205,23 @@ export async function listPackages(query: PackageQuery) {
     db.select({ total: count() }).from(packages).where(where),
   ])
 
+  // Ricalcola stati al volo per ogni pacchetto (senza scrivere nel DB in bulk)
+  const rowsWithFreshStates = rows.map((pkg) => {
+    if (pkg.sospeso) {
+      return { ...pkg, stati: ['SOSPESO' as PackageStatus] }
+    }
+    const freshStati = computePackageStates({
+      oreAcquistate:  pkg.oreAcquistate,
+      oreResiduo:     pkg.oreResiduo,
+      importoResiduo: pkg.importoResiduo,
+      dataScadenza:   pkg.dataScadenza,
+      giorniResiduo:  pkg.giorniResiduo,
+    })
+    return { ...pkg, stati: freshStati }
+  })
+
   return {
-    data: rows,
+    data: rowsWithFreshStates,
     meta: {
       page:       query.page,
       limit:      query.limit,
@@ -190,7 +236,19 @@ export async function listPackages(query: PackageQuery) {
 // ─────────────────────────────────────────────
 
 export async function getPackageById(id: string) {
-  const [pkg] = await db.select().from(packages).where(eq(packages.id, id)).limit(1)
+  const [pkg] = await db
+    .select({
+      ...getTableColumns(packages),
+      studentFirstName: students.firstName,
+      studentLastName:  students.lastName,
+    })
+    .from(packages)
+    .leftJoin(students, eq(packages.studentId, students.id))
+    .where(eq(packages.id, id))
+    .limit(1)
+  if (pkg) {
+    await refreshPackageStatesIfNeeded(pkg)
+  }
   return pkg ?? null
 }
 
@@ -241,6 +299,7 @@ export async function createPackage(data: CreatePackageInput) {
       dataInizio:        data.dataInizio,
       dataScadenza,
       stati,
+      sospeso: false,
       note: data.note ?? null,
     }).returning()
 
@@ -316,6 +375,24 @@ export async function updatePackage(id: string, data: UpdatePackageInput) {
   if (data.orarioGiornaliero !== undefined) changes.orarioGiornaliero = data.orarioGiornaliero ? String(data.orarioGiornaliero) : null
   if (data.standardPackageId !== undefined) changes.standardPackageId = data.standardPackageId ?? null
   if (data.note              !== undefined) changes.note              = data.note ?? null
+  if (data.sospeso           !== undefined) changes.sospeso           = data.sospeso
+
+  // Ricalcola oreResiduo se cambia oreAcquistate
+  if (data.oreAcquistate !== undefined) {
+    const oldOre = parseFloat(existing.oreAcquistate)
+    const diff = data.oreAcquistate - oldOre
+    const newResiduo = Math.max(0, parseFloat(existing.oreResiduo) + diff)
+    changes.oreResiduo = String(newResiduo)
+  }
+
+  // Ricalcola giorniResiduo se cambia giorniAcquistati
+  if (data.giorniAcquistati != null) {
+    const oldGiorni = Number(existing.giorniAcquistati ?? 0)
+    const diff = data.giorniAcquistati - oldGiorni
+    const currentResiduo = Number(existing.giorniResiduo ?? existing.giorniAcquistati ?? 0)
+    const newResiduo = Math.max(0, currentResiduo + diff)
+    changes.giorniResiduo = newResiduo
+  }
 
   // Ricalcola importoResiduo se cambia il prezzo totale (importoPagato resta invariato)
   const nuovoPrezzoTotale = data.prezzoTotale !== undefined
@@ -326,20 +403,40 @@ export async function updatePackage(id: string, data: UpdatePackageInput) {
   changes.importoResiduo = String(nuovoImportoResiduo)
 
   // Giorni residui: se cambia giorniAcquistati lo aggiorniamo, altrimenti manteniamo l'esistente
-  const nuoviGiorniResiduo = data.giorniAcquistati !== undefined
-    ? data.giorniAcquistati
+  const nuoviGiorniResiduo = data.giorniAcquistati != null
+    ? (changes.giorniResiduo as number | undefined) ?? existing.giorniResiduo
     : existing.giorniResiduo
 
-  // Ricalcola gli stati con TUTTI i valori aggiornati (incluso giorniResiduo per i MENSILI)
-  changes.stati = computePackageStates({
-    oreAcquistate:  (changes.oreAcquistate as string | undefined) ?? existing.oreAcquistate,
-    oreResiduo:     existing.oreResiduo,
-    importoResiduo: String(nuovoImportoResiduo),
-    dataScadenza:   (changes.dataScadenza as Date | null | undefined) !== undefined
-      ? (changes.dataScadenza as Date | null)
-      : existing.dataScadenza,
-    giorniResiduo:  nuoviGiorniResiduo,
-  })
+  // Se il pacchetto è stato sospeso (o era sospeso e lo si riattiva), gestiamo gli stati
+  if (data.sospeso === true) {
+    changes.stati = ['SOSPESO']
+  } else if (data.sospeso === false && existing.sospeso === true) {
+    // Riattivazione: ricalcola gli stati normalmente
+    changes.stati = computePackageStates({
+      oreAcquistate:  (changes.oreAcquistate as string | undefined) ?? existing.oreAcquistate,
+      oreResiduo:     (changes.oreResiduo as string | undefined) ?? existing.oreResiduo,
+      importoResiduo: String(nuovoImportoResiduo),
+      dataScadenza:   (changes.dataScadenza as Date | null | undefined) !== undefined
+        ? (changes.dataScadenza as Date | null)
+        : existing.dataScadenza,
+      giorniResiduo:  nuoviGiorniResiduo,
+    })
+  } else if (data.sospeso === undefined) {
+    // Nessun cambio di sospensione: se era sospeso, mantieni SOSPESO
+    if (existing.sospeso) {
+      changes.stati = ['SOSPESO']
+    } else {
+      changes.stati = computePackageStates({
+        oreAcquistate:  (changes.oreAcquistate as string | undefined) ?? existing.oreAcquistate,
+        oreResiduo:     (changes.oreResiduo as string | undefined) ?? existing.oreResiduo,
+        importoResiduo: String(nuovoImportoResiduo),
+        dataScadenza:   (changes.dataScadenza as Date | null | undefined) !== undefined
+          ? (changes.dataScadenza as Date | null)
+          : existing.dataScadenza,
+        giorniResiduo:  nuoviGiorniResiduo,
+      })
+    }
+  }
 
   const [updated] = await db.update(packages)
     .set(changes as Partial<typeof packages.$inferInsert>)
@@ -444,4 +541,27 @@ export async function getPackageRecharges(packageId: string) {
     .from(packageRecharges)
     .where(eq(packageRecharges.packageId, packageId))
     .orderBy(desc(packageRecharges.data))
+}
+
+// ─────────────────────────────────────────────
+// DELETE — DELETE /api/packages/:id
+// Un pacchetto si può eliminare SOLO se non ha pagamenti né lezioni collegate
+// (altrimenti si perderebbe lo storico di soldi/ore reali già movimentati).
+// ─────────────────────────────────────────────
+
+export async function deletePackage(id: string) {
+  const [pkg] = await db.select().from(packages).where(eq(packages.id, id)).limit(1)
+  if (!pkg) throw new Error('Pacchetto non trovato')
+
+  const [rowPagamenti] = await db.select({ n: count() }).from(payments).where(eq(payments.packageId, id))
+  const [rowLezioni]   = await db.select({ n: count() }).from(lessonStudents).where(eq(lessonStudents.packageId, id))
+  const numPagamenti = rowPagamenti?.n ?? 0
+  const numLezioni   = rowLezioni?.n ?? 0
+
+  if (numPagamenti > 0 || numLezioni > 0) {
+    throw new Error(`Impossibile eliminare: il pacchetto ha ${numPagamenti} pagamento/i e ${numLezioni} lezione/i collegate.`)
+  }
+
+  await db.delete(packages).where(eq(packages.id, id))
+  return { ok: true }
 }

@@ -14,5 +14,10 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  return payTutor(id, parsed.data)
+  try {
+    return payTutor(id, parsed.data)
+  } catch (err: any) {
+    const code = err.message?.includes('identico') ? 409 : err.message?.includes('zero') ? 400 : 400
+    throw createError({ statusCode: code, statusMessage: err.message })
+  }
 })

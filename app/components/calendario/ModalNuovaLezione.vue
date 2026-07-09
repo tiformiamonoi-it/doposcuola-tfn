@@ -74,8 +74,7 @@
                         title="Duplica nel prossimo slot"
                         @click="duplicateToNext(slotIndex)"
                       />
-                      <UButton 
-                        v-if="!STANDARD_SLOTS.includes(slot.oraInizio)"
+                      <UButton
                         size="2xs"
                         color="error"
                         variant="ghost"
@@ -88,44 +87,35 @@
 
                 <div class="flex-1 flex flex-col gap-3">
                   <!-- Lista Studenti in questo slot -->
-                  <div v-for="(stu, stuIndex) in slot.studenti" :key="stuIndex" class="bg-white border border-slate-200 rounded-lg p-2.5 relative shadow-sm">
-                    <UButton icon="i-heroicons-x-mark" size="2xs" color="gray" variant="ghost" class="absolute top-1 right-1 z-10" @click="removeStudent(slotIndex, stuIndex)" />
-                    
-                    <div class="flex flex-col gap-2 pr-6">
-                      <!-- Select Studente -->
+                  <div v-for="(stu, stuIndex) in slot.studenti" :key="stuIndex"
+                       class="flex items-center gap-2 bg-white border border-slate-200 rounded-lg p-2.5 shadow-sm">
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm font-medium text-slate-800 truncate">{{ stu.studentItem?.label }}</div>
+                      <!-- Select Pacchetto se non auto-selezionato o multiplo -->
                       <USelectMenu
-                        v-model="stu.studentItem"
-                        :items="getAvailableStudents(slotIndex, stuIndex)"
-                        placeholder="Cerca studente..."
-                        searchable
-                        size="sm"
-                        class="w-full"
-                        @update:model-value="(val) => onStudenteSelezionato(slotIndex, stuIndex, val)"
-                      />
-                      
-                      <!-- Select Pacchetto -->
-                      <USelectMenu
-                        v-if="stu.studentItem"
+                        v-if="stu.packageOptions?.length > 1"
                         v-model="stu.packageItem"
-                        :items="stu.packageOptions || []"
+                        :items="stu.packageOptions"
                         :loading="stu.loadingPackages"
-                        placeholder="Seleziona pacchetto..."
-                        size="sm"
-                        class="w-full"
-                      >
-                        <template #label>
-                          <span v-if="stu.packageItem" class="truncate text-xs" :class="isPackageWarning(stu.packageItem) ? 'text-amber-600 font-bold' : ''">
-                            {{ stu.packageItem.label }}
-                          </span>
-                          <span v-else class="text-slate-400 text-xs">Seleziona il pacchetto da scalare...</span>
-                        </template>
-                      </USelectMenu>
+                        placeholder="Pacchetto..."
+                        size="xs"
+                        class="w-full mt-1"
+                      />
+                      <span v-else-if="stu.packageItem" class="text-xs"
+                            :class="isPackageWarning(stu.packageItem) ? 'text-amber-600 font-bold' : 'text-slate-400'">
+                        {{ stu.packageItem.label }}
+                      </span>
+                      <span v-else-if="stu.loadingPackages" class="text-xs text-slate-400">Caricamento...</span>
+                      <span v-else class="text-xs text-rose-500">Nessun pacchetto attivo</span>
                     </div>
+                    <UButton icon="i-heroicons-x-mark" size="xs" color="neutral" variant="ghost" @click="removeStudent(slotIndex, stuIndex)" />
                   </div>
 
-                  <!-- Aggiungi Studente -->
-                  <UButton size="sm" variant="soft" color="primary" icon="i-heroicons-plus" @click="addStudent(slotIndex)" class="w-full justify-center border border-dashed border-primary-300 bg-primary-50 hover:bg-primary-100">
-                    Aggiungi Studente
+                  <!-- Bottone apri picker -->
+                  <UButton size="sm" variant="soft" color="primary" icon="i-heroicons-user-plus"
+                           class="w-full justify-center border border-dashed border-primary-300 bg-primary-50 hover:bg-primary-100"
+                           @click="apriPickerPerSlot(slotIndex)">
+                    {{ slot.studenti.length === 0 ? 'Aggiungi studenti' : '+ Aggiungi altri studenti' }}
                   </UButton>
                 </div>
 
@@ -143,7 +133,7 @@
             <!-- Note -->
             <div class="lg:col-span-2">
               <UFormField label="Note Generali (opzionale)">
-                <UTextarea v-model="note" placeholder="Es: Lezioni di recupero, argomenti trattati..." rows="4" class="w-full" />
+                <UTextarea v-model="note" placeholder="Es: Lezioni di recupero, argomenti trattati..." :rows="4" class="w-full" />
               </UFormField>
             </div>
 
@@ -186,9 +176,16 @@
       </div>
     </template>
     
+    <!-- Picker studenti (condiviso, una sola istanza per tutti gli slot) -->
+    <ModalSelezionaStudenti
+      v-model:open="pickerAperto"
+      :already-selected-ids="pickerSlotIndex >= 0 ? activeSlots[pickerSlotIndex]?.studenti.map((s: any) => s.studentItem?.value).filter(Boolean) : []"
+      @confirm="onPickerConfirm"
+    />
+
     <template #footer>
       <div class="flex justify-end gap-3 w-full">
-        <UButton variant="ghost" color="gray" @click="isOpen = false">Annulla</UButton>
+        <UButton variant="ghost" color="neutral" @click="isOpen = false">Annulla</UButton>
         <UButton color="primary" size="lg" :loading="saving" :disabled="!canSave" @click="saveAllLessons">
           <UIcon name="i-heroicons-check-circle" class="w-5 h-5 mr-1" />
           Salva Tutte le Lezioni
@@ -201,12 +198,11 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { format } from 'date-fns'
+import ModalSelezionaStudenti from '~/components/calendario/ModalSelezionaStudenti.vue'
 
 const emit = defineEmits(['refresh', 'close'])
 const isOpen = defineModel('open', { type: Boolean, default: false })
 const toast = useToast()
-
-const STANDARD_SLOTS = ['15:30', '16:30', '17:30']
 
 const selectedDate = ref(format(new Date(), 'yyyy-MM-dd'))
 const tutorItem = ref<any>(null)
@@ -227,6 +223,13 @@ const allSlotsOptions = computed(() => (slotsRes.value || []).map((s: any) => ({
 const { data: studentsRes } = useFetch('/api/students?active=true&limit=500', { lazy: true })
 const studentsOptions = computed(() => (studentsRes.value?.data || []).map((s: any) => ({ label: `${s.firstName} ${s.lastName}`, value: s.id })))
 
+const { data: configsRes } = useFetch('/api/settings/configs', { lazy: true })
+const tariffeConfig = computed(() => {
+  try {
+    return JSON.parse(configsRes.value?.tariffe_tutor ?? '{"SINGOLA":5,"GRUPPO":8,"MAXI":8.5}')
+  } catch { return { SINGOLA: 5, GRUPPO: 8, MAXI: 8.5 } }
+})
+
 // ==========================================
 // INIT SLOTS
 // ==========================================
@@ -234,13 +237,8 @@ watch([() => isOpen.value, allSlotsOptions], ([open, options]) => {
   if (open && options.length > 0) {
     resetState()
     
-    // Inizializza i 3 slot standard
-    const initials = STANDARD_SLOTS.map(time => {
-      const found = options.find(o => o.oraInizio === time)
-      return found ? createEmptySlot(found) : null
-    }).filter(Boolean)
-    
-    activeSlots.value = initials
+    // Inizializza tutti gli slot attivi dal DB
+    activeSlots.value = options.map((o: any) => createEmptySlot(o))
   }
 }, { immediate: true })
 
@@ -315,17 +313,33 @@ function getAvailableStudents(slotIdx: number, stuIdx: number) {
   return studentsOptions.value.filter(opt => !selectedIds.includes(opt.value))
 }
 
-function addStudent(slotIdx: number) {
-  activeSlots.value[slotIdx].studenti.push({
-    studentItem: null,
-    packageItem: null,
-    packageOptions: [],
-    loadingPackages: false
-  })
-}
-
 function removeStudent(slotIdx: number, stuIdx: number) {
   activeSlots.value[slotIdx].studenti.splice(stuIdx, 1)
+}
+
+// ─── Picker studenti ───
+const pickerAperto = ref(false)
+const pickerSlotIndex = ref(-1)
+
+function apriPickerPerSlot(slotIdx: number) {
+  pickerSlotIndex.value = slotIdx
+  pickerAperto.value = true
+}
+
+async function onPickerConfirm(picked: Array<{ studentId: string; nome: string }>) {
+  pickerAperto.value = false
+  const slotIdx = pickerSlotIndex.value
+  if (slotIdx < 0 || !activeSlots.value[slotIdx]) return
+
+  for (const p of picked) {
+    const alreadyIn = activeSlots.value[slotIdx].studenti.some((s: any) => s.studentItem?.value === p.studentId)
+    if (alreadyIn) continue
+
+    const stu = { studentItem: { label: p.nome, value: p.studentId }, packageItem: null, packageOptions: [], loadingPackages: false }
+    activeSlots.value[slotIdx].studenti.push(stu)
+    const stuIdx = activeSlots.value[slotIdx].studenti.length - 1
+    await onStudenteSelezionato(slotIdx, stuIdx, { value: p.studentId })
+  }
 }
 
 async function onStudenteSelezionato(slotIdx: number, stuIdx: number, newVal: any) {
@@ -383,8 +397,13 @@ const totalCompenso = computed(() => {
     else tipo = 'MAXI'
     
     const isMezza = slot.mezzaLezione
-    const tariffe: Record<string, number> = { SINGOLA: isMezza ? 2.50 : 5.00, GRUPPO: isMezza ? 4.00 : 8.00, MAXI: isMezza ? 4.00 : 8.50 }
-    
+    const base = tariffeConfig.value
+    const tariffe: Record<string, number> = {
+      SINGOLA: isMezza ? (base.SINGOLA ?? 5) / 2 : (base.SINGOLA ?? 5),
+      GRUPPO:  isMezza ? (base.GRUPPO  ?? 8) / 2 : (base.GRUPPO  ?? 8),
+      MAXI:    isMezza ? (base.MAXI    ?? 8.5) / 2 : (base.MAXI    ?? 8.5),
+    }
+
     total += tariffe[tipo] || 0
   })
   return total

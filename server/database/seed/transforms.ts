@@ -146,7 +146,8 @@ export const tx = {
 
   lessons: (r: Row, mezza: Map<string, boolean>) => ({
     id: r.id!, tutorId: r.tutorId!, timeSlotId: r.timeSlotId!,
-    data: toDateReq(r.data), tipo: r.tipo as any,
+    // La colonna lessons.data ora è un giorno civile 'YYYY-MM-DD' (niente ora/fuso)
+    data: String(r.data).slice(0, 10), tipo: r.tipo as any,
     mezzaLezione: mezza.get(r.id!) ?? false, forzaGruppo: toBool(r.forzaGruppo),
     compensoTutor: r.compensoTutor, note: r.note,
     createdAt: toDateReq(r.createdAt), updatedAt: toDateReq(r.updatedAt),

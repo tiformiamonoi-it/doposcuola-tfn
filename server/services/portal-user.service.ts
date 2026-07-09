@@ -27,7 +27,7 @@ export async function getPortalAccess(studentId: string) {
   })
 
   if (!student) {
-    throw createError({ statusCode: 404, statusMessage: 'Studente non trovato' })
+    throw new Error('Studente non trovato')
   }
 
   return student
@@ -43,10 +43,7 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
 
   if (existing) {
     if (existing.role !== 'GENITORE') {
-      throw createError({
-        statusCode: 409,
-        statusMessage: 'Questa email è usata da un account staff. Usa un\'altra email per il genitore.',
-      })
+      throw new Error('Questa email è usata da un account staff. Usa un\'altra email per il genitore.')
     }
 
     if (!force) {
@@ -84,6 +81,8 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
       active:    true,
     }).returning()
 
+    if (!user) throw new Error('Inserimento utente portale fallito')
+
     await tx.update(students)
       .set({ portalUserId: user.id, updatedAt: new Date() })
       .where(eq(students.id, input.studentId))
@@ -100,7 +99,7 @@ export async function resetPortalPassword(userId: string) {
   })
 
   if (!user) {
-    throw createError({ statusCode: 404, statusMessage: 'Account non trovato' })
+    throw new Error('Account non trovato')
   }
 
   const tempPassword = generateTempPassword()

@@ -18,5 +18,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 422, statusMessage: 'Dati non validi', data: result.error.format() })
   }
 
-  return await updateBookingStatus(id, result.data)
+  try {
+    return await updateBookingStatus(id, result.data)
+  } catch (err: any) {
+    if (err.statusCode) throw err
+    const code = err.message?.includes('non trovato') ? 404 : 400
+    throw createError({ statusCode: code, statusMessage: err.message })
+  }
 })

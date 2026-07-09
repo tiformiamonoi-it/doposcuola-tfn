@@ -11,14 +11,14 @@ export async function createBooking(input: CreateBookingInput, userId: string) {
   })
 
   if (!student) {
-    throw createError({ statusCode: 404, statusMessage: 'Studente non trovato' })
+    throw new Error('Studente non trovato')
   }
 
   const dateObj = new Date(input.dataDesiderata)
   
   // 1. Controllo Domenica (0 = Domenica)
   if (dateObj.getDay() === 0) {
-    throw createError({ statusCode: 400, statusMessage: 'Impossibile prenotare di Domenica' })
+    throw new Error('Impossibile prenotare di Domenica')
   }
 
   // 2. Controllo Chiusure
@@ -28,7 +28,7 @@ export async function createBooking(input: CreateBookingInput, userId: string) {
   })
   
   if (isClosed) {
-    throw createError({ statusCode: 400, statusMessage: 'Il centro è chiuso in questa data' })
+    throw new Error('Il centro è chiuso in questa data')
   }
 
   return await db.transaction(async (tx) => {
@@ -42,6 +42,8 @@ export async function createBooking(input: CreateBookingInput, userId: string) {
       notes:          input.noteOrario ?? null,
       status:         'CONFIRMED',
     }).returning()
+
+    if (!booking) throw new Error('Inserimento prenotazione fallito')
 
     if (input.materie.length > 0) {
       await tx.insert(bookingSubjects).values(
@@ -93,7 +95,7 @@ export async function updateBookingStatus(id: string, input: UpdateBookingStatus
   })
 
   if (!booking) {
-    throw createError({ statusCode: 404, statusMessage: 'Prenotazione non trovata' })
+    throw new Error('Prenotazione non trovata')
   }
 
   const [updated] = await db.update(bookings)

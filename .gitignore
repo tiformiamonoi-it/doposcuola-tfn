@@ -27,6 +27,7 @@ Thumbs.db
 .cursor/
 .superpowers/
 docs/
+.design/
 ERROR_LOGS.md
 append-docs.mjs
 # Ignora file markdown nella root tranne README.md

@@ -37,7 +37,7 @@ export async function getNoteById(id: string) {
       }
     }
   })
-  if (!note) throw createError({ statusCode: 404, statusMessage: 'Nota non trovata' })
+  if (!note) throw new Error('Nota non trovata')
   return note
 }
 
@@ -56,10 +56,7 @@ function assertCanEditOrDelete(note: any, sessionUser: any) {
   const isAuthor = note.authorId === sessionUser.id
 
   if (!isAdminOrSuper && !isAuthor) {
-    throw createError({ 
-      statusCode: 403, 
-      statusMessage: 'Non hai i permessi per modificare o eliminare questa nota' 
-    })
+    throw new Error('Non hai i permessi per modificare o eliminare questa nota')
   }
 }
 

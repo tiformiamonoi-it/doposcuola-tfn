@@ -12,5 +12,10 @@ export default defineEventHandler(async (event) => {
   if (!id) throw createError({ statusCode: 400, statusMessage: 'ID mancante' })
 
   const mode = getQuery(event).mode === 'storno' ? 'storno' : 'delete'
-  return await deleteAccountingEntry(id, mode)
+  try {
+    return await deleteAccountingEntry(id, mode)
+  } catch (err: any) {
+    const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('automatico') ? 403 : 400
+    throw createError({ statusCode: code, statusMessage: err.message })
+  }
 })

@@ -15,6 +15,7 @@ export const packageStatusEnum = pgEnum('package_status', [
   'DA_PAGARE',
   'PAGATO',
   'CHIUSO',
+  'SOSPESO',
 ])
 export const lessonTypeEnum = pgEnum('lesson_type', ['SINGOLA', 'GRUPPO', 'MAXI'])
 export const paymentTypeEnum = pgEnum('payment_type', ['ACCONTO', 'SALDO', 'RATA', 'INTEGRAZIONE'])

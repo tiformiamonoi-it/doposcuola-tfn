@@ -71,9 +71,12 @@
 
         <!-- Colonna Tipo -->
         <template #tipo-cell="{ row }">
-          <UBadge :color="coloreTipo(row.original.tipo)" variant="subtle" size="sm" class="font-medium uppercase tracking-wide text-xs">
-            {{ row.original.tipo }}
-          </UBadge>
+          <div class="flex items-center gap-1.5">
+            <UBadge :color="coloreTipo(row.original.tipo)" variant="subtle" size="sm" class="font-medium uppercase tracking-wide text-xs">
+              {{ row.original.tipo }}
+            </UBadge>
+            <UIcon v-if="row.original.confermata" name="i-heroicons-check-badge" class="w-4 h-4 text-emerald-500" title="Visione confermata" />
+          </div>
         </template>
 
         <!-- Colonna Studenti -->
@@ -99,16 +102,19 @@
           <span class="text-slate-500 text-xs truncate max-w-[160px] block" :title="row.original.note">{{ row.original.note ?? '—' }}</span>
         </template>
 
-        <!-- Colonna Dettaglio -->
-        <template #dettaglio-cell="{ row }">
+        <!-- Colonna Azioni -->
+        <template #azioni-cell="{ row }">
           <div class="flex justify-end">
-            <UButton
-              icon="i-heroicons-chevron-right"
-              color="gray"
-              variant="ghost"
-              size="sm"
-              @click="apriDettaglio(row.original)"
-            />
+            <UDropdownMenu
+              :items="[
+                [
+                  { label: 'Dettagli', icon: 'i-heroicons-document-magnifying-glass', onSelect: () => apriDettaglio(row.original) },
+                  { label: 'Vai al Calendario', icon: 'i-heroicons-calendar-days', onSelect: () => vaiAlCalendario(row.original) },
+                ]
+              ]"
+            >
+              <UButton icon="i-heroicons-ellipsis-horizontal" color="neutral" variant="ghost" size="sm" />
+            </UDropdownMenu>
           </div>
         </template>
       </UTable>
@@ -158,6 +164,16 @@
             <dt class="w-32 text-slate-400">Note</dt>
             <dd class="text-slate-700">{{ lezioneSelezionata.note }}</dd>
           </div>
+          <div class="flex gap-2 items-center">
+            <dt class="w-32 text-slate-400">Visione</dt>
+            <dd>
+              <UBadge v-if="lezioneSelezionata.confermata" color="success" variant="subtle" size="sm" class="flex items-center gap-1">
+                <UIcon name="i-heroicons-check-badge" class="w-3.5 h-3.5" />
+                Confermata da {{ lezioneSelezionata.confermataDaUser?.firstName }} {{ lezioneSelezionata.confermataDaUser?.lastName }}
+              </UBadge>
+              <UBadge v-else color="warning" variant="subtle" size="sm">Da confermare</UBadge>
+            </dd>
+          </div>
           <USeparator />
           <div v-if="lezioneSelezionata.lessonStudents?.length > 0">
             <p class="text-slate-400 mb-2">Studenti ({{ lezioneSelezionata.lessonStudents.length }})</p>
@@ -173,32 +189,57 @@
       </template>
       <template #footer>
         <div class="flex justify-between w-full">
-          <UButton 
-            v-if="lezioneSelezionata"
-            color="red" 
-            variant="soft" 
-            icon="i-heroicons-trash"
-            @click="eliminaLezioneSelezionata"
-          >
-            Elimina
-          </UButton>
+          <div class="flex gap-2">
+            <UButton 
+              v-if="lezioneSelezionata && !lezioneSelezionata.confermata"
+              color="success" 
+              variant="soft" 
+              icon="i-heroicons-check-badge"
+              :loading="confermando"
+              @click="confermaVisione"
+            >
+              Conferma visione
+            </UButton>
+            <UButton 
+              v-if="lezioneSelezionata"
+              color="red" 
+              variant="soft" 
+              icon="i-heroicons-trash"
+              @click="eliminaLezioneSelezionata"
+            >
+              Elimina
+            </UButton>
+          </div>
           <UButton variant="ghost" @click="modalDettaglioAperto = false">Chiudi</UButton>
         </div>
       </template>
     </UModal>
 
   </div>
+
+  <ConfirmDialog
+    v-model:open="confirmOpen"
+    :title="confirmTitle"
+    :description="confirmDescription"
+    confirm-label="Elimina"
+    confirm-color="error"
+    @confirm="eseguiEliminazione"
+  />
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import ConfirmDialog from '~/components/ConfirmDialog.vue'
 
 definePageMeta({ middleware: ['admin-or-super'] })
 
 // ─── Filtri ───
+// Costruisco le stringhe 'YYYY-MM-DD' dai componenti LOCALI (non con toISOString, che usa
+// UTC e farebbe slittare il 1° del mese al giorno prima per chi è in fuso orario italiano).
 const oggi = new Date()
-const primoDelMese = new Date(oggi.getFullYear(), oggi.getMonth(), 1).toISOString().slice(0, 10)
-const ultDelMese   = new Date(oggi.getFullYear(), oggi.getMonth() + 1, 0).toISOString().slice(0, 10)
+const aaaammgg = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const primoDelMese = aaaammgg(new Date(oggi.getFullYear(), oggi.getMonth(), 1))
+const ultDelMese   = aaaammgg(new Date(oggi.getFullYear(), oggi.getMonth() + 1, 0))
 
 const filtroDataInizio = ref(primoDelMese)
 const filtroDataFine   = ref(ultDelMese)
@@ -241,7 +282,7 @@ const colonne = [
   { id: 'studenti', accessorKey: 'lessonStudents', header: 'Studenti' },
   { id: 'compenso', accessorKey: 'compensoTutor',  header: 'Compenso' },
   { accessorKey: 'note',             header: 'Note' },
-  { id: 'dettaglio', accessorKey: 'id',            header: '' },
+  { id: 'azioni',    header: '' },
 ]
 
 function formatData(d: string | Date | null) {
@@ -265,11 +306,46 @@ function apriDettaglio(row: any) {
   modalDettaglioAperto.value = true
 }
 
-const toast = useToast()
-async function eliminaLezioneSelezionata() {
-  if (!lezioneSelezionata.value) return
-  if (!confirm('Sei sicuro di voler eliminare questa lezione? Le ore verranno rimborsate agli alunni.')) return
+function vaiAlCalendario(lezione: any) {
+  const data = lezione.data?.slice(0, 10) // prende YYYY-MM-DD
+  navigateTo(`/calendario?data=${data}`)
+}
 
+const toast = useToast()
+const confermando = ref(false)
+
+const confirmOpen = ref(false)
+const confirmTitle = ref('')
+const confirmDescription = ref('')
+
+function eliminaLezioneSelezionata() {
+  if (!lezioneSelezionata.value) return
+  confirmTitle.value = 'Eliminare questa lezione?'
+  confirmDescription.value = 'Le ore verranno rimborsate agli alunni.'
+  confirmOpen.value = true
+}
+
+async function confermaVisione() {
+  if (!lezioneSelezionata.value) return
+  confermando.value = true
+  try {
+    await $fetch(`/api/lessons/${lezioneSelezionata.value.id}/confirm`, { method: 'POST' })
+    toast.add({ title: 'Visione confermata', color: 'success' })
+    lezioneSelezionata.value.confermata = true
+    caricaLezioni()
+  } catch (e: any) {
+    toast.add({
+      title: 'Errore',
+      description: e?.data?.statusMessage || 'Impossibile confermare la visione',
+      color: 'error'
+    })
+  } finally {
+    confermando.value = false
+  }
+}
+
+async function eseguiEliminazione() {
+  confirmOpen.value = false
   try {
     await $fetch(`/api/lessons/${lezioneSelezionata.value.id}`, { method: 'DELETE' })
     toast.add({ title: 'Lezione eliminata con successo', color: 'success' })

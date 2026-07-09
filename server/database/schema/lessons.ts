@@ -1,4 +1,4 @@
-import { pgTable, text, varchar, boolean, timestamp, uniqueIndex, index, numeric } from 'drizzle-orm/pg-core'
+import { pgTable, text, varchar, boolean, timestamp, date, uniqueIndex, index, numeric } from 'drizzle-orm/pg-core'
 import { cuid, lessonTypeEnum } from './common'
 import { users } from './users'
 import { students } from './students'
@@ -20,13 +20,21 @@ export const lessons = pgTable('lessons', {
   id:         text('id').primaryKey().$defaultFn(cuid),
   tutorId:    text('tutor_id').notNull().references(() => users.id),
   timeSlotId: text('time_slot_id').notNull().references(() => timeSlots.id),
-  data:       timestamp('data', { withTimezone: true }).notNull(),
+  // Giorno civile della lezione (solo data, senza ora né fuso orario): una lezione è un
+  // GIORNO, non un istante. Memorizzata come 'YYYY-MM-DD' per evitare lo sfasamento di fuso
+  // orario (UTC vs Europe/Rome) che causava la visualizzazione nel giorno sbagliato.
+  data:       date('data', { mode: 'string' }).notNull(),
 
   tipo:        lessonTypeEnum('tipo').notNull().default('SINGOLA'),
   mezzaLezione: boolean('mezza_lezione').notNull().default(false),
   forzaGruppo: boolean('forza_gruppo').notNull().default(false),
 
   compensoTutor: numeric('compenso_tutor', { precision: 10, scale: 2 }),
+
+  // Conferma visione lezione (admin/super tutor)
+  confermata:    boolean('confermata').notNull().default(false),
+  confermataDa:  text('confermata_da').references(() => users.id),
+  confermataAt:  timestamp('confermata_at', { withTimezone: true }),
 
   note:      text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

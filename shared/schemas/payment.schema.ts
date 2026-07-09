@@ -6,19 +6,16 @@
  *   Schema field : fatturaRichiesta  →  DB column: richiedeFattura (payments)
  *   Schema field : fatturaEmessa     →  DB column: fatturaEmessa   (accounting_entries)
  *
- * Il metodoPagamento è volutamente ristretto a CONTANTI/BONIFICO per questo flusso:
- * - getCashFlow() restituirà totali separati Cassa (CONTANTI) vs Banca (BONIFICO)
- * - I pagamenti iniziali sui pacchetti (package.schema.ts) mantengono l'enum completo
+ *
+ * I pagamenti possono usare tutti i metodi (CONTANTI, BONIFICO, POS, ASSEGNO, ALTRO).
+ * Ai fini contabili, CONTANTI andrà nel flusso 'Cassa', tutto il resto nel flusso 'Banca'.
  */
 
 import { z } from 'zod'
 
 // ─────────────────────────────────────────────
-// ENUM RISTRETTI (solo i due metodi principali del flusso pagamenti)
-// ─────────────────────────────────────────────
-
-export const PaymentMethodRestrictedEnum = z.enum(['CONTANTI', 'BONIFICO'], {
-  message: "Il metodo di pagamento deve essere 'CONTANTI' o 'BONIFICO'",
+export const PaymentMethodEnum = z.enum(['CONTANTI', 'BONIFICO', 'POS', 'ASSEGNO', 'ALTRO'], {
+  message: "Metodo di pagamento non valido",
 })
 
 export const PaymentTypeEnum = z.enum(['ACCONTO', 'SALDO', 'RATA', 'INTEGRAZIONE'], {
@@ -40,7 +37,7 @@ export const CreatePaymentSchema = z.object({
     .max(99999, "L'importo non può superare € 99.999"),
 
   tipoPagamento:   PaymentTypeEnum,
-  metodoPagamento: PaymentMethodRestrictedEnum,
+  metodoPagamento: PaymentMethodEnum,
 
   dataPagamento: z.coerce
     .date({ message: 'Data di pagamento non valida' })
@@ -55,6 +52,26 @@ export const CreatePaymentSchema = z.object({
     .optional(),
 
   note: z.string().max(500, 'Le note non possono superare 500 caratteri').optional(),
+})
+
+// ─────────────────────────────────────────────
+// SCHEMA MODIFICA PAGAMENTO (PUT /api/payments/:id)
+// Si riflette anche sul movimento contabile collegato.
+// ─────────────────────────────────────────────
+
+export const UpdatePaymentSchema = z.object({
+  importo: z
+    .number({ message: "L'importo è obbligatorio" })
+    .positive("L'importo deve essere maggiore di zero")
+    .max(99999, "L'importo non può superare € 99.999"),
+
+  tipoPagamento:   PaymentTypeEnum,
+  metodoPagamento: PaymentMethodEnum,
+
+  dataPagamento: z.coerce.date({ message: 'Data di pagamento non valida' }),
+
+  riferimento: z.string().max(200, 'Il riferimento non può superare 200 caratteri').optional(),
+  note:        z.string().max(500, 'Le note non possono superare 500 caratteri').optional(),
 })
 
 // ─────────────────────────────────────────────
@@ -74,7 +91,7 @@ export const UpdateInvoiceStatusSchema = z.object({
 
 export const PaymentQuerySchema = z.object({
   packageId:        z.string().cuid2().optional(),
-  metodoPagamento:  PaymentMethodRestrictedEnum.optional(),
+  metodoPagamento:  PaymentMethodEnum.optional(),
   fatturaRichiesta: z.enum(['true', 'false']).optional(),
   page:             z.coerce.number().int().positive().default(1),
   limit:            z.coerce.number().int().positive().max(100).default(20),
@@ -85,6 +102,7 @@ export const PaymentQuerySchema = z.object({
 // ─────────────────────────────────────────────
 
 export type CreatePaymentInput       = z.infer<typeof CreatePaymentSchema>
+export type UpdatePaymentInput       = z.infer<typeof UpdatePaymentSchema>
 export type UpdateInvoiceStatusInput = z.infer<typeof UpdateInvoiceStatusSchema>
 export type PaymentQuery             = z.infer<typeof PaymentQuerySchema>
-export type PaymentMethodRestricted  = z.infer<typeof PaymentMethodRestrictedEnum>
+export type PaymentMethod            = z.infer<typeof PaymentMethodEnum>

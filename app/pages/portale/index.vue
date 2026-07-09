@@ -216,8 +216,7 @@
           </UFormField>
 
           <!-- Materie -->
-          <UFormField label="Materia / Materie" required>
-            <div class="grid grid-cols-2 gap-2 mt-1">
+          <UFormField label="Materia / Materie" required>              <div class="grid grid-cols-2 gap-2 mt-1">
               <button
                 v-for="materia in MATERIE"
                 :key="materia"
@@ -262,10 +261,20 @@
       </template>
     </UModal>
   </div>
+
+  <ConfirmDialog
+    v-model:open="confirmOpen"
+    :title="confirmTitle"
+    :description="confirmDescription"
+    confirm-label="Annulla"
+    confirm-color="error"
+    @confirm="eseguiAnnullamento"
+  />
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
+import ConfirmDialog from '~/components/ConfirmDialog.vue'
 
 definePageMeta({
   layout: 'portal',
@@ -276,10 +285,11 @@ useHead({ title: 'Home — Portale Famiglie' })
 const toast = useToast()
 const { user } = useUserSession()
 
-const MATERIE = [
+const { data: portalConfigs } = useLazyFetch('/api/portal/configs')
+const MATERIE = computed(() => (portalConfigs.value as any)?.materie ?? [
   'Matematica', 'Fisica', 'Chimica', 'Italiano', 'Inglese',
   'Storia', 'Geografia', 'Latino', 'Greco', 'Scienze', 'Informatica',
-]
+])
 
 // ─── CARICAMENTO DATI ───
 const { data: studentsData, pending: pendingStudents } = await useFetch('/api/portal/students')
@@ -392,12 +402,24 @@ function canCancel(dateStr: string) {
 
 // ─── ANNULLAMENTO PRENOTAZIONE ───
 const cancellandoId = ref<string | null>(null)
+const confirmOpen = ref(false)
+const confirmTitle = ref('')
+const confirmDescription = ref('')
+const pendingCancelId = ref<string | null>(null)
 
-async function annullaLezione(id: string) {
-  if (!confirm('Sei sicuro di voler annullare questa prenotazione?')) return
-  cancellandoId.value = id
+function annullaLezione(id: string) {
+  pendingCancelId.value = id
+  confirmTitle.value = 'Annullare questa prenotazione?'
+  confirmDescription.value = 'La lezione verrà cancellata e non potrà essere recuperata.'
+  confirmOpen.value = true
+}
+
+async function eseguiAnnullamento() {
+  confirmOpen.value = false
+  if (!pendingCancelId.value) return
+  cancellandoId.value = pendingCancelId.value
   try {
-    await $fetch(`/api/portal/bookings/${id}`, { method: 'DELETE' })
+    await $fetch(`/api/portal/bookings/${pendingCancelId.value}`, { method: 'DELETE' })
     toast.add({ title: 'Lezione annullata con successo', color: 'success' })
     await refreshBookings()
   } catch (err: any) {
@@ -408,6 +430,7 @@ async function annullaLezione(id: string) {
     })
   } finally {
     cancellandoId.value = null
+    pendingCancelId.value = null
   }
 }
 

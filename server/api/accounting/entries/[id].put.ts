@@ -8,6 +8,7 @@ const bodySchema = z.object({
   categoria:       z.string().nullable().optional(),
   metodoPagamento: z.enum(['CONTANTI', 'BONIFICO', 'POS', 'ASSEGNO', 'ALTRO']).nullable().optional(),
   data:            z.string().optional(),
+  fatturaEmessa:   z.boolean().optional(),
 })
 
 // PUT /api/accounting/entries/:id
@@ -25,5 +26,10 @@ export default defineEventHandler(async (event) => {
   if (!parsed.success) {
     throw createError({ statusCode: 422, statusMessage: 'Dati non validi', data: parsed.error.format() })
   }
-  return await updateAccountingEntry(id, parsed.data)
+  try {
+    return await updateAccountingEntry(id, parsed.data)
+  } catch (err: any) {
+    const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('automatico') ? 403 : 400
+    throw createError({ statusCode: code, statusMessage: err.message })
+  }
 })

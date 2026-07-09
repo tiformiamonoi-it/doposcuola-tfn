@@ -109,5 +109,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 409, statusMessage: 'Hai già una lezione prenotata per questa data. Vai alla dashboard per modificarla.' })
   }
 
-  return await createBooking(result.data, user.id)
+  try {
+    return await createBooking(result.data, user.id)
+  } catch (err: any) {
+    if (err.statusCode) throw err
+    const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('Domenica') || err.message?.includes('chiuso') ? 400 : 400
+    throw createError({ statusCode: code, statusMessage: err.message })
+  }
 })

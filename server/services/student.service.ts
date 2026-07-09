@@ -63,42 +63,43 @@ export async function listStudents(query: StudentQuery) {
   const sortCol = SORT_COLUMNS[query.sortBy as keyof typeof SORT_COLUMNS] ?? students.lastName
   const orderBy = query.sortDir === 'desc' ? desc(sortCol) : asc(sortCol)
 
-  const [rows, [countRow]] = await Promise.all([
-    db.select().from(students)
-      .where(where)
-      .orderBy(orderBy)
-      .limit(query.limit)
-      .offset((query.page - 1) * query.limit),
-    db.select({ total: count() }).from(students).where(where),
-  ])
+  const rows = await db.select().from(students)
+    .where(where)
+    .orderBy(orderBy)
+    .limit(query.limit)
+    .offset((query.page - 1) * query.limit)
+  
+  const [countRow] = await db.select({ total: count() }).from(students).where(where)
 
   const studentIds = rows.map(r => r.id)
-  let studentPackages: { studentId: string, stati: string[], createdAt: Date }[] = []
+  let studentPackages: { studentId: string, stati: string[], createdAt: Date, oreResiduo: string | null, tipo: string | null }[] = []
   if (studentIds.length > 0) {
     studentPackages = await db.select({
       studentId: packages.studentId,
       stati: packages.stati,
       createdAt: packages.createdAt,
+      oreResiduo: packages.oreResiduo,
+      tipo: packages.tipo,
     }).from(packages).where(inArray(packages.studentId, studentIds))
   }
 
   const dataWithStatus = rows.map(student => {
     const pkgs = studentPackages.filter(p => p.studentId === student.id && !p.stati.includes('CHIUSO'))
-    
+
     let globalStatus = 'Inattivo'
     let statusColor = 'neutral'
-    
+
     if (student.active) {
        globalStatus = 'Attivo'
        statusColor = 'success'
-       
+
        if (pkgs.length > 0) {
          pkgs.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-         
+
          const hasDaPagare = pkgs.some(p => p.stati.includes('DA_PAGARE'))
          const hasDaRinnovare = pkgs.some(p => p.stati.includes('DA_RINNOVARE') || p.stati.includes('ESAURITO'))
          const hasScaduto = pkgs.some(p => p.stati.includes('SCADUTO'))
-         
+
          if (hasDaPagare) {
            globalStatus = 'Da pagare'
            statusColor = 'error'
@@ -115,10 +116,17 @@ export async function listStudents(query: StudentQuery) {
        }
     }
 
+    // Pacchetto attivo più rilevante (il primo non chiuso)
+    const pkgAttivo = studentPackages.find(p => p.studentId === student.id && !p.stati.includes('CHIUSO'))
+    const hasPacchetti = studentPackages.some(p => p.studentId === student.id)
+
     return {
       ...student,
       globalStatus,
-      statusColor
+      statusColor,
+      pkgOreResiduo: pkgAttivo?.oreResiduo ?? null,
+      pkgTipo: pkgAttivo?.tipo ?? null,
+      hasPacchetti,
     }
   })
 
@@ -153,12 +161,10 @@ export async function getStudentsStats() {
       ),
     )
 
-  const [[totRow], [attRow], [pagRow], [rinRow]] = await Promise.all([
-    db.select({ n: count() }).from(students),
-    db.select({ n: count() }).from(students).where(eq(students.active, true)),
-    db.select({ n: count() }).from(students).where(conPacchettoStato('DA_PAGARE')),
-    db.select({ n: count() }).from(students).where(conPacchettoStato('DA_RINNOVARE')),
-  ])
+  const [totRow] = await db.select({ n: count() }).from(students)
+  const [attRow] = await db.select({ n: count() }).from(students).where(eq(students.active, true))
+  const [pagRow] = await db.select({ n: count() }).from(students).where(conPacchettoStato('DA_PAGARE'))
+  const [rinRow] = await db.select({ n: count() }).from(students).where(conPacchettoStato('DA_RINNOVARE'))
 
   return {
     total:       totRow!.n,

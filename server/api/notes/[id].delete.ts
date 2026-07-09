@@ -6,5 +6,11 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'ID richiesto' })
 
-  return await deleteNote(id, sessionUser)
+  try {
+    return await deleteNote(id, sessionUser)
+  } catch (err: any) {
+    if (err.statusCode) throw err
+    const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('permessi') ? 403 : 400
+    throw createError({ statusCode: code, statusMessage: err.message })
+  }
 })

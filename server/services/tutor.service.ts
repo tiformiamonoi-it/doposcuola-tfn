@@ -3,6 +3,7 @@ import { db } from '../database/client'
 import {
   users, tutorProfiles, lessons,
   tutorPayments, tutorReimbursements, accountingEntries,
+  systemConfigs,
 } from '../database/schema'
 import { and, asc, desc, eq, gte, ilike, lte, or, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
@@ -19,6 +20,10 @@ export async function listTutors(query: TutorQuery) {
   const now = new Date()
   const meseStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const meseEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+  // Confini del mese come stringhe 'YYYY-MM-DD' per la colonna lessons.data (giorno civile)
+  const meseMM       = String(now.getMonth() + 1).padStart(2, '0')
+  const meseStartStr = `${now.getFullYear()}-${meseMM}-01`
+  const meseEndStr   = `${now.getFullYear()}-${meseMM}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`
   const pastStart = new Date(now.getFullYear() - 1, now.getMonth() + 1, 1)
   const pastEnd   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)
 
@@ -59,32 +64,34 @@ export async function listTutors(query: TutorQuery) {
       compenso:   sql<string>`COALESCE(SUM(${lessons.compensoTutor}::numeric), 0)::text`,
     })
     .from(lessons)
-    .where(and(gte(lessons.data, meseStart), lte(lessons.data, meseEnd)))
+    .where(and(gte(lessons.data, meseStartStr), lte(lessons.data, meseEndStr)))
     .groupBy(lessons.tutorId),
 
-    // 3. Somma pagamenti mese corrente per tutorId
+    // 3. Somma pagamenti mese corrente per tutorId (+ flag Pro Bono: mese liquidato a titolo gratuito)
     db.select({
       tutorId: tutorPayments.tutorId,
       pagato:  sql<string>`COALESCE(SUM(${tutorPayments.importo}::numeric), 0)::text`,
+      proBono: sql<boolean>`BOOL_OR(${tutorPayments.status} = 'PRO_BONO')`,
     })
     .from(tutorPayments)
     .where(and(gte(tutorPayments.mese, meseStart), lte(tutorPayments.mese, meseEnd)))
     .groupBy(tutorPayments.tutorId),
 
-    // 4. Arretrati: mesi passati con compenso > pagato (CTE SQL)
+    // 4. Arretrati: mesi passati con compenso > pagato
     db.execute(sql`
       WITH monthly_lessons AS (
         SELECT tutor_id,
                DATE_TRUNC('month', data) AS mese,
                FLOOR(COALESCE(SUM(compenso_tutor::numeric), 0)) AS compenso_calcolato
         FROM lessons
-        WHERE data >= ${pastStart.toISOString()} AND data <= ${pastEnd.toISOString()}
+        WHERE data >= ${pastStart.toISOString().slice(0, 10)} AND data <= ${pastEnd.toISOString().slice(0, 10)}
         GROUP BY tutor_id, DATE_TRUNC('month', data)
       ),
       monthly_payments AS (
         SELECT tutor_id,
                DATE_TRUNC('month', mese) AS mese,
-               COALESCE(SUM(importo::numeric), 0) AS pagato
+               COALESCE(SUM(importo::numeric), 0) AS pagato,
+               BOOL_OR(status = 'PRO_BONO') AS pro_bono
         FROM tutor_payments
         WHERE mese >= ${pastStart.toISOString()} AND mese <= ${pastEnd.toISOString()}
         GROUP BY tutor_id, DATE_TRUNC('month', mese)
@@ -95,6 +102,7 @@ export async function listTutors(query: TutorQuery) {
       FROM monthly_lessons ml
       LEFT JOIN monthly_payments mp ON ml.tutor_id = mp.tutor_id AND ml.mese = mp.mese
       WHERE ml.compenso_calcolato > COALESCE(mp.pagato, 0)
+        AND NOT COALESCE(mp.pro_bono, false)
       GROUP BY ml.tutor_id
     `),
   ])
@@ -116,12 +124,17 @@ export async function listTutors(query: TutorQuery) {
 
     const compensoCalcolato = Math.floor(parseFloat(ls?.compenso ?? '0'))
     const pagato            = parseFloat(ps?.pagato ?? '0')
-    const compensoResiduo   = Math.max(0, compensoCalcolato - pagato)
+    // Pro Bono: il mese è considerato saldato (residuo 0) anche se non transita in contabilità.
+    const compensoResiduo   = ps?.proBono ? 0 : Math.max(0, compensoCalcolato - pagato)
     const mesiArretrati     = parseInt(ar?.mesi_arretrati ?? '0')
     const totaleArretrati   = Math.round(parseFloat(ar?.totale_arretrati ?? '0') * 100) / 100
 
+    // Totale unico "Da liquidare": mese corrente + tutti i mesi arretrati insieme.
+    const totaleDaLiquidare = Number((compensoResiduo + totaleArretrati).toFixed(2))
+    const mesiDaLiquidare   = mesiArretrati + (compensoResiduo > 0.01 ? 1 : 0)
+
     if (tutor.active) tutoriAttivi++
-    if (compensoResiduo > 0.01) { daLiquidare++; totaleDovuto += compensoResiduo }
+    if (totaleDaLiquidare > 0.01) { daLiquidare++; totaleDovuto += totaleDaLiquidare }
     if (compensoCalcolato > 0) { sumLiquidazioni += compensoCalcolato; countLiquidati++ }
 
     return {
@@ -131,11 +144,13 @@ export async function listTutors(query: TutorQuery) {
       compensoResiduo:  Number(compensoResiduo.toFixed(2)),
       mesiArretrati,
       totaleArretrati:  Number(totaleArretrati.toFixed(2)),
+      totaleDaLiquidare,
+      mesiDaLiquidare,
     }
   })
 
   const filtered = query.daLiquidare === 'true'
-    ? tutors.filter(t => t.compensoResiduo > 0.01)
+    ? tutors.filter(t => t.totaleDaLiquidare > 0.01)
     : tutors
 
   return {
@@ -195,7 +210,7 @@ export async function createTutor(data: CreateTutorInput) {
       password:  hashed,
       firstName: data.firstName,
       lastName:  data.lastName,
-      role:      'TUTOR',
+      role:      data.role ?? 'TUTOR',
       phone:     data.phone ?? null,
     }).returning()
 
@@ -219,7 +234,7 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
   const userChanges: Record<string, unknown>    = { updatedAt: new Date() }
   const profileChanges: Record<string, unknown> = { updatedAt: new Date() }
 
-  const userFields    = ['firstName', 'lastName', 'email', 'phone', 'active']
+  const userFields    = ['firstName', 'lastName', 'email', 'phone', 'role', 'active']
   const profileFields = ['indirizzo', 'citta', 'cap', 'codiceFiscale', 'partitaIva',
                          'materie', 'noteInterne', 'modalitaPagamento', 'importoForfait']
 
@@ -272,7 +287,7 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
              COUNT(*)::text AS num_lezioni,
              COALESCE(SUM(compenso_tutor::numeric), 0)::text AS compenso_grezzo
       FROM lessons
-      WHERE tutor_id = ${tutorId} AND data >= ${pastStart.toISOString()}
+      WHERE tutor_id = ${tutorId} AND data >= ${pastStart.toISOString().slice(0, 10)}
       GROUP BY DATE_TRUNC('month', data)
       ORDER BY mese DESC
     `),
@@ -320,7 +335,8 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
 
     const pay               = payByMonth.get(meseKey)
     const pagato            = pay?.totale ?? 0
-    const residuo           = Math.max(0, compensoCalcolato - pagato)
+    // Pro Bono: il mese è considerato saldato (residuo 0) anche se non transita in contabilità.
+    const residuo           = pay?.proBono ? 0 : Math.max(0, compensoCalcolato - pagato)
     const isMeseCorrente    = meseKey === nowKey
 
     let stato: string
@@ -353,7 +369,27 @@ export async function payTutor(tutorId: string, data: PayTutorInput) {
   const importo  = data.proBono ? 0 : parseFloat(data.importo)
   const status   = data.proBono ? 'PRO_BONO' : 'PAGATO'
 
+  if (!data.proBono && importo <= 0) {
+    throw new Error('Inserisci un importo maggiore di zero, oppure spunta "Pro Bono" per un compenso a titolo gratuito.')
+  }
+
   return db.transaction(async (tx) => {
+    // Rete di sicurezza anti-doppio-invio: blocca un pagamento identico
+    // (stesso tutor, mese, importo) registrato negli ultimi 15 secondi.
+    const [duplicate] = await tx.select({ id: tutorPayments.id })
+      .from(tutorPayments)
+      .where(and(
+        eq(tutorPayments.tutorId, tutorId),
+        eq(tutorPayments.mese, meseDate),
+        eq(tutorPayments.importo, importo.toFixed(2)),
+        gte(tutorPayments.createdAt, new Date(Date.now() - 15_000)),
+      ))
+      .limit(1)
+
+    if (duplicate) {
+      throw new Error('Hai già registrato un pagamento identico pochi secondi fa. Controlla lo storico pagamenti prima di riprovare.')
+    }
+
     const [payment] = await tx.insert(tutorPayments).values({
       tutorId,
       mese:    meseDate,
@@ -389,6 +425,14 @@ export async function getMonthlyPerformance(tutorId: string, months = 6) {
   const now       = new Date()
   const startDate = new Date(now.getFullYear(), now.getMonth() - months + 1, 1)
 
+  // Leggi tariffa di fallback da system_configs
+  const [configRow] = await db.select({ value: systemConfigs.value }).from(systemConfigs).where(eq(systemConfigs.key, 'tariffe_tutor')).limit(1)
+  let tariffaFallback = 25.0
+  try {
+    const parsed = JSON.parse(configRow?.value ?? '{}')
+    if (parsed.SINGOLA) tariffaFallback = parseFloat(parsed.SINGOLA)
+  } catch { /* fallback 25.0 */ }
+
   const rows = await db.execute(sql`
     SELECT
       DATE_TRUNC('month', l.data) AS mese,
@@ -403,14 +447,14 @@ export async function getMonthlyPerformance(tutorId: string, months = 6) {
               WHEN p.ore_acquistate IS NOT NULL AND p.ore_acquistate::numeric > 0
                    AND p.prezzo_totale IS NOT NULL
               THEN p.prezzo_totale::numeric / p.ore_acquistate::numeric
-              ELSE 25.0
+              ELSE ${tariffaFallback}
             END
           )
       ), 0)::text AS ricavo_totale
     FROM lessons l
     JOIN lesson_students ls ON ls.lesson_id = l.id
     LEFT JOIN packages p ON p.id = ls.package_id
-    WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate.toISOString()}
+    WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate.toISOString().slice(0, 10)}
     GROUP BY DATE_TRUNC('month', l.data)
     ORDER BY mese DESC
   `)
@@ -442,18 +486,17 @@ export async function getDetailedStats(tutorId: string, months = 6) {
   const now       = new Date()
   const startDate = new Date(now.getFullYear(), now.getMonth() - months + 1, 1)
 
-  const [tipoRows, topStudentRows] = await Promise.all([
-    db.execute(sql`
+  const tipoRows = await db.execute(sql`
       SELECT l.tipo,
              COUNT(DISTINCT l.id)::text AS num_lezioni,
              COALESCE(SUM(CASE WHEN l.mezza_lezione THEN 0.5 ELSE 1.0 END), 0)::text AS ore_totali
       FROM lessons l
       JOIN lesson_students ls ON ls.lesson_id = l.id
-      WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate.toISOString()}
+      WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate.toISOString().slice(0, 10)}
       GROUP BY l.tipo
-    `),
+    `)
 
-    db.execute(sql`
+  const topStudentRows = await db.execute(sql`
       SELECT s.id,
              s.first_name AS first_name,
              s.last_name  AS last_name,
@@ -462,12 +505,11 @@ export async function getDetailedStats(tutorId: string, months = 6) {
       FROM lessons l
       JOIN lesson_students ls ON ls.lesson_id = l.id
       JOIN students s ON s.id = ls.student_id
-      WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate.toISOString()}
+      WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate.toISOString().slice(0, 10)}
       GROUP BY s.id, s.first_name, s.last_name
       ORDER BY COALESCE(SUM(CASE WHEN l.mezza_lezione THEN 0.5 ELSE 1.0 END), 0) DESC
       LIMIT 5
-    `),
-  ])
+    `)
 
   const tipoData = (tipoRows as any[]).map(r => ({
     tipo:       r.tipo as string,
@@ -578,7 +620,7 @@ export async function payReimbursement(reimbursementId: string, data: PayReimbur
 // ─────────────────────────────────────────────
 export async function deleteTutorPayment(id: string) {
   const [row] = await db.delete(tutorPayments).where(eq(tutorPayments.id, id)).returning()
-  if (!row) throw createError({ statusCode: 404, statusMessage: 'Compenso non trovato' })
+  if (!row) throw new Error('Compenso non trovato')
   return { ok: true }
 }
 
@@ -597,7 +639,7 @@ export async function listTutorPayments(tutorId: string) {
 // ─────────────────────────────────────────────
 export async function deleteReimbursement(id: string) {
   const [row] = await db.delete(tutorReimbursements).where(eq(tutorReimbursements.id, id)).returning()
-  if (!row) throw createError({ statusCode: 404, statusMessage: 'Rimborso non trovato' })
+  if (!row) throw new Error('Rimborso non trovato')
   return { ok: true }
 }
 

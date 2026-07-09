@@ -161,7 +161,7 @@
                   </template>
                   <template #azioni-cell="{ row }">
                     <UButton
-                      v-if="row.original.residuo > 0.01 || row.original.isMeseCorrente"
+                      v-if="row.original.stato === 'DA_PAGARE' || row.original.stato === 'PARZIALE'"
                       size="xs"
                       variant="ghost"
                       @click="apriLiquidaMese(row.original)"
@@ -366,13 +366,26 @@
             <UFormField name="citta" label="Città"><UInput v-model="datiModifica.citta" class="w-full" /></UFormField>
             <UFormField name="cap" label="CAP"><UInput v-model="datiModifica.cap" class="w-full" /></UFormField>
           </div>
-          <UFormField name="modalitaPagamento" label="Modalità compenso">
-            <USelect
-              v-model="datiModifica.modalitaPagamento"
-              :items="[{ label: 'A ore', value: 'ORE' }, { label: 'Forfait mensile', value: 'FORFAIT' }]"
-              class="w-full"
-            />
-          </UFormField>
+          <div class="grid grid-cols-2 gap-4">
+            <UFormField name="role" label="Ruolo">
+              <USelect
+                v-model="datiModifica.role"
+                :items="[
+                  { label: 'Tutor', value: 'TUTOR' },
+                  { label: 'Admin', value: 'ADMIN' },
+                  { label: 'Super Tutor', value: 'SUPER_TUTOR' },
+                ]"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField name="modalitaPagamento" label="Modalità compenso">
+              <USelect
+                v-model="datiModifica.modalitaPagamento"
+                :items="[{ label: 'A ore', value: 'ORE' }, { label: 'Forfait mensile', value: 'FORFAIT' }]"
+                class="w-full"
+              />
+            </UFormField>
+          </div>
           <UFormField v-if="datiModifica.modalitaPagamento === 'FORFAIT'" name="importoForfait" label="Importo forfait (€)">
             <UInput v-model="datiModifica.importoForfait" type="number" class="w-full" />
           </UFormField>
@@ -440,8 +453,8 @@
             <UTextarea v-model="datiLiquidaDettaglio.note" :rows="2" class="w-full" />
           </UFormField>
           <div class="flex justify-end gap-3 pt-2">
-            <UButton variant="ghost" @click="modalLiquidaDettaglioAperto = false">Annulla</UButton>
-            <UButton type="submit" :loading="salvando">Conferma</UButton>
+            <UButton variant="ghost" :disabled="salvando" @click="modalLiquidaDettaglioAperto = false">Annulla</UButton>
+            <UButton type="submit" :loading="salvando" :disabled="salvando">Conferma</UButton>
           </div>
         </UForm>
       </template>
@@ -497,9 +510,21 @@
     </UModal>
 
   </div>
+
+  <ConfirmDialog
+    v-model:open="confirmOpen"
+    :title="confirmTitle"
+    :description="confirmDescription"
+    :confirm-label="confirmLabel"
+    :confirm-color="confirmColor"
+    @confirm="eseguiConferma"
+  />
 </template>
 
 <script setup lang="ts">
+import ConfirmDialog from '~/components/ConfirmDialog.vue'
+import { METODI_PAGAMENTO_ITEMS, coloreStatoPagamento, coloreStatoRimborso } from '~/utils/contabilita'
+
 definePageMeta({ middleware: ['admin-or-super'] })
 
 const route = useRoute()
@@ -528,19 +553,45 @@ const { data: tutorPayments, refresh: refreshTutorPayments } = useLazyFetch(`/ap
 })
 const eliminandoCompenso = ref<string | null>(null)
 
+const confirmOpen = ref(false)
+const confirmTitle = ref('')
+const confirmDescription = ref('')
+const confirmLabel = ref('Conferma')
+const confirmColor = ref<'primary' | 'error'>('primary')
+const pendingAction = ref<(() => void) | null>(null)
+
+function chiediConferma(config: { title: string; description: string; confirmLabel?: string; confirmColor?: 'primary' | 'error' }, action: () => void) {
+  confirmTitle.value = config.title
+  confirmDescription.value = config.description
+  confirmLabel.value = config.confirmLabel ?? 'Conferma'
+  confirmColor.value = config.confirmColor ?? 'primary'
+  pendingAction.value = action
+  confirmOpen.value = true
+}
+
+function eseguiConferma() {
+  confirmOpen.value = false
+  pendingAction.value?.()
+  pendingAction.value = null
+}
+
 async function eliminaCompenso(p: any) {
-  if (!confirm(`Eliminare il compenso di € ${parseFloat(p.importo).toFixed(2)}? Verrà rimosso anche il movimento contabile collegato.`)) return
-  eliminandoCompenso.value = p.id
-  try {
-    await $fetch(`/api/tutor-payments/${p.id}`, { method: 'DELETE' })
-    toast.add({ title: 'Compenso eliminato', color: 'success' })
-    refreshTutorPayments()
-    refreshComp()
-  } catch (err: any) {
-    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Eliminazione non riuscita', color: 'error' })
-  } finally {
-    eliminandoCompenso.value = null
-  }
+  chiediConferma(
+    { title: `Eliminare il compenso di € ${parseFloat(p.importo).toFixed(2)}?`, description: 'Verrà rimosso anche il movimento contabile collegato.', confirmLabel: 'Elimina', confirmColor: 'error' },
+    async () => {
+      eliminandoCompenso.value = p.id
+      try {
+        await $fetch(`/api/tutor-payments/${p.id}`, { method: 'DELETE' })
+        toast.add({ title: 'Compenso eliminato', color: 'success' })
+        refreshTutorPayments()
+        refreshComp()
+      } catch (err: any) {
+        toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Eliminazione non riuscita', color: 'error' })
+      } finally {
+        eliminandoCompenso.value = null
+      }
+    }
+  )
 }
 const { data: performance, pending: pendingPerf } = useLazyFetch(`/api/tutors/${id}/performance`, {
   default: () => [] as any[],
@@ -607,27 +658,7 @@ const colonnePerf = [
   { id: 'marginePerc', header: '%' },
 ]
 
-// ─── Helper colori badge ──────────────────────
-function coloreStatoPagamento(stato: string) {
-  if (stato === 'PAGATO')   return 'success'
-  if (stato === 'PARZIALE') return 'warning'
-  if (stato === 'PRO_BONO') return 'neutral'
-  return 'error'
-}
-function coloreStatoRimborso(stato: string) {
-  if (stato === 'PAGATO')   return 'success'
-  if (stato === 'PARZIALE') return 'warning'
-  return 'error'
-}
-
-// ─── Metodi pagamento ─────────────────────────
-const metodiPagamento = [
-  { label: 'Contanti', value: 'CONTANTI' },
-  { label: 'Bonifico', value: 'BONIFICO' },
-  { label: 'POS',      value: 'POS' },
-  { label: 'Assegno',  value: 'ASSEGNO' },
-  { label: 'Altro',    value: 'ALTRO' },
-]
+const metodiPagamento = METODI_PAGAMENTO_ITEMS
 
 // ─── Modal Modifica ───────────────────────────
 const modalModificaAperto = ref(false)
@@ -637,6 +668,7 @@ const datiModifica = reactive({
   lastName: tutor.value?.lastName ?? '',
   email: tutor.value?.email ?? '',
   phone: tutor.value?.phone ?? '',
+  role: tutor.value?.role ?? 'TUTOR',
   codiceFiscale: tutor.value?.codiceFiscale ?? '',
   partitaIva: tutor.value?.partitaIva ?? '',
   indirizzo: tutor.value?.indirizzo ?? '',
@@ -654,6 +686,7 @@ watch(tutor, (t) => {
     lastName: t.lastName ?? '',
     email: t.email ?? '',
     phone: t.phone ?? '',
+    role: t.role ?? 'TUTOR',
     codiceFiscale: t.codiceFiscale ?? '',
     partitaIva: t.partitaIva ?? '',
     indirizzo: t.indirizzo ?? '',
@@ -764,7 +797,7 @@ async function confermaLiquidaDettaglio() {
   salvando.value = true
   try {
     const [anno, meseNum] = datiLiquidaDettaglio.mese.split('-').map(Number)
-    const meseISO = new Date(anno!, meseNum! - 1, 1).toISOString()
+    const meseISO = new Date(Date.UTC(anno!, meseNum! - 1, 1)).toISOString()
     await $fetch(`/api/tutors/${id}/pay`, {
       method: 'POST',
       body: {
@@ -822,17 +855,21 @@ async function creaNuovoRimborso() {
 const eliminandoRimborso = ref<string | null>(null)
 
 async function eliminaRimborso(r: any) {
-  if (!confirm(`Eliminare il rimborso "${r.descrizione}"? Verranno eliminati anche i relativi movimenti contabili.`)) return
-  eliminandoRimborso.value = r.id
-  try {
-    await $fetch(`/api/tutors/${id}/reimbursements/${r.id}`, { method: 'DELETE' })
-    toast.add({ title: 'Rimborso eliminato', color: 'success' })
-    refreshReimb()
-  } catch (err: any) {
-    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Eliminazione non riuscita', color: 'error' })
-  } finally {
-    eliminandoRimborso.value = null
-  }
+  chiediConferma(
+    { title: `Eliminare il rimborso "${r.descrizione}"?`, description: 'Verranno eliminati anche i relativi movimenti contabili.', confirmLabel: 'Elimina', confirmColor: 'error' },
+    async () => {
+      eliminandoRimborso.value = r.id
+      try {
+        await $fetch(`/api/tutors/${id}/reimbursements/${r.id}`, { method: 'DELETE' })
+        toast.add({ title: 'Rimborso eliminato', color: 'success' })
+        refreshReimb()
+      } catch (err: any) {
+        toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Eliminazione non riuscita', color: 'error' })
+      } finally {
+        eliminandoRimborso.value = null
+      }
+    }
+  )
 }
 
 // ─── Modal Paga Rimborso ──────────────────────

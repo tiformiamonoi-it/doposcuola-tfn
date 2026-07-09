@@ -10,13 +10,16 @@
       <!-- Navigazione Mese e Azioni -->
       <div class="flex flex-col sm:flex-row items-center gap-4">
         <div class="flex items-center bg-white rounded-xl ring-1 ring-slate-200 shadow-sm p-1">
-          <UButton color="gray" variant="ghost" icon="i-heroicons-chevron-left" @click="previousMonth" />
+          <UButton color="neutral" variant="ghost" icon="i-heroicons-chevron-left" @click="previousMonth" />
           <div class="flex flex-col items-center min-w-[140px] px-2">
             <span class="text-sm font-semibold text-slate-800 capitalize">{{ nomeMeseAnno }}</span>
-            <UButton size="2xs" variant="link" color="primary" @click="goToToday" :padded="false" class="mt-0.5">Torna a Oggi</UButton>
+            <UButton size="xs" variant="link" color="primary" @click="goToToday" :padded="false" class="mt-0.5">Torna a Oggi</UButton>
           </div>
-          <UButton color="gray" variant="ghost" icon="i-heroicons-chevron-right" @click="nextMonth" />
+          <UButton color="neutral" variant="ghost" icon="i-heroicons-chevron-right" @click="nextMonth" />
         </div>
+        <UButton color="neutral" variant="outline" icon="i-heroicons-bolt" @click="openLezioneRapida(format(currentDate, 'yyyy-MM-dd'))">
+          Lezione rapida
+        </UButton>
         <UButton color="primary" icon="i-heroicons-plus" @click="openNuovaLezione" class="w-full sm:w-auto justify-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary-500/30">
           Nuova Lezione
         </UButton>
@@ -34,7 +37,7 @@
         clearable
         class="w-full sm:w-64"
       />
-      <UButton color="gray" variant="soft" :icon="allExpanded ? 'i-heroicons-arrows-pointing-in' : 'i-heroicons-arrows-pointing-out'" @click="toggleAllDays" class="w-full sm:w-auto justify-center">
+      <UButton color="neutral" variant="soft" :icon="allExpanded ? 'i-heroicons-arrows-pointing-in' : 'i-heroicons-arrows-pointing-out'" @click="toggleAllDays" class="w-full sm:w-auto justify-center">
         {{ allExpanded ? 'Comprimi Tutti' : 'Espandi Tutti' }}
       </UButton>
     </div>
@@ -90,7 +93,7 @@
               </p>
             </div>
             <UButton
-              color="gray"
+              color="neutral"
               variant="ghost"
               :icon="isDayExpanded(giorno.dateStr) ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
               class="pointer-events-none"
@@ -123,7 +126,7 @@
             <p class="text-sm text-slate-400 mt-1 max-w-sm">Aggiungi un tutor con i suoi studenti per iniziare a riempire la griglia.</p>
             <div class="flex flex-wrap items-center justify-center gap-2 mt-5">
               <UButton color="primary" icon="i-heroicons-plus" @click="openLezioneRapida(giorno.dateStr)">Aggiungi lezione</UButton>
-              <UButton color="gray" variant="soft" icon="i-heroicons-queue-list" @click="openNuovaLezione">Creazione multipla</UButton>
+              <UButton color="neutral" variant="soft" icon="i-heroicons-queue-list" @click="openNuovaLezione">Creazione multipla</UButton>
             </div>
           </div>
 
@@ -134,59 +137,74 @@
                 <UIcon name="i-heroicons-squares-2x2" class="w-4 h-4 text-slate-400" />
                 Griglia Oraria
               </h4>
-              <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-plus" @click="openLezioneRapida(giorno.dateStr)">
+              <UButton size="xs" color="neutral" variant="soft" icon="i-heroicons-plus" @click="openLezioneRapida(giorno.dateStr)">
                 Aggiungi Tutor in questo giorno
               </UButton>
             </div>
 
-            <div class="overflow-x-auto">
-              <table class="w-full text-left border-collapse min-w-[600px]">
-                <thead>
-                  <tr class="bg-sky-50">
-                    <th class="py-3.5 px-5 text-xs font-bold text-sky-700 border-r-2 border-slate-300 border-b-2 border-sky-200 w-48 uppercase tracking-wider sticky left-0 z-20 bg-sky-50">Tutor</th>
-                    <th v-for="slot in getActiveSlotsForDay(giorno)" :key="slot.id" class="py-3.5 px-2 text-xs font-bold text-sky-700 text-center border-l-2 border-b-2 border-sky-200 min-w-[150px] uppercase tracking-wider">
-                      {{ slot.label }}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="bg-white">
-                  <tr v-for="tutorData in giorno.tutorsRecap" :key="tutorData.tutor.id" class="border-t-2 border-slate-200 first:border-t-0 hover:bg-slate-50/60 transition-colors">
-                    <!-- Colonna tutor: neutra, in grassetto, fissa allo scorrimento -->
-                    <td class="py-3 px-5 text-sm font-semibold text-slate-800 border-r-2 border-slate-300 sticky left-0 z-10 bg-white">
-                      <div class="flex items-center gap-2.5">
-                        <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 bg-slate-100 text-slate-600">
-                          {{ tutorData.tutor.firstName.charAt(0) }}{{ tutorData.tutor.lastName.charAt(0) }}
-                        </div>
-                        <span class="truncate">{{ tutorData.tutor.firstName }} {{ tutorData.tutor.lastName.charAt(0) }}.</span>
-                      </div>
-                    </td>
+            <div class="overflow-x-auto pb-4 px-4 pt-4">
+              <div class="flex gap-3 items-start" style="min-width: max-content;">
 
-                    <td
-                      v-for="slot in getActiveSlotsForDay(giorno)"
-                      :key="slot.id"
-                      class="p-0 border-l-2 border-slate-200 relative cursor-pointer hover:bg-sky-100/60 transition-colors group align-top"
-                      :class="getStudentsInSlot(giorno, tutorData.tutor.id, slot.id).length > 0 ? 'bg-sky-50/60' : ''"
-                      @click="openGestisciSlot(giorno.dateStr, tutorData.tutor.id, tutorData.tutor.firstName + ' ' + tutorData.tutor.lastName, slot)"
-                    >
-                      <!-- Cella piena: targhette studenti neutre, in fila (vanno a capo da sole) -->
-                      <div v-if="getStudentsInSlot(giorno, tutorData.tutor.id, slot.id).length > 0" class="min-h-[52px] p-2.5 flex flex-wrap gap-2 items-start content-start">
-                        <div
-                          v-for="stu in getStudentsInSlot(giorno, tutorData.tutor.id, slot.id)"
-                          :key="stu.id"
-                          class="text-xs font-semibold rounded-lg px-2.5 py-1 shadow-sm ring-1 ring-slate-300 bg-white text-slate-700 inline-flex items-center gap-1 whitespace-nowrap"
-                        >
-                          <span>{{ stu.firstName || '?' }} {{ stu.lastName ? stu.lastName.charAt(0) + '.' : '' }}</span>
-                          <span v-if="stu.mezzaLezione" class="font-bold text-amber-600" title="Mezza Lezione">½</span>
+                <!-- Card per ogni tutor -->
+                <div v-for="tutorData in giorno.tutorsRecap" :key="tutorData.tutor.id"
+                     class="flex-none w-72 bg-slate-50/70 border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+
+                  <!-- Header card tutor -->
+                  <div class="flex items-center gap-2.5 px-3 py-3 border-b border-slate-200 bg-white">
+                    <div class="w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                      {{ tutorData.tutor.firstName.charAt(0) }}{{ tutorData.tutor.lastName.charAt(0) }}
+                    </div>
+                    <div class="min-w-0">
+                      <div class="text-sm font-semibold text-slate-800 truncate">{{ tutorData.tutor.firstName }} {{ tutorData.tutor.lastName }}</div>
+                      <div class="text-xs text-slate-400">{{ getActiveSlotsForDay(giorno).length }} slot</div>
+                    </div>
+                  </div>
+
+                  <!-- Bande slot -->
+                  <div class="flex flex-col gap-2 p-2.5">
+                    <div v-for="slot in getActiveSlotsForDay(giorno)" :key="slot.id"
+                         class="border rounded-xl overflow-hidden cursor-pointer transition-all hover:shadow-sm"
+                         :class="getStudentsInSlot(giorno, tutorData.tutor.id, slot.id).length > 0
+                           ? coloreBandaSlot(tipoLezioneSlot(giorno, tutorData.tutor.id, slot.id))
+                           : 'border-slate-200 bg-white hover:border-primary-300'"
+                         @click="openGestisciSlot(giorno.dateStr, tutorData.tutor.id, tutorData.tutor.firstName + ' ' + tutorData.tutor.lastName, slot)">
+
+                      <!-- Header banda -->
+                      <div class="flex items-center justify-between px-2.5 py-1.5 bg-white/60">
+                        <span class="text-xs font-bold text-slate-600 font-mono">{{ slot.label }}</span>
+                        <span v-if="getStudentsInSlot(giorno, tutorData.tutor.id, slot.id).length > 0"
+                              class="text-[10px] font-bold uppercase tracking-wider"
+                              :class="labelColoreTipo(tipoLezioneSlot(giorno, tutorData.tutor.id, slot.id))">
+                          {{ tipoLezioneSlot(giorno, tutorData.tutor.id, slot.id) }}
+                        </span>
+                      </div>
+
+                      <!-- Corpo banda: studenti o "+aggiungi" -->
+                      <div v-if="getStudentsInSlot(giorno, tutorData.tutor.id, slot.id).length > 0"
+                           class="flex flex-col gap-1 px-2.5 pb-2.5">
+                        <span v-for="stu in getStudentsInSlot(giorno, tutorData.tutor.id, slot.id)" :key="stu.id"
+                              class="text-xs font-medium text-slate-700 bg-white/80 border border-white rounded-lg px-2 py-1 truncate flex items-center gap-1">
+                          {{ stu.firstName || '?' }} {{ stu.lastName || '' }}
+                          <span v-if="stu.mezzaLezione" class="text-amber-500 font-bold ml-auto">½</span>
+                        </span>
+                      </div>
+                      <div v-else class="px-2.5 pb-2">
+                        <div class="w-full py-1.5 border border-dashed border-slate-200 rounded-lg text-center text-xs font-semibold text-slate-300 hover:border-primary-300 hover:text-primary-400 transition-colors">
+                          + aggiungi
                         </div>
                       </div>
-                      <!-- Cella vuota -->
-                      <div v-else class="min-h-[52px] flex items-center justify-center text-slate-200 group-hover:text-primary-400 transition-colors">
-                        <UIcon name="i-heroicons-plus" class="w-5 h-5 opacity-0 group-hover:opacity-100" />
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Card "+ Tutor" (apre nuova lezione) -->
+                <button class="flex-none w-32 min-h-40 self-stretch border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-primary-400 hover:text-primary-500 hover:bg-primary-50 transition-all text-xs font-semibold"
+                        @click="openLezioneRapida(giorno.dateStr)">
+                  <UIcon name="i-heroicons-plus" class="w-5 h-5" />
+                  Tutor
+                </button>
+
+              </div>
             </div>
           </div>
 
@@ -224,7 +242,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { startOfMonth, endOfMonth, addMonths, subMonths, format, isSameDay, getDaysInMonth, setDate } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { corsiaTutor } from '~/utils/coloriTutor'
@@ -244,6 +262,21 @@ const currentDate = ref(new Date())
 const expandedDays = ref<Set<string>>(new Set([format(new Date(), 'yyyy-MM-dd')]))
 const allExpanded = ref(false)
 const filtroTutor = ref<any>(null)
+
+// Deep-link: /calendario?data=YYYY-MM-DD apre il mese giusto e il giorno
+const route = useRoute()
+onMounted(() => {
+  const dataParam = route.query.data as string | undefined
+  if (dataParam && /^\d{4}-\d{2}-\d{2}$/.test(dataParam)) {
+    // Costruisco la data in orario LOCALE (non UTC) per evitare che il giorno slitti
+    const [y, m, gg] = dataParam.split('-').map(Number) as [number, number, number]
+    const d = new Date(y, m - 1, gg)
+    if (!isNaN(d.getTime())) {
+      currentDate.value = d
+      expandedDays.value = new Set([dataParam])
+    }
+  }
+})
 
 // ==========================================
 // DATA FETCHING
@@ -266,7 +299,7 @@ const dateChiusure = computed(() => {
   return (closuresRes.value || []).map((c: any) => c.data)
 })
 
-const STANDARD_SLOTS = ['15:30', '16:30', '17:30']
+const standardSlotStarts = computed(() => timeSlots.value.map((s: any) => s.start))
 
 const { data: tutorsRes } = useFetch('/api/tutors?active=true', { lazy: true })
 const tutorsOptions = computed(() => {
@@ -424,10 +457,10 @@ function toggleAllDays() {
 // ==========================================
 function getActiveSlotsForDay(giorno: any) {
   if (giorno.lezioniBase.length === 0) {
-    return timeSlots.value.filter(s => STANDARD_SLOTS.includes(s.start))
+    return timeSlots.value.filter(s => standardSlotStarts.value.includes(s.start))
   }
   const usedIds = new Set(giorno.lezioniBase.map((l: any) => l.timeSlotId))
-  return timeSlots.value.filter(s => STANDARD_SLOTS.includes(s.start) || usedIds.has(s.id))
+  return timeSlots.value.filter(s => standardSlotStarts.value.includes(s.start) || usedIds.has(s.id))
 }
 
 function getStudentsInSlot(giorno: any, tutorId: string, slotId: string) {
@@ -448,6 +481,32 @@ function getStudentsInSlot(giorno: any, tutorId: string, slotId: string) {
   })
   
   return Array.from(studentsMap.values())
+}
+
+function tipoLezioneSlot(giorno: any, tutorId: string, slotId: string): string {
+  const stus = getStudentsInSlot(giorno, tutorId, slotId)
+  if (stus.length === 0) return ''
+  for (const lesson of giorno.lezioniBase || []) {
+    if (lesson.tutorId === tutorId && lesson.timeSlotId === slotId) {
+      if (lesson.tipo) return lesson.tipo
+    }
+  }
+  if (stus.length === 1) return 'SINGOLA'
+  if (stus.length <= 3) return 'GRUPPO'
+  return 'MAXI'
+}
+
+function coloreBandaSlot(tipo: string): string {
+  if (tipo === 'GRUPPO') return 'border border-l-4 border-primary-200 border-l-primary-400 bg-primary-50/60 hover:border-l-primary-500'
+  if (tipo === 'MAXI')   return 'border border-l-4 border-amber-200 border-l-amber-400 bg-amber-50/60 hover:border-l-amber-500'
+  // SINGOLA
+  return 'border border-l-4 border-slate-200 border-l-slate-400 bg-slate-50/80 hover:border-l-slate-500'
+}
+
+function labelColoreTipo(tipo: string): string {
+  if (tipo === 'GRUPPO') return 'text-primary-500'
+  if (tipo === 'MAXI')   return 'text-amber-500'
+  return 'text-slate-400'
 }
 
 // ==========================================

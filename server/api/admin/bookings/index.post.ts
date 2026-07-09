@@ -30,6 +30,10 @@ export default defineEventHandler(async (event) => {
     notes: data.notes || null,
   }).returning()
 
+  if (!newBooking) {
+    throw createError({ statusCode: 500, statusMessage: 'Creazione prenotazione fallita' })
+  }
+
   if (data.subjects && Array.isArray(data.subjects)) {
     const subjectsToInsert = data.subjects.map((s: string) => ({
       bookingId: newBooking.id,

@@ -23,13 +23,19 @@ export const API_POLICY: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: '/api/portal',                  roles: ['GENITORE', 'ADMIN', 'SUPER_TUTOR'] },
   { prefix: '/api/admin',                   roles: ADMIN_SUPER },
   { prefix: '/api/tutors/availabilities',   roles: STAFF },
+  { prefix: '/api/tutors/today-pool',       roles: STAFF },
   { prefix: '/api/tutor-payments',          roles: ADMIN_SUPER },
   { prefix: '/api/notes',                   roles: STAFF },
   { prefix: '/api/students',                roles: STAFF },
-  { prefix: '/api/packages',                roles: ADMIN_SUPER },
+  // Lettura pacchetti aperta allo STAFF (serve al tutor per scalare le ore in una lezione);
+  // le mutazioni (POST/PUT/recharge/bulk) hanno un controllo ADMIN_SUPER esplicito nel proprio handler.
+  { prefix: '/api/packages',                roles: STAFF },
   { prefix: '/api/standard-packages',       roles: ADMIN_SUPER },
-  { prefix: '/api/lessons',                 roles: ADMIN_SUPER },
+  // I tutor possono creare/modificare solo le proprie lezioni del giorno, entro le 20:00
+  // (controllo granulare dentro service/handler) — la policy qui apre solo l'accesso di massima.
+  { prefix: '/api/lessons',                 roles: STAFF },
   { prefix: '/api/payments',                roles: ADMIN_SUPER },
+  { prefix: '/api/settings/timeslots',      roles: STAFF },
   { prefix: '/api/settings',                roles: ADMIN_SUPER },
   { prefix: '/api/matching',                roles: ADMIN_SUPER },
   { prefix: '/api/tutors',                  roles: ADMIN_SUPER },

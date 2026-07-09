@@ -5,17 +5,24 @@ import {
   packages,
   timeSlots,
   accountingEntries,
+  students,
+  users,
+  bookings,
+  bookingSubjects,
+  systemConfigs,
 } from '../database/schema'
-import { and, count, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gte, inArray, isNotNull, lte, ne, sql } from 'drizzle-orm'
 import { computePackageStates } from './package.service'
+import { confiniGiornoOggiRome } from '../utils/tutor-time-window'
 import type {
   CreateLessonInput,
+  UpdateLessonInput,
   LessonQuery,
   CalendarQuery,
 } from '../../shared/schemas/lesson.schema'
 
 // ─────────────────────────────────────────────
-// TARIFFE TUTOR (da lessonCalculations.js — DOCUMENTAZIONE §4)
+// TARIFFE TUTOR — lette da system_configs (chiave: tariffe_tutor)
 //   SINGOLA = 1 studente senza forzaGruppo
 //   GRUPPO  = 2–4 studenti OPPURE 1 studente con forzaGruppo=true
 //   MAXI    = 5+ studenti
@@ -23,16 +30,61 @@ import type {
 
 type LessonType = 'SINGOLA' | 'GRUPPO' | 'MAXI'
 
-const TARIFFE: Record<LessonType, number> = {
+// Default: usati se il record system_configs non esiste o è malformato
+const DEFAULT_TARIFFE: Record<LessonType, number> = {
   SINGOLA: 5.00,
   GRUPPO:  8.00,
   MAXI:    8.50,
+}
+
+// Tariffe per le mezze lezioni: arrotondate per difetto (NON semplice TARIFFE * 0.5)
+// La mezza MAXI = €4,00, non €4,25 — regola di business confermata dall'utente.
+// I valori mezza sono hardcoded in quanto regola di business, non configurabili dall'admin.
+const TARIFFE_MEZZA: Record<LessonType, number> = {
+  SINGOLA: 2.50,
+  GRUPPO:  4.00,
+  MAXI:    4.00,
+}
+
+// Cache in-memory con TTL 60 secondi (il valore cambia raramente)
+let tariffeCache: Record<LessonType, number> | null = null
+let tariffeCacheExpiry = 0
+const CACHE_TTL_MS = 60_000
+
+async function getTariffeTutor(): Promise<Record<LessonType, number>> {
+  const now = Date.now()
+  if (tariffeCache && tariffeCacheExpiry > now) {
+    return tariffeCache
+  }
+  try {
+    const rows = await db.select({ value: systemConfigs.value }).from(systemConfigs).where(eq(systemConfigs.key, 'tariffe_tutor')).limit(1)
+    const raw = rows[0]?.value
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, number>
+      tariffeCache = {
+        SINGOLA: parsed.SINGOLA ?? DEFAULT_TARIFFE.SINGOLA,
+        GRUPPO:  parsed.GRUPPO  ?? DEFAULT_TARIFFE.GRUPPO,
+        MAXI:    parsed.MAXI    ?? DEFAULT_TARIFFE.MAXI,
+      }
+    } else {
+      tariffeCache = { ...DEFAULT_TARIFFE }
+    }
+  } catch {
+    tariffeCache = { ...DEFAULT_TARIFFE }
+  }
+  tariffeCacheExpiry = now + CACHE_TTL_MS
+  return tariffeCache
 }
 
 function calcDurationHours(oraInizio: string, oraFine: string): number {
   const [h1, m1] = oraInizio.split(':').map(Number) as [number, number]
   const [h2, m2] = oraFine.split(':').map(Number) as [number, number]
   return ((h2 * 60 + m2) - (h1 * 60 + m1)) / 60
+}
+
+function calcCompenso(tariffe: Record<LessonType, number>, tipo: LessonType, mezzaLezione: boolean, oraInizio: string, oraFine: string): number {
+  if (mezzaLezione) return TARIFFE_MEZZA[tipo]
+  return tariffe[tipo] * calcDurationHours(oraInizio, oraFine)
 }
 
 function determineLessonType(numStudenti: number, forzaGruppo: boolean): LessonType {
@@ -59,11 +111,51 @@ export async function createLesson(data: CreateLessonInput) {
       .limit(1)
     if (!slot) throw new Error('Slot orario non trovato')
 
+    // 1.b Anti-doppia-prenotazione: nessuno studente selezionato può essere già in
+    // un'altra lezione, con un ALTRO tutor, nello stesso slot/data (vale per chiunque crei
+    // la lezione: admin, super tutor o tutor).
+    const lessonDateStrCheck = data.data
+    const studentIds = data.studenti.map(s => s.studentId)
+
+    // Nomi studenti per messaggi d'errore leggibili (una query, usata solo se errore)
+    const nomiStudentiRows = await tx
+      .select({ id: students.id, firstName: students.firstName, lastName: students.lastName })
+      .from(students)
+      .where(inArray(students.id, studentIds))
+    const nomeStudente = (id: string) => {
+      const s = nomiStudentiRows.find(r => r.id === id)
+      return s ? `${s.firstName} ${s.lastName}` : id
+    }
+
+    const conflitti = await tx
+      .select({
+        studentFirstName: students.firstName,
+        studentLastName:  students.lastName,
+        tutorFirstName:   users.firstName,
+        tutorLastName:    users.lastName,
+      })
+      .from(lessonStudents)
+      .innerJoin(lessons, eq(lessonStudents.lessonId, lessons.id))
+      .innerJoin(students, eq(lessonStudents.studentId, students.id))
+      .innerJoin(users, eq(lessons.tutorId, users.id))
+      .where(and(
+        inArray(lessonStudents.studentId, studentIds),
+        eq(lessons.timeSlotId, data.timeSlotId),
+        eq(lessons.data, lessonDateStrCheck),
+      ))
+      .limit(1)
+
+    if (conflitti.length > 0) {
+      const c = conflitti[0]!
+      throw new Error(
+        `${c.studentFirstName} ${c.studentLastName} è già in una lezione in questo slot orario con ${c.tutorFirstName} ${c.tutorLastName}.`
+      )
+    }
+
     // 2. Determina tipo lezione e compenso tutor
-    const tipo         = determineLessonType(data.studenti.length, data.forzaGruppo)
-    // Se la lezione è contrassegnata come "Mezza Lezione", il tutor viene pagato per 0.5 ore
-    const durataOre    = data.mezzaLezione ? 0.5 : calcDurationHours(slot.oraInizio, slot.oraFine)
-    const compensoTutor = TARIFFE[tipo] * durataOre
+    const tipo          = determineLessonType(data.studenti.length, data.forzaGruppo)
+    const tariffe       = await getTariffeTutor()
+    const compensoTutor = calcCompenso(tariffe, tipo, data.mezzaLezione, slot.oraInizio, slot.oraFine)
 
     // 3. Inserisce la lezione
     const [lesson] = await tx
@@ -81,7 +173,7 @@ export async function createLesson(data: CreateLessonInput) {
       .returning()
 
     // 4. Per ogni studente: inserisce lesson_student + scala ore atomicamente
-    const lessonDateStr = new Date(data.data).toISOString().split('T')[0]
+    const lessonDateStr = data.data
 
     for (const studente of data.studenti) {
       // REGOLA: L'alunno, anche se fa mezz'ora, scala SEMPRE un'ora dal pacchetto
@@ -89,22 +181,26 @@ export async function createLesson(data: CreateLessonInput) {
 
       // 4.a Verifica che il pacchetto sia valido e abbia ore sufficienti
       const [pkgCheck] = await tx
-        .select({ oreResiduo: packages.oreResiduo, stati: packages.stati })
+        .select({ oreResiduo: packages.oreResiduo, stati: packages.stati, sospeso: packages.sospeso })
         .from(packages)
         .where(eq(packages.id, studente.packageId))
         .limit(1)
 
       if (!pkgCheck) {
-        throw new Error(`Pacchetto non trovato per lo studente ${studente.studentId}`)
+        throw new Error(`Pacchetto non trovato per ${nomeStudente(studente.studentId)}`)
       }
 
-      const hasInvalidState = Array.isArray(pkgCheck.stati) 
+      if (pkgCheck.sospeso) {
+        throw new Error(`${nomeStudente(studente.studentId)}: il pacchetto è sospeso e non può essere usato.`)
+      }
+
+      const hasInvalidState = Array.isArray(pkgCheck.stati)
         ? (pkgCheck.stati.includes('CHIUSO') || pkgCheck.stati.includes('ESAURITO'))
         // fallback in caso non sia un array
         : (String(pkgCheck.stati).includes('CHIUSO') || String(pkgCheck.stati).includes('ESAURITO'))
 
       if (Number(pkgCheck.oreResiduo) < oreScalate || hasInvalidState) {
-        throw new Error(`Impossibile scalare le ore per lo studente ${studente.studentId}: il pacchetto non ha ore sufficienti o è chiuso/esaurito.`)
+        throw new Error(`${nomeStudente(studente.studentId)}: il pacchetto non ha ore sufficienti o è chiuso/esaurito.`)
       }
 
       // Inserisce il record studente nella lezione
@@ -142,7 +238,7 @@ export async function createLesson(data: CreateLessonInput) {
             and(
               eq(lessonStudents.studentId, studente.studentId),
               eq(lessonStudents.packageId, studente.packageId),
-              sql`DATE(${lessons.data}) = ${lessonDateStr}::date`,
+              eq(lessons.data, lessonDateStr),
             )
           )
         const n = res[0]?.n ?? 0
@@ -183,6 +279,293 @@ export async function createLesson(data: CreateLessonInput) {
     return lesson
   })
 }
+
+// ─────────────────────────────────────────────
+// UPDATE — PUT /api/lessons/:id
+// Aggiorna gli studenti/note/forzaGruppo di una lezione esistente (tutor/slot/data restano
+// quelli della lezione originale). Rimborsa le ore degli studenti tolti, scala le ore dei
+// nuovi, ricalcola tipo e compenso tutor in base al numero finale di studenti.
+// ─────────────────────────────────────────────
+
+export async function updateLesson(id: string, data: UpdateLessonInput) {
+  return await db.transaction(async (tx) => {
+    const [lesson] = await tx.select().from(lessons).where(eq(lessons.id, id)).limit(1)
+    if (!lesson) throw new Error('Lezione non trovata')
+
+    const lessonDateStr = lesson.data
+
+    if (data.studenti) {
+      const existing = await tx.select().from(lessonStudents).where(eq(lessonStudents.lessonId, id))
+      const newIds        = new Set(data.studenti.map(s => s.studentId))
+      const studentiNuovi = data.studenti.filter(s => !existing.some(e => e.studentId === s.studentId))
+
+      // Nomi studenti per messaggi d'errore leggibili
+      const allIdsUpdate = [...new Set(data.studenti.map(s => s.studentId))]
+      const nomiUpdateRows = await tx
+        .select({ id: students.id, firstName: students.firstName, lastName: students.lastName })
+        .from(students)
+        .where(inArray(students.id, allIdsUpdate))
+      const nomeStudenteUpd = (id: string) => {
+        const s = nomiUpdateRows.find(r => r.id === id)
+        return s ? `${s.firstName} ${s.lastName}` : id
+      }
+
+      // Anti-doppia-prenotazione: solo per gli studenti effettivamente nuovi in questa lezione
+      if (studentiNuovi.length > 0) {
+        const conflitti = await tx
+          .select({
+            studentFirstName: students.firstName,
+            studentLastName:  students.lastName,
+            tutorFirstName:   users.firstName,
+            tutorLastName:    users.lastName,
+          })
+          .from(lessonStudents)
+          .innerJoin(lessons, eq(lessonStudents.lessonId, lessons.id))
+          .innerJoin(students, eq(lessonStudents.studentId, students.id))
+          .innerJoin(users, eq(lessons.tutorId, users.id))
+          .where(and(
+            inArray(lessonStudents.studentId, studentiNuovi.map(s => s.studentId)),
+            eq(lessons.timeSlotId, lesson.timeSlotId),
+            ne(lessons.id, id),
+            eq(lessons.data, lessonDateStr),
+          ))
+          .limit(1)
+
+        if (conflitti.length > 0) {
+          const c = conflitti[0]!
+          throw new Error(
+            `${c.studentFirstName} ${c.studentLastName} è già in una lezione in questo slot orario con ${c.tutorFirstName} ${c.tutorLastName}.`
+          )
+        }
+      }
+
+      // Rimuove gli studenti tolti: rimborsa ore (e giorni per i pacchetti MENSILE)
+      for (const old of existing) {
+        if (newIds.has(old.studentId)) continue
+
+        const oreRimborsate = Number(old.oreScalate)
+        await tx
+          .update(packages)
+          .set({ oreResiduo: sql`${packages.oreResiduo} + ${String(oreRimborsate)}`, updatedAt: new Date() })
+          .where(eq(packages.id, old.packageId))
+
+        const [pkg] = await tx.select({ tipo: packages.tipo }).from(packages).where(eq(packages.id, old.packageId)).limit(1)
+        if (pkg?.tipo === 'MENSILE') {
+          const res = await tx
+            .select({ n: count() })
+            .from(lessonStudents)
+            .innerJoin(lessons, eq(lessonStudents.lessonId, lessons.id))
+            .where(and(
+              eq(lessonStudents.studentId, old.studentId),
+              eq(lessonStudents.packageId, old.packageId),
+              eq(lessons.data, lessonDateStr),
+            ))
+          if ((res[0]?.n ?? 0) === 1) {
+            await tx.update(packages)
+              .set({ giorniResiduo: sql`${packages.giorniResiduo} + 1`, updatedAt: new Date() })
+              .where(eq(packages.id, old.packageId))
+          }
+        }
+
+        await tx.delete(lessonStudents).where(eq(lessonStudents.id, old.id))
+
+        const [updatedPkg] = await tx.select().from(packages).where(eq(packages.id, old.packageId)).limit(1)
+        if (updatedPkg) {
+          const newStati = computePackageStates({
+            oreAcquistate:  updatedPkg.oreAcquistate,
+            oreResiduo:     updatedPkg.oreResiduo,
+            importoResiduo: updatedPkg.importoResiduo,
+            dataScadenza:   updatedPkg.dataScadenza,
+            giorniResiduo:  updatedPkg.giorniResiduo,
+          })
+          await tx.update(packages).set({ stati: newStati, updatedAt: new Date() }).where(eq(packages.id, old.packageId))
+        }
+      }
+
+      // Aggiunge i nuovi studenti: valida pacchetto e scala le ore (stessa logica di createLesson)
+      for (const nuovo of studentiNuovi) {
+        const oreScalate = 1.0
+
+        const [pkgCheck] = await tx
+          .select({ oreResiduo: packages.oreResiduo, stati: packages.stati, sospeso: packages.sospeso })
+          .from(packages)
+          .where(eq(packages.id, nuovo.packageId))
+          .limit(1)
+
+        if (!pkgCheck) throw new Error(`Pacchetto non trovato per ${nomeStudenteUpd(nuovo.studentId)}`)
+
+        if (pkgCheck.sospeso) {
+          throw new Error(`${nomeStudenteUpd(nuovo.studentId)}: il pacchetto è sospeso e non può essere usato.`)
+        }
+
+        const hasInvalidState = Array.isArray(pkgCheck.stati)
+          ? (pkgCheck.stati.includes('CHIUSO') || pkgCheck.stati.includes('ESAURITO'))
+          : (String(pkgCheck.stati).includes('CHIUSO') || String(pkgCheck.stati).includes('ESAURITO'))
+
+        if (Number(pkgCheck.oreResiduo) < oreScalate || hasInvalidState) {
+          throw new Error(`${nomeStudenteUpd(nuovo.studentId)}: il pacchetto non ha ore sufficienti o è chiuso/esaurito.`)
+        }
+
+        await tx.insert(lessonStudents).values({
+          lessonId:  id,
+          studentId: nuovo.studentId,
+          packageId: nuovo.packageId,
+          oreScalate: String(oreScalate),
+        })
+
+        await tx.update(packages)
+          .set({ oreResiduo: sql`GREATEST(0, ${packages.oreResiduo} - ${String(oreScalate)})`, updatedAt: new Date() })
+          .where(eq(packages.id, nuovo.packageId))
+
+        const [pkg] = await tx.select({ tipo: packages.tipo, giorniResiduo: packages.giorniResiduo }).from(packages).where(eq(packages.id, nuovo.packageId)).limit(1)
+        if (pkg?.tipo === 'MENSILE' && (pkg.giorniResiduo ?? 0) > 0) {
+          const res = await tx
+            .select({ n: count() })
+            .from(lessonStudents)
+            .innerJoin(lessons, eq(lessonStudents.lessonId, lessons.id))
+            .where(and(
+              eq(lessonStudents.studentId, nuovo.studentId),
+              eq(lessonStudents.packageId, nuovo.packageId),
+              eq(lessons.data, lessonDateStr),
+            ))
+          if ((res[0]?.n ?? 0) <= 1) {
+            await tx.update(packages)
+              .set({ giorniResiduo: sql`GREATEST(0, ${packages.giorniResiduo} - 1)`, updatedAt: new Date() })
+              .where(eq(packages.id, nuovo.packageId))
+          }
+        }
+
+        const [updatedPkg] = await tx.select().from(packages).where(eq(packages.id, nuovo.packageId)).limit(1)
+        if (updatedPkg) {
+          const newStati = computePackageStates({
+            oreAcquistate:  updatedPkg.oreAcquistate,
+            oreResiduo:     updatedPkg.oreResiduo,
+            importoResiduo: updatedPkg.importoResiduo,
+            dataScadenza:   updatedPkg.dataScadenza,
+            giorniResiduo:  updatedPkg.giorniResiduo,
+          })
+          await tx.update(packages).set({ stati: newStati, updatedAt: new Date() }).where(eq(packages.id, nuovo.packageId))
+        }
+      }
+
+      // F7 — studenti già presenti ma con pacchetto cambiato: rimborsa il vecchio, scala il nuovo
+      for (const newStu of data.studenti) {
+        const oldRecord = existing.find(e => e.studentId === newStu.studentId && e.packageId !== newStu.packageId)
+        if (!oldRecord) continue
+
+        const oreScalate = Number(oldRecord.oreScalate)
+
+        // Rimborsa ore al vecchio pacchetto
+        await tx.update(packages)
+          .set({ oreResiduo: sql`${packages.oreResiduo} + ${String(oreScalate)}`, updatedAt: new Date() })
+          .where(eq(packages.id, oldRecord.packageId))
+
+        // Gestione giorni MENSILE per il vecchio pacchetto
+        const [oldPkg] = await tx.select({ tipo: packages.tipo }).from(packages).where(eq(packages.id, oldRecord.packageId)).limit(1)
+        if (oldPkg?.tipo === 'MENSILE') {
+          const resOld = await tx.select({ n: count() }).from(lessonStudents)
+            .innerJoin(lessons, eq(lessonStudents.lessonId, lessons.id))
+            .where(and(
+              eq(lessonStudents.studentId, oldRecord.studentId),
+              eq(lessonStudents.packageId, oldRecord.packageId),
+              eq(lessons.data, lessonDateStr),
+            ))
+          if ((resOld[0]?.n ?? 0) === 1) {
+            await tx.update(packages)
+              .set({ giorniResiduo: sql`${packages.giorniResiduo} + 1`, updatedAt: new Date() })
+              .where(eq(packages.id, oldRecord.packageId))
+          }
+        }
+
+        // Verifica nuovo pacchetto
+        const [newPkgCheck] = await tx.select({ oreResiduo: packages.oreResiduo, stati: packages.stati, sospeso: packages.sospeso })
+          .from(packages).where(eq(packages.id, newStu.packageId)).limit(1)
+        if (!newPkgCheck) throw new Error(`Pacchetto non trovato per ${nomeStudenteUpd(newStu.studentId)}`)
+        if (newPkgCheck.sospeso) {
+          throw new Error(`${nomeStudenteUpd(newStu.studentId)}: il nuovo pacchetto è sospeso e non può essere usato.`)
+        }
+        const hasInvalidStateF7 = Array.isArray(newPkgCheck.stati)
+          ? (newPkgCheck.stati.includes('CHIUSO') || newPkgCheck.stati.includes('ESAURITO'))
+          : (String(newPkgCheck.stati).includes('CHIUSO') || String(newPkgCheck.stati).includes('ESAURITO'))
+        if (Number(newPkgCheck.oreResiduo) < oreScalate || hasInvalidStateF7) {
+          throw new Error(`${nomeStudenteUpd(newStu.studentId)}: il nuovo pacchetto non ha ore sufficienti o è chiuso/esaurito.`)
+        }
+
+        // Scala ore dal nuovo pacchetto
+        await tx.update(packages)
+          .set({ oreResiduo: sql`GREATEST(0, ${packages.oreResiduo} - ${String(oreScalate)})`, updatedAt: new Date() })
+          .where(eq(packages.id, newStu.packageId))
+
+        // Gestione giorni MENSILE per il nuovo pacchetto
+        const [newPkg] = await tx.select({ tipo: packages.tipo, giorniResiduo: packages.giorniResiduo })
+          .from(packages).where(eq(packages.id, newStu.packageId)).limit(1)
+        if (newPkg?.tipo === 'MENSILE' && (newPkg.giorniResiduo ?? 0) > 0) {
+          const resNew = await tx.select({ n: count() }).from(lessonStudents)
+            .innerJoin(lessons, eq(lessonStudents.lessonId, lessons.id))
+            .where(and(
+              eq(lessonStudents.studentId, newStu.studentId),
+              eq(lessonStudents.packageId, newStu.packageId),
+              eq(lessons.data, lessonDateStr),
+            ))
+          if ((resNew[0]?.n ?? 0) === 0) {
+            await tx.update(packages)
+              .set({ giorniResiduo: sql`GREATEST(0, ${packages.giorniResiduo} - 1)`, updatedAt: new Date() })
+              .where(eq(packages.id, newStu.packageId))
+          }
+        }
+
+        // Aggiorna il record lesson_students con il nuovo pacchetto
+        await tx.update(lessonStudents)
+          .set({ packageId: newStu.packageId })
+          .where(eq(lessonStudents.id, oldRecord.id))
+
+        // Ricalcola stati per entrambi i pacchetti
+        for (const pkgId of [oldRecord.packageId, newStu.packageId]) {
+          const [updPkg] = await tx.select().from(packages).where(eq(packages.id, pkgId)).limit(1)
+          if (updPkg) {
+            const newStati = computePackageStates({
+              oreAcquistate:  updPkg.oreAcquistate,
+              oreResiduo:     updPkg.oreResiduo,
+              importoResiduo: updPkg.importoResiduo,
+              dataScadenza:   updPkg.dataScadenza,
+              giorniResiduo:  updPkg.giorniResiduo,
+            })
+            await tx.update(packages).set({ stati: newStati, updatedAt: new Date() }).where(eq(packages.id, pkgId))
+          }
+        }
+      }
+    }
+
+    // Ricalcola tipo e compenso tutor in base al numero finale di studenti
+    const studentCountFinal = data.studenti
+      ? data.studenti.length
+      : (await tx.select({ n: count() }).from(lessonStudents).where(eq(lessonStudents.lessonId, id)))[0]?.n ?? 0
+    const forzaGruppoFinal = data.forzaGruppo ?? lesson.forzaGruppo
+    const tipo = determineLessonType(studentCountFinal, forzaGruppoFinal)
+
+    const [slot] = await tx.select().from(timeSlots).where(eq(timeSlots.id, lesson.timeSlotId)).limit(1)
+    if (!slot) throw new Error('Slot orario non trovato')
+    const mezzaLezioneFinal = data.mezzaLezione ?? lesson.mezzaLezione
+    const tariffe       = await getTariffeTutor()
+    const compensoTutor = calcCompenso(tariffe, tipo, mezzaLezioneFinal, slot.oraInizio, slot.oraFine)
+
+    const [updated] = await tx
+      .update(lessons)
+      .set({
+        tipo,
+        mezzaLezione:  mezzaLezioneFinal,
+        compensoTutor: compensoTutor.toFixed(2),
+        forzaGruppo:   forzaGruppoFinal,
+        note:          data.note !== undefined ? data.note : lesson.note,
+        updatedAt:     new Date(),
+      })
+      .where(eq(lessons.id, id))
+      .returning()
+
+    return updated
+  })
+}
+
 // ─────────────────────────────────────────────
 // DELETE — DELETE /api/lessons/:id
 // Transazione: cancella studenti lezione + rimborsa ore + ricalcola stati
@@ -195,7 +578,7 @@ export async function deleteLesson(id: string) {
 
     const [lesson] = await tx.select().from(lessons).where(eq(lessons.id, id)).limit(1)
     if (!lesson) throw new Error('Lezione non trovata')
-    const lessonDateStr = lesson.data.toISOString().split('T')[0]
+    const lessonDateStr = lesson.data
 
     // 2. Rimborsa i pacchetti per ogni studente
     for (const studente of students) {
@@ -227,7 +610,7 @@ export async function deleteLesson(id: string) {
             and(
               eq(lessonStudents.studentId, studente.studentId),
               eq(lessonStudents.packageId, studente.packageId),
-              sql`DATE(${lessons.data}) = ${lessonDateStr}::date`
+              eq(lessons.data, lessonDateStr)
             )
           )
         const n = res[0]?.n ?? 0
@@ -312,8 +695,7 @@ export async function listLessons(query: LessonQuery) {
     ? and(...(conditions as [ReturnType<typeof eq>, ...ReturnType<typeof eq>[]]))
     : undefined
 
-  const [rows, [countRow]] = await Promise.all([
-    db.query.lessons.findMany({
+  const rows = await db.query.lessons.findMany({
       where: where,
       orderBy: [desc(lessons.data)],
       limit: query.limit,
@@ -334,9 +716,9 @@ export async function listLessons(query: LessonQuery) {
           }
         }
       }
-    }),
-    db.select({ total: count() }).from(lessons).where(where),
-  ])
+    })
+    
+  const [countRow] = await db.select({ total: count() }).from(lessons).where(where)
 
   return {
     data: rows,
@@ -381,8 +763,11 @@ export async function getLessonById(id: string) {
 // ─────────────────────────────────────────────
 
 export async function getLessonCalendar(query: CalendarQuery) {
-  const startDate = new Date(query.anno, query.mese - 1, 1)
-  const endDate   = new Date(query.anno, query.mese, 0, 23, 59, 59, 999)
+  // Confini del mese come stringhe 'YYYY-MM-DD' (la colonna data è un giorno civile, non un istante)
+  const mm = String(query.mese).padStart(2, '0')
+  const startDate = `${query.anno}-${mm}-01`
+  const ultimoGiorno = new Date(query.anno, query.mese, 0).getDate()
+  const endDate   = `${query.anno}-${mm}-${String(ultimoGiorno).padStart(2, '0')}`
 
   const conditions: ReturnType<typeof eq>[] = [
     gte(lessons.data, startDate) as any,
@@ -398,13 +783,161 @@ export async function getLessonCalendar(query: CalendarQuery) {
     .where(and(...(conditions as [ReturnType<typeof eq>, ...ReturnType<typeof eq>[]])))
     .orderBy(lessons.data)
 
-  // Raggruppa per data (chiave: "YYYY-MM-DD")
+  // Raggruppa per data (chiave: "YYYY-MM-DD") — lesson.data è già una stringa 'YYYY-MM-DD'
   const byDay: Record<string, typeof rows> = {}
   for (const lesson of rows) {
-    const key = lesson.data.toISOString().split('T')[0]!
+    const key = lesson.data
     if (!byDay[key]) byDay[key] = []
     byDay[key]!.push(lesson)
   }
 
   return byDay
+}
+
+// ─────────────────────────────────────────────
+// POOL DI OGGI — GET /api/tutors/today-pool
+// Studenti selezionabili per registrare una lezione oggi: tutte le materie prenotate
+// per la giornata odierna (qualunque tutor assegnato, o anche non assegnate), collegate
+// a un'anagrafica studente reale.
+// ─────────────────────────────────────────────
+
+export async function getPoolStudentiOggi() {
+  const { start, end } = confiniGiornoOggiRome()
+
+  const rows = await db
+    .select({
+      studentId:      bookings.studentId,
+      studentName:    bookings.studentName,
+      studentSurname: bookings.studentSurname,
+      subject:        bookingSubjects.name,
+    })
+    .from(bookingSubjects)
+    .innerJoin(bookings, eq(bookingSubjects.bookingId, bookings.id))
+    .where(and(
+      isNotNull(bookings.studentId),
+      ne(bookings.status, 'CANCELLED'),
+      gte(bookings.requestedDate, start),
+      lte(bookings.requestedDate, end),
+    ))
+
+  return rows.map(r => ({
+    studentId: r.studentId as string,
+    nome:      `${r.studentName} ${r.studentSurname}`,
+    materia:   r.subject,
+  }))
+}
+
+// Verifica che ogni studente sia nel pool di oggi — usata per impedire a un TUTOR di
+// creare una lezione con uno studente non presente nel Matching di oggi.
+// Ritorna gli ID degli studenti NON trovati nel pool (vuoto = tutti validi).
+export async function verificaPoolOggiPerTutor(studentIds: string[]): Promise<string[]> {
+  if (studentIds.length === 0) return []
+  const pool = await getPoolStudentiOggi()
+  const trovati = new Set(pool.map(p => p.studentId))
+  return studentIds.filter(id => !trovati.has(id))
+}
+
+// ─────────────────────────────────────────────
+// STORICO LEZIONI DI UN PACCHETTO — GET /api/packages/:id/lessons
+// Tutte le lezioni in cui sono state scalate ore da questo pacchetto.
+// ─────────────────────────────────────────────
+
+export async function getLessonsByPackage(packageId: string) {
+  const rows = await db
+    .select({
+      lessonId:    lessons.id,
+      data:        lessons.data,
+      tipo:        lessons.tipo,
+      oreScalate:  lessonStudents.oreScalate,
+      studentFirstName: students.firstName,
+      studentLastName:  students.lastName,
+      tutorFirstName:   users.firstName,
+      tutorLastName:    users.lastName,
+    })
+    .from(lessonStudents)
+    .innerJoin(lessons, eq(lessonStudents.lessonId, lessons.id))
+    .innerJoin(students, eq(lessonStudents.studentId, students.id))
+    .innerJoin(users, eq(lessons.tutorId, users.id))
+    .where(eq(lessonStudents.packageId, packageId))
+    .orderBy(desc(lessons.data))
+
+  return rows
+}
+
+// ─────────────────────────────────────────────
+// MANUTENZIONE — Ricalcolo tipo + compenso di TUTTE le lezioni
+// Corregge i dati incoerenti (es. lezioni importate con tipo "SINGOLA" ma 2 studenti):
+// ricalcola tipo (SINGOLA/GRUPPO/MAXI) dal numero reale di studenti + forzaGruppo, e il
+// compenso tutor di conseguenza. Con apply=false è una simulazione (non scrive nulla).
+// ─────────────────────────────────────────────
+
+export type RicalcoloLezioneChange = {
+  id: string
+  numStudenti: number
+  tipoVecchio: LessonType
+  tipoNuovo: LessonType
+  compensoVecchio: string | null
+  compensoNuovo: string
+}
+
+export async function ricalcolaTipiECompensiLezioni(apply = false) {
+  // Lezioni + slot (per la durata) in un colpo solo
+  const allLessons = await db
+    .select({
+      id:           lessons.id,
+      tipo:         lessons.tipo,
+      forzaGruppo:  lessons.forzaGruppo,
+      mezzaLezione: lessons.mezzaLezione,
+      compenso:     lessons.compensoTutor,
+      oraInizio:    timeSlots.oraInizio,
+      oraFine:      timeSlots.oraFine,
+    })
+    .from(lessons)
+    .innerJoin(timeSlots, eq(lessons.timeSlotId, timeSlots.id))
+
+  // Numero di studenti per lezione
+  const counts = await db
+    .select({ lessonId: lessonStudents.lessonId, n: count() })
+    .from(lessonStudents)
+    .groupBy(lessonStudents.lessonId)
+  const countMap = new Map(counts.map(c => [c.lessonId, Number(c.n)]))
+
+  const changes: RicalcoloLezioneChange[] = []
+  for (const l of allLessons) {
+    const n = countMap.get(l.id) ?? 0
+    if (n === 0) continue // lezione senza studenti: non la tocco
+
+    const tipoNuovo     = determineLessonType(n, l.forzaGruppo)
+    const tariffe = await getTariffeTutor()
+    const compensoNuovo = calcCompenso(tariffe, tipoNuovo, l.mezzaLezione, l.oraInizio, l.oraFine).toFixed(2)
+
+    if (tipoNuovo !== l.tipo || compensoNuovo !== l.compenso) {
+      changes.push({
+        id: l.id,
+        numStudenti: n,
+        tipoVecchio: l.tipo as LessonType,
+        tipoNuovo,
+        compensoVecchio: l.compenso,
+        compensoNuovo,
+      })
+    }
+  }
+
+  if (apply && changes.length > 0) {
+    await db.transaction(async (tx) => {
+      for (const c of changes) {
+        await tx
+          .update(lessons)
+          .set({ tipo: c.tipoNuovo, compensoTutor: c.compensoNuovo, updatedAt: new Date() })
+          .where(eq(lessons.id, c.id))
+      }
+    })
+  }
+
+  return {
+    totaleLezioni: allLessons.length,
+    daCorreggere:  changes.length,
+    applied:       apply,
+    changes,
+  }
 }

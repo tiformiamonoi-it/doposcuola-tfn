@@ -18,5 +18,11 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  return await updateNote(id, result.data, sessionUser)
+  try {
+    return await updateNote(id, result.data, sessionUser)
+  } catch (err: any) {
+    if (err.statusCode) throw err
+    const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('permessi') ? 403 : 400
+    throw createError({ statusCode: code, statusMessage: err.message })
+  }
 })

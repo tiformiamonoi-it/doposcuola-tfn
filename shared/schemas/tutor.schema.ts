@@ -3,11 +3,12 @@ import { z } from 'zod'
 
 // ─── Crea Tutor ───────────────────────────────
 export const CreateTutorSchema = z.object({
-  firstName:         z.string({ message: 'Nome obbligatorio' }).min(1).max(100).trim(),
-  lastName:          z.string({ message: 'Cognome obbligatorio' }).min(1).max(100).trim(),
+  firstName:         z.string({ message: 'Nome obbligatorio' }).min(1, 'Nome obbligatorio').max(100).trim(),
+  lastName:          z.string({ message: 'Cognome obbligatorio' }).min(1, 'Cognome obbligatorio').max(100).trim(),
   email:             z.string({ message: 'Email obbligatoria' }).email('Email non valida').toLowerCase().trim(),
   password:          z.string({ message: 'Password obbligatoria' }).min(8, 'Password: almeno 8 caratteri'),
   phone:             z.string().regex(/^[\d\s+\-().]{7,20}$/, 'Telefono non valido').optional().nullable(),
+  role:              z.enum(['TUTOR', 'ADMIN', 'SUPER_TUTOR']).default('TUTOR'),
   modalitaPagamento: z.enum(['ORE', 'FORFAIT']).default('ORE'),
   importoForfait:    z.coerce.string().optional().nullable(),
 })
@@ -19,6 +20,7 @@ export const UpdateTutorSchema = z.object({
   lastName:          z.string().min(1).max(100).trim().optional(),
   email:             z.string().email('Email non valida').toLowerCase().trim().optional(),
   phone:             z.string().optional().nullable(),
+  role:              z.enum(['TUTOR', 'ADMIN', 'SUPER_TUTOR']).optional(),
   indirizzo:         z.string().optional().nullable(),
   citta:             z.string().max(100).optional().nullable(),
   cap:               z.string().max(10).optional().nullable(),

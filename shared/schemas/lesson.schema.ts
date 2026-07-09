@@ -44,9 +44,11 @@ export const CreateLessonSchema = z
       .string({ message: "Lo slot orario è obbligatorio" })
       .cuid2('ID slot orario non valido'),
 
-    data: z.coerce.date({
-      message: 'La data della lezione non è valida',
-    }),
+    // Giorno della lezione come stringa 'YYYY-MM-DD' (nessun orario, nessun fuso): così il
+    // giorno salvato è esattamente quello scelto, senza slittamenti di fuso orario.
+    data: z
+      .string({ message: 'La data della lezione è obbligatoria' })
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'La data della lezione non è valida'),
 
     studenti: z
       .array(LessonStudentSchema, { message: 'Devi selezionare almeno uno studente' })
@@ -74,7 +76,7 @@ export const CreateLessonSchema = z
     const oggi = new Date()
     const maxDate = new Date(oggi)
     maxDate.setFullYear(maxDate.getFullYear() + 1)
-    if (data.data > maxDate) {
+    if (new Date(data.data) > maxDate) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['data'],
@@ -88,9 +90,10 @@ export const CreateLessonSchema = z
 // ─────────────────────────────────────────────
 
 export const UpdateLessonSchema = z.object({
-  studenti:    z.array(LessonStudentSchema).min(1, 'Devi avere almeno uno studente').optional(),
-  forzaGruppo: z.boolean().optional(),
-  note:        z.string().max(1000).optional().nullable(),
+  studenti:     z.array(LessonStudentSchema).min(1, 'Devi avere almeno uno studente').optional(),
+  forzaGruppo:  z.boolean().optional(),
+  mezzaLezione: z.boolean().optional(),
+  note:         z.string().max(1000).optional().nullable(),
 })
 
 // ─────────────────────────────────────────────
@@ -115,8 +118,8 @@ export const DeleteLessonsBulkSchema = z.object({
 export const LessonQuerySchema = z.object({
   tutorId:     z.string().cuid2().optional(),
   studentId:   z.string().cuid2().optional(),
-  dataInizio:  z.coerce.date().optional(),
-  dataFine:    z.coerce.date().optional(),
+  dataInizio:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dataFine:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   tipo:        z.enum(['SINGOLA', 'GRUPPO', 'MAXI']).optional(),
   page:        z.coerce.number().int().positive().default(1),
   limit:       z.coerce.number().int().positive().max(1000).default(50),

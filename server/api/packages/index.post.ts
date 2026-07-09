@@ -6,6 +6,11 @@ import { createPackage } from '../../services/package.service'
 // Se viene inviato "pagamentoIniziale", registra anche il pagamento e il movimento contabile.
 // Tutto in un'unica transazione atomica (nessun dato parziale in caso di errore).
 export default defineEventHandler(async (event) => {
+  const { user } = await requireUserSession(event)
+  if (user.role !== 'ADMIN' && user.role !== 'SUPER_TUTOR') {
+    throw createError({ statusCode: 403, statusMessage: 'Forbidden' })
+  }
+
   const body = await readBody(event)
   const parsed = CreatePackageSchema.safeParse(body)
 
@@ -18,8 +23,13 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const pkg = await createPackage(parsed.data)
-
-  setResponseStatus(event, 201)
-  return { data: pkg }
+  try {
+    const pkg = await createPackage(parsed.data)
+    setResponseStatus(event, 201)
+    return { data: pkg }
+  } catch (err: any) {
+    if (err.statusCode) throw err
+    const code = err.message?.includes('non trovato') ? 404 : 400
+    throw createError({ statusCode: code, statusMessage: err.message })
+  }
 })

@@ -15,5 +15,10 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  return await createNote(result.data, sessionUser.id)
+  try {
+    return await createNote(result.data, sessionUser.id)
+  } catch (err: any) {
+    if (err.statusCode) throw err
+    throw createError({ statusCode: 400, statusMessage: err.message })
+  }
 })

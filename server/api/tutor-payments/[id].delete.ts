@@ -9,5 +9,9 @@ export default defineEventHandler(async (event) => {
   }
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'ID mancante' })
-  return await deleteTutorPayment(id)
+  try {
+    return await deleteTutorPayment(id)
+  } catch (err: any) {
+    throw createError({ statusCode: err.message?.includes('non trovato') ? 404 : 400, statusMessage: err.message })
+  }
 })

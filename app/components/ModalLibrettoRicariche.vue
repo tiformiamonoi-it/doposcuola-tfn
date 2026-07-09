@@ -32,6 +32,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { formatData } from '~/utils/format'
 
 const props = defineProps<{ pacchetto: any | null }>()
 const isOpen = defineModel<boolean>('open', { default: false })
@@ -40,10 +41,7 @@ const toast = useToast()
 const caricamentoLibretto = ref(false)
 const storicoRicariche = ref<any[]>([])
 
-function formatData(d: string | Date | null) {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
+
 
 watch(isOpen, async (val) => {
   if (val && props.pacchetto) {

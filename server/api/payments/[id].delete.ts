@@ -10,5 +10,10 @@ export default defineEventHandler(async (event) => {
   }
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'ID mancante' })
-  return await deletePayment(id)
+  try {
+    return await deletePayment(id)
+  } catch (err: any) {
+    const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('fattura') ? 403 : 400
+    throw createError({ statusCode: code, statusMessage: err.message })
+  }
 })

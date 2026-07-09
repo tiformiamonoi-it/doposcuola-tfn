@@ -9,12 +9,19 @@ let _db: DrizzleDb | undefined
 function createDb(): DrizzleDb {
   const url = process.env.DATABASE_URL
   if (!url) throw new Error('DATABASE_URL non è definita nelle variabili d\'ambiente. Controlla il file .env')
-  
-  // Opzioni ottimizzate per ambienti serverless (Vercel) e Connection Pooling (Supabase)
-  return drizzle(postgres(url, { 
+
+  // Opzioni ottimizzate per ambienti serverless (Vercel) e Connection Pooling (Supabase).
+  // IMPORTANTE: max: 10 permette 10 query parallele senza deadlock.
+  // Il PgBouncer di Supabase (Transaction Mode) gestisce il pool lato server,
+  // quindi ogni connessione qui viene acquisita e rilasciata istantaneamente
+  // dopo ogni singola query — non rischia di saturare il database.
+  // max: 1 causava deadlock: il browser fa 5-6 chiamate API in parallelo
+  // e tutte aspettavano l'unico slot disponibile → timeout infinito (Status: 0).
+  return drizzle(postgres(url, {
     ssl: 'require',
-    max: 1, // In Vercel, ogni "funzione" deve usare al massimo 1 connessione per non intasare il database
-    prepare: false // Necessario quando si usa il Connection Pooler di Supabase in modalità transazione
+    max: 10,          // Pool sicuro: permette query in parallelo senza deadlock
+    prepare: false,   // Necessario per Supabase PgBouncer in Transaction Mode
+    fetch_types: false // Previene i timeout della query di introspezione iniziale
   }), { schema })
 }
 

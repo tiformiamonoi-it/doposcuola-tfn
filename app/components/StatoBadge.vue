@@ -44,6 +44,7 @@ const colore = computed(() => {
       return 'warning'
     case 'PAGATO':       return 'info'
     case 'CHIUSO':       return 'neutral'
+    case 'SOSPESO':      return 'neutral'
     default:             return 'neutral'
   }
 })

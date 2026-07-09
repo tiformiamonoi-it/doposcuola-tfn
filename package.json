@@ -6,7 +6,9 @@
     "prepare": "nuxt prepare",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:seed-import": "tsx server/database/seed-import.ts"
+    "db:seed-import": "tsx server/database/seed-import.ts",
+    "db:fix-lessons": "tsx server/database/fix-lessons.ts",
+    "db:fix-lessons:apply": "tsx server/database/fix-lessons.ts --apply"
   },
   "dependencies": {
     "@iconify-json/heroicons": "latest",

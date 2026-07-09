@@ -132,25 +132,45 @@
           </div>
         </div>
 
-        <div class="mt-8 border-t border-slate-200 pt-4">
-          <h3 class="font-medium text-sm text-slate-500 mb-3">Aggiungi studente manuale</h3>
+        <div class="mt-8 border-t border-slate-200 pt-4 space-y-3">
+          <h3 class="font-medium text-sm text-slate-500">Aggiungi studente manuale</h3>
           <USelectMenu
+            v-model="manualeStudentId"
             searchable
             :items="studentOptions"
-            placeholder="Seleziona e aggiungi..."
+            placeholder="Seleziona studente..."
             label-key="label"
             value-key="value"
-            @update:model-value="aggiungiStudenteManuale"
+            class="w-full"
           />
+          <USelectMenu
+            v-model="manualeMateria"
+            :items="MATERIE"
+            placeholder="Seleziona materia..."
+            class="w-full"
+          />
+          <UButton icon="i-heroicons-plus" size="sm" :disabled="!manualeStudentId || !manualeMateria" :loading="aggiungendoManuale" @click="aggiungiStudenteManuale">
+            Aggiungi al matching
+          </UButton>
         </div>
       </div>
     </div>
   </div>
+
+  <ConfirmDialog
+    v-model:open="confirmOpen"
+    :title="confirmTitle"
+    :description="confirmDescription"
+    confirm-label="Elimina"
+    confirm-color="error"
+    @confirm="eseguiEliminazione"
+  />
 </template>
 
 <script setup lang="ts">
 import { format, addDays, subDays } from 'date-fns'
 import { it } from 'date-fns/locale'
+import ConfirmDialog from '~/components/ConfirmDialog.vue'
 
 definePageMeta({ middleware: ['admin-or-super'] })
 useHead({ title: 'Matching — Ti Formiamo Noi' })
@@ -186,6 +206,15 @@ const studentOptions = computed(() => {
     phone: s.studentPhone || s.parentPhone || ''
   }))
 })
+
+const MATERIE = [
+  'Matematica', 'Fisica', 'Chimica', 'Italiano', 'Inglese',
+  'Storia', 'Geografia', 'Latino', 'Greco', 'Scienze', 'Informatica',
+]
+
+const manualeStudentId = ref('')
+const manualeMateria = ref('')
+const aggiungendoManuale = ref(false)
 
 function cambiaGiorno(dir: number) {
   currentDate.value = dir > 0 ? addDays(currentDate.value, 1) : subDays(currentDate.value, 1)
@@ -273,44 +302,63 @@ async function rimuoviAssegnazione(badge: any) {
   }
 }
 
-async function eliminaPrenotazioneManuale(badge: any) {
-  if (!confirm(`Sei sicuro di voler eliminare la prenotazione per ${badge.studentName} ${badge.studentSurname}?`)) return
+const confirmOpen = ref(false)
+const confirmTitle = ref('')
+const confirmDescription = ref('')
+const pendingDeleteBadge = ref<any>(null)
+
+function eliminaPrenotazioneManuale(badge: any) {
+  pendingDeleteBadge.value = badge
+  confirmTitle.value = `Eliminare la prenotazione per ${badge.studentName} ${badge.studentSurname}?`
+  confirmDescription.value = 'La prenotazione verrà rimossa definitivamente.'
+  confirmOpen.value = true
+}
+
+async function eseguiEliminazione() {
+  confirmOpen.value = false
+  if (!pendingDeleteBadge.value) return
   try {
-    await $fetch(`/api/admin/bookings/${badge.bookingId}`, {
+    await $fetch(`/api/admin/bookings/${pendingDeleteBadge.value.bookingId}`, {
       method: 'DELETE'
     })
     toast.add({ title: 'Prenotazione eliminata', color: 'success' })
     await loadData()
   } catch (err) {
     toast.add({ title: 'Errore', description: 'Impossibile eliminare la prenotazione', color: 'error' })
+  } finally {
+    pendingDeleteBadge.value = null
   }
 }
 
-async function aggiungiStudenteManuale(studentVal: any) {
-  if (!studentVal) return
-  
-  const student = typeof studentVal === 'string' ? studentOptions.value.find(s => s.value === studentVal) : studentVal
+async function aggiungiStudenteManuale() {
+  if (!manualeStudentId.value || !manualeMateria.value) return
+
+  const student = studentOptions.value.find(s => s.value === manualeStudentId.value)
   if (!student) return
 
+  aggiungendoManuale.value = true
   try {
-    // Creiamo una prenotazione "al volo" per oggi
-    const res = await $fetch('/api/admin/bookings', {
+    await $fetch('/api/admin/bookings', {
       method: 'POST',
       body: {
         studentId: student.value,
         studentName: student.firstName,
         studentSurname: student.lastName,
         studentPhone: student.phone,
-        requestedDate: dateParam.value,
+        requestedDate: dateParam.value + 'T12:00:00.000Z',
         status: 'PENDING',
-        subjects: ['Generica (Aggiunto Manualmente)']
+        subjects: [manualeMateria.value]
       }
     })
-    
+
     toast.add({ title: 'Studente aggiunto al matching', color: 'success' })
-    await loadData() // ricarica tutto
+    manualeStudentId.value = ''
+    manualeMateria.value = ''
+    await loadData()
   } catch (err) {
     toast.add({ title: 'Errore', description: 'Impossibile aggiungere studente', color: 'error' })
+  } finally {
+    aggiungendoManuale.value = false
   }
 }
 

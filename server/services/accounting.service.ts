@@ -1,6 +1,7 @@
 import { db } from '../database/client'
-import { accountingEntries, payments } from '../database/schema'
-import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm'
+import { accountingEntries, payments, systemConfigs } from '../database/schema'
+import { and, desc, eq, gte, inArray, isNull, lte, notInArray, or, sql } from 'drizzle-orm'
+import { getNeutralKeys } from '../utils/categorie'
 import { deletePayment } from './payment.service'
 import { deleteTutorPayment, reduceReimbursementOnEntryDelete } from './tutor.service'
 
@@ -123,6 +124,10 @@ export async function getPendingInvoices() {
 // ─────────────────────────────────────────────
 
 export async function getNetMargin(startDate: Date, endDate: Date) {
+  // E3: le categorie "neutre" (giroconti, saldo iniziale…) sono escluse dal margine.
+  // L'elenco è configurabile da Impostazioni → Categorie.
+  const neutre = await getNeutralKeys()
+
   const rows = await db
     .select({
       tipo:   accountingEntries.tipo,
@@ -134,6 +139,9 @@ export async function getNetMargin(startDate: Date, endDate: Date) {
         inArray(accountingEntries.tipo, ['ENTRATA', 'USCITA']),
         gte(accountingEntries.data, startDate),
         lte(accountingEntries.data, endDate),
+        neutre.length
+          ? or(isNull(accountingEntries.categoria), notInArray(accountingEntries.categoria, neutre))
+          : undefined,
       )
     )
     .groupBy(accountingEntries.tipo)
@@ -256,33 +264,99 @@ export async function getSaldiCassa() {
 }
 
 // ─────────────────────────────────────────────
-// DASHBOARD — GET /api/accounting/dashboard
-// Aggregato per il cruscotto finanziario, sul PERIODO selezionato:
-// - periodo      — entrate, uscite, margine netto nel periodo
-// - perMetodo    — entrate e uscite per ciascun metodo nel periodo
-// - saldiCassa   — rimanenze reali di cassa/banca (sempre dall'inizio, NON per periodo)
-// - previsioni   — crediti e debiti (dall'inizio)
-// - fattureInAttesa — fatture richieste ma non emesse (dall'inizio)
+// BREAKDOWN MARKETING — Entrate/Uscite categoria 'marketing' vs tutto il resto.
+// Il "resto" (doposcuola) è calcolato lato getDashboard: periodo - marketing.
 // ─────────────────────────────────────────────
 
+export async function getBreakdownMarketing(startDate: Date, endDate: Date) {
+  const rows = await db
+    .select({
+      tipo:   accountingEntries.tipo,
+      totale: sql<string>`COALESCE(SUM(${accountingEntries.importo}::numeric), 0)::text`,
+    })
+    .from(accountingEntries)
+    .where(
+      and(
+        inArray(accountingEntries.tipo, ['ENTRATA', 'USCITA']),
+        gte(accountingEntries.data, startDate),
+        lte(accountingEntries.data, endDate),
+        eq(accountingEntries.categoria, 'marketing'),
+      )
+    )
+    .groupBy(accountingEntries.tipo)
+
+  let mktE = 0
+  let mktU = 0
+  for (const r of rows) {
+    if (r.tipo === 'ENTRATA') mktE = parseFloat(r.totale)
+    else mktU = parseFloat(r.totale)
+  }
+  const r2 = (n: number) => Number(n.toFixed(2))
+  return { entrate: r2(mktE), uscite: r2(mktU), margine: r2(mktE - mktU) }
+}
+
+// ─────────────────────────────────────────────
+// DASHBOARD — GET /api/accounting/dashboard
+// ─────────────────────────────────────────────
+
+// ─────────────────────────────────────────────
+// COSTI FISSI — Spese mensili configurate in Impostazioni
+// ─────────────────────────────────────────────
+export async function getCostiFissi(): Promise<number> {
+  try {
+    const [row] = await db
+      .select({ value: systemConfigs.value })
+      .from(systemConfigs)
+      .where(eq(systemConfigs.key, 'spese_fisse'))
+      .limit(1)
+
+    if (!row?.value) return 0
+    const spese: { nome: string; importo: number }[] = JSON.parse(row.value)
+    return spese.reduce((sum, s) => sum + (Number(s.importo) || 0), 0)
+  } catch {
+    return 0
+  }
+}
+
 export async function getDashboard(startDate: Date, endDate: Date) {
-  const [periodo, perMetodo, saldiCassa, fattureInAttesa, previsioni] = await Promise.all([
+  const [periodo, perMetodo, saldiCassa, fattureInAttesa, previsioni, marketing, costiFissiMensili] = await Promise.all([
     getNetMargin(startDate, endDate),
     getMovimentiPerMetodo(startDate, endDate),
     getSaldiCassa(),
     getPendingInvoices(),
     getPrevisioni(),
+    getBreakdownMarketing(startDate, endDate),
+    getCostiFissi(),
   ])
+
+  const r2 = (n: number) => Number(n.toFixed(2))
+  const doposcuola = {
+    entrate: r2(periodo.entrate - marketing.entrate),
+    uscite:  r2(periodo.uscite  - marketing.uscite),
+    margine: r2(periodo.margine - marketing.margine),
+  }
+
+  // Calcola i mesi nel periodo per proporzionare i costi fissi (media 30.44 gg/mese)
+  const msStart = startDate.getTime()
+  const msEnd = endDate.getTime()
+  const giorniNelPeriodo = (msEnd - msStart) / (1000 * 60 * 60 * 24)
+  const mesiNelPeriodo = Math.max(0.03, giorniNelPeriodo / 30.44) // min ~1 giorno
+  const costiFissiPeriodo = r2(costiFissiMensili * mesiNelPeriodo)
+  const breakEven = r2(periodo.margine - costiFissiPeriodo)
 
   return {
     periodo,
     perMetodo,
     saldiCassa,
     previsioni,
-    fattureInAttesa: {
-      count: fattureInAttesa.length,
-      lista: fattureInAttesa,
+    fattureInAttesa: { count: fattureInAttesa.length, lista: fattureInAttesa },
+    breakdown: { doposcuola, marketing },
+    costiFissi: {
+      mensili: costiFissiMensili,
+      periodo: costiFissiPeriodo,
+      mesi: Math.round(mesiNelPeriodo * 10) / 10,
     },
+    breakEven,
   }
 }
 
@@ -308,7 +382,7 @@ export async function deleteAccountingEntry(
   motivo = 'Eliminazione manuale',
 ) {
   const [entry] = await db.select().from(accountingEntries).where(eq(accountingEntries.id, entryId)).limit(1)
-  if (!entry) throw createError({ statusCode: 404, statusMessage: 'Movimento non trovato' })
+  if (!entry) throw new Error('Movimento non trovato')
 
   if (mode === 'storno') {
     return await reverseTransaction(entryId, motivo)
@@ -345,18 +419,22 @@ export async function updateAccountingEntry(
     categoria?: string | null
     metodoPagamento?: string | null
     data?: string
+    fatturaEmessa?: boolean
   },
 ) {
   const [entry] = await db.select().from(accountingEntries).where(eq(accountingEntries.id, entryId)).limit(1)
-  if (!entry) throw createError({ statusCode: 404, statusMessage: 'Movimento non trovato' })
-  if (isAutoEntry(entry)) {
-    throw createError({
-      statusCode: 403,
-      statusMessage: 'Questo movimento è automatico: modificalo dal pagamento di origine (oppure eliminalo).',
-    })
+  if (!entry) throw new Error('Movimento non trovato')
+
+  const hasContentChange = data.tipo !== undefined || data.importo !== undefined
+    || data.descrizione !== undefined || data.categoria !== undefined
+    || data.metodoPagamento !== undefined || data.data !== undefined
+
+  if (isAutoEntry(entry) && hasContentChange) {
+    throw new Error('Questo movimento è automatico: modificalo dal pagamento di origine (oppure eliminalo).')
   }
 
   const changes: Record<string, unknown> = { updatedAt: new Date() }
+  if (data.fatturaEmessa !== undefined)   changes.fatturaEmessa   = data.fatturaEmessa
   if (data.tipo !== undefined)            changes.tipo            = data.tipo
   if (data.importo !== undefined)         changes.importo         = String(data.importo)
   if (data.descrizione !== undefined)     changes.descrizione     = data.descrizione

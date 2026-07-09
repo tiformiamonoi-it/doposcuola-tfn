@@ -49,7 +49,7 @@ export const StudentSchema = z.object({
       z.literal(''),
       z.null(),
       z.undefined()
-    ]),
+    ]).optional(),
 
   studentEmail: z
     .union([
@@ -57,7 +57,7 @@ export const StudentSchema = z.object({
       z.literal(''),
       z.null(),
       z.undefined()
-    ]),
+    ]).optional(),
 
   // Dati genitore per fatturazione (opzionali ma consigliati)
   parentName: z
@@ -73,7 +73,7 @@ export const StudentSchema = z.object({
       z.literal(''),
       z.null(),
       z.undefined()
-    ]),
+    ]).optional(),
 
   parentPhone: z
     .union([
@@ -81,7 +81,7 @@ export const StudentSchema = z.object({
       z.literal(''),
       z.null(),
       z.undefined()
-    ]),
+    ]).optional(),
 
   parentIndirizzo: z
     .string()
@@ -103,7 +103,7 @@ export const StudentSchema = z.object({
       z.literal(''),
       z.null(),
       z.undefined()
-    ]),
+    ]).optional(),
 
   parentCF: z
     .union([
@@ -111,7 +111,7 @@ export const StudentSchema = z.object({
       z.literal(''),
       z.null(),
       z.undefined()
-    ]),
+    ]).optional(),
 
   parentPIva: z
     .union([
@@ -119,7 +119,7 @@ export const StudentSchema = z.object({
       z.literal(''),
       z.null(),
       z.undefined()
-    ]),
+    ]).optional(),
 
   // Informazioni aggiuntive
   note:            z.string().max(2000, 'Le note non possono superare 2000 caratteri').optional().nullable(),

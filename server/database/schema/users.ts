@@ -1,4 +1,4 @@
-import { pgTable, text, varchar, boolean, timestamp, uniqueIndex, index, numeric } from 'drizzle-orm/pg-core'
+import { pgTable, text, varchar, boolean, timestamp, date, uniqueIndex, index, numeric } from 'drizzle-orm/pg-core'
 import { cuid, userRoleEnum, tutorPaymentModeEnum } from './common'
 
 export const users = pgTable('users', {
@@ -35,7 +35,8 @@ export const tutorProfiles = pgTable('tutor_profiles', {
 export const tutorAvailabilities = pgTable('tutor_availabilities', {
   id:     text('id').primaryKey().$defaultFn(cuid),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  date:   timestamp('date', { withTimezone: true }).notNull(),
+  // Giorno civile della disponibilità (solo data, senza ora né fuso orario)
+  date:   date('date', { mode: 'string' }).notNull(),
   notes:  text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

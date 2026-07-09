@@ -9,5 +9,9 @@ export default defineEventHandler(async (event) => {
   }
   const rid = getRouterParam(event, 'rid')
   if (!rid) throw createError({ statusCode: 400, statusMessage: 'ID rimborso mancante' })
-  return await deleteReimbursement(rid)
+  try {
+    return await deleteReimbursement(rid)
+  } catch (err: any) {
+    throw createError({ statusCode: err.message?.includes('non trovato') ? 404 : 400, statusMessage: err.message })
+  }
 })

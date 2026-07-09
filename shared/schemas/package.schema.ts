@@ -11,6 +11,7 @@
  */
 
 import { z } from 'zod'
+import { PaymentTypeEnum, PaymentMethodEnum } from './payment.schema'
 
 // ─────────────────────────────────────────────
 // ENUM CONDIVISI
@@ -29,14 +30,6 @@ export const PackageStatusEnum = z.enum([
   'PAGATO',
   'CHIUSO',
 ])
-
-export const PaymentTypeEnum = z.enum(['ACCONTO', 'SALDO', 'RATA', 'INTEGRAZIONE'], {
-  message: 'Tipo pagamento non valido. Scegli tra: Acconto, Saldo, Rata, Integrazione',
-})
-
-export const PaymentMethodEnum = z.enum(['CONTANTI', 'BONIFICO', 'POS', 'ASSEGNO', 'ALTRO'], {
-  message: 'Metodo di pagamento non valido',
-})
 
 // ─────────────────────────────────────────────
 // SCHEMA PAGAMENTO INIZIALE (opzionale alla creazione del pacchetto)
@@ -182,33 +175,8 @@ export const UpdatePackageSchema = z
     orarioGiornaliero: z.number().positive().max(24).optional().nullable(),
     standardPackageId: z.string().min(1).optional().nullable(),
     note:              z.string().max(2000).optional().nullable(),
+    sospeso:           z.boolean().optional(),
   })
-
-// ─────────────────────────────────────────────
-// SCHEMA PAGAMENTO (POST /api/payments)
-// ─────────────────────────────────────────────
-
-export const CreatePaymentSchema = z.object({
-  packageId: z
-    .string({ message: "L'ID del pacchetto è obbligatorio" })
-    .min(1, "L'ID del pacchetto non è valido"),
-
-  importo: z
-    .number({ message: "L'importo è obbligatorio" })
-    .positive("L'importo deve essere maggiore di zero")
-    .max(99999, "L'importo non può superare € 99.999"),
-
-  tipoPagamento:   PaymentTypeEnum,
-  metodoPagamento: PaymentMethodEnum,
-
-  dataPagamento: z.coerce
-    .date({ message: 'Data di pagamento non valida' })
-    .default(() => new Date()),
-
-  richiedeFattura: z.boolean().default(false),
-  riferimento:     z.string().max(200).optional(),
-  note:            z.string().max(500).optional(),
-})
 
 // ─────────────────────────────────────────────
 // SCHEMA QUERY PACCHETTI (GET /api/packages)
@@ -247,6 +215,8 @@ export const RechargePackageSchema = z.object({
   pagamentoIniziale: InitialPaymentSchema.optional(),
 
   note: z.string().max(500, 'Le note non possono superare 500 caratteri').optional(),
+
+  sospeso: z.boolean().optional(),
 })
 
 // ─────────────────────────────────────────────
@@ -254,9 +224,30 @@ export const RechargePackageSchema = z.object({
 // ─────────────────────────────────────────────
 export type CreatePackageInput  = z.infer<typeof CreatePackageSchema>
 export type UpdatePackageInput  = z.infer<typeof UpdatePackageSchema>
-export type CreatePaymentInput  = z.infer<typeof CreatePaymentSchema>
 export type InitialPaymentInput = z.infer<typeof InitialPaymentSchema>
 export type RechargePackageInput = z.infer<typeof RechargePackageSchema>
 export type PackageQuery        = z.infer<typeof PackageQuerySchema>
 export type PackageStatus       = z.infer<typeof PackageStatusEnum>
 export type PackageType         = z.infer<typeof PackageTypeEnum>
+
+// ─────────────────────────────────────────────
+// SCHEMA MODIFICA AVANZATA PACCHETTO (POST /api/packages/:id/upgrade)
+// Usato per cambiare le ore acquistate / giorni, e gestire integrazioni
+// ─────────────────────────────────────────────
+
+export const UpgradePackageSchema = z.object({
+  // Quantità finali (devono sempre coprire almeno ciò che è stato consumato)
+  nuoveOreAcquistate: z.number().nonnegative().optional(),
+  nuoviGiorniAcquistati: z.number().int().nonnegative().optional(),
+  
+  // Nuovo prezzo totale (può diminuire se le ore diminuiscono, ma non sotto il pagato, validato a server)
+  nuovoPrezzoTotale: z.number().nonnegative(),
+  
+  // Scadenza
+  nuovaDataScadenza: z.coerce.date().optional().nullable(),
+  
+  // Pagamento di integrazione (obbligatorio se nuovoPrezzoTotale > prezzoTotalePrecedente e importoPagato era totale, ma il server lo gestirà come opzionale se la differenza viene messa "in debito" o saldata subito)
+  pagamentoIntegrazione: InitialPaymentSchema.optional(),
+})
+
+export type UpgradePackageInput = z.infer<typeof UpgradePackageSchema>

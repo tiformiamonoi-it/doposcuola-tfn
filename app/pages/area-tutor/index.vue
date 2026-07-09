@@ -1,15 +1,19 @@
 <template>
-  <div class="space-y-6 max-w-4xl mx-auto">
+  <div class="space-y-6 max-w-2xl mx-auto">
     <!-- Intestazione -->
     <div>
       <h1 class="text-2xl font-bold text-slate-900">Area Personale Tutor</h1>
-      <p class="text-slate-500">Gestisci le tue presenze e inserisci note didattiche.</p>
+      <p class="text-slate-500">Gestisci le tue presenze, lezioni e note.</p>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      
-      <!-- 1) CALENDARIO DISPONIBILITÀ -->
-      <UCard>
+    <!-- Navigazione rapida -->
+    <div class="flex gap-2">
+      <UButton to="/tutor-calendario" icon="i-heroicons-calendar-days" variant="soft" size="sm">Il mio Calendario</UButton>
+      <UButton to="/area-tutor/cronologia" icon="i-heroicons-document-text" variant="soft" size="sm">Cronologia Note</UButton>
+    </div>
+
+    <!-- CALENDARIO DISPONIBILITÀ -->
+    <UCard>
         <template #header>
           <div class="flex items-center justify-between">
             <h2 class="font-semibold text-slate-800">Le tue disponibilità</h2>
@@ -53,44 +57,6 @@
           </button>
         </div>
       </UCard>
-
-      <!-- 2) INSERIMENTO NOTE -->
-      <UCard>
-        <template #header>
-          <h2 class="font-semibold text-slate-800">Nuova Nota Studente</h2>
-          <p class="text-xs text-slate-500 font-normal">Aggiungi un commento su un alunno.</p>
-        </template>
-        
-        <UForm :state="notaState" class="space-y-4" @submit="salvaNota">
-          <UFormField label="Studente" required>
-            <USelectMenu
-              v-model="notaState.studentId"
-              :items="studentsOptions"
-              searchable
-              placeholder="Cerca studente..."
-              value-key="value"
-              label-key="label"
-              class="w-full"
-            />
-          </UFormField>
-
-          <UFormField label="Visibilità" required>
-            <URadioGroup
-              v-model="notaState.visibilita"
-              :items="[{ label: 'Interna (Solo Staff)', value: 'INTERNA' }, { label: 'Famiglia (Visibile ai genitori)', value: 'FAMIGLIA' }]"
-            />
-          </UFormField>
-
-          <UFormField label="Contenuto della nota" required>
-            <UTextarea v-model="notaState.contenuto" :rows="4" placeholder="Scrivi qui..." />
-          </UFormField>
-
-          <div class="flex justify-end pt-2">
-            <UButton type="submit" icon="i-heroicons-paper-airplane" :loading="salvandoNota">Salva Nota</UButton>
-          </div>
-        </UForm>
-      </UCard>
-    </div>
   </div>
 </template>
 
@@ -162,41 +128,5 @@ async function toggleDisponibilita(dateStr: string) {
   }
 }
 
-// ─── NOTE STUDENTE ───
-const salvandoNota = ref(false)
-const notaState = reactive({
-  studentId: '',
-  visibilita: 'INTERNA' as 'INTERNA' | 'FAMIGLIA',
-  contenuto: ''
-})
-
-const { data: studentsRes } = useLazyFetch('/api/students?active=true&limit=1000')
-const studentsOptions = computed(() => {
-  return (studentsRes.value?.data || []).map((s: any) => ({
-    label: `${s.firstName} ${s.lastName}`,
-    value: s.id
-  }))
-})
-
-async function salvaNota() {
-  if (!notaState.studentId || !notaState.contenuto) {
-    toast.add({ title: 'Compila tutti i campi', color: 'warning' })
-    return
-  }
-  salvandoNota.value = true
-  try {
-    await $fetch('/api/notes', {
-      method: 'POST',
-      body: notaState
-    })
-    toast.add({ title: 'Nota salvata con successo', color: 'success' })
-    notaState.contenuto = ''
-    notaState.studentId = ''
-  } catch (err) {
-    toast.add({ title: 'Errore salvataggio nota', color: 'error' })
-  } finally {
-    salvandoNota.value = false
-  }
-}
 </script>
 

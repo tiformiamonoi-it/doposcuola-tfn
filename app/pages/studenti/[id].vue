@@ -1,6 +1,5 @@
 <template>
   <div class="space-y-6">
-
     <!-- Skeleton caricamento -->
     <template v-if="pending">
       <div class="space-y-4">
@@ -18,276 +17,349 @@
 
     <!-- Contenuto principale -->
     <template v-else>
-      <!-- Intestazione -->
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <UButton to="/studenti" variant="ghost" icon="i-heroicons-arrow-left" size="sm" />
-          <div>
-            <h2 class="text-xl font-semibold text-slate-900">{{ studente.lastName }} {{ studente.firstName }}</h2>
-            <p class="text-sm text-slate-500">{{ studente.classe ?? '' }} {{ studente.scuola ? '— ' + studente.scuola : '' }}</p>
-          </div>
-        </div>
-        <div class="flex gap-2">
-          <UBadge :color="studente.active ? 'success' : 'neutral'" variant="subtle" size="md">
-            {{ studente.active ? 'Attivo' : 'Inattivo' }}
-          </UBadge>
-          <UButton icon="i-heroicons-pencil-square" variant="outline" size="sm" @click="apriModalModifica">Modifica</UButton>
-          <UButton
-            v-if="studente.active"
-            icon="i-heroicons-user-minus"
-            variant="outline"
-            color="error"
-            size="sm"
-            :loading="disattivando"
-            @click="disattivaStudente"
-          >
-            Disattiva
-          </UButton>
+      <div class="flex items-center justify-between mb-4">
+        <UButton to="/studenti" variant="ghost" icon="i-heroicons-arrow-left" size="sm">Torna alla lista</UButton>
+        <div class="flex items-center gap-2">
+          <UButton icon="i-heroicons-pencil-square" variant="ghost" size="sm" @click="apriModalModifica">Modifica</UButton>
+          <UButton v-if="studente.active" icon="i-heroicons-user-minus" variant="ghost" color="error" size="sm" :loading="disattivando" @click="disattivaStudente">Disattiva</UButton>
         </div>
       </div>
 
-      <!-- Card info studente -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <UCard>
-          <template #header>
-            <div class="flex items-center gap-2">
-              <UIcon name="i-heroicons-academic-cap" class="w-4 h-4 text-tfn-500" />
-              <span class="font-medium text-slate-800">Dati Studente</span>
-            </div>
-          </template>
-          <dl class="space-y-2 text-sm">
-            <InfoRow label="Nome" :value="`${studente.firstName} ${studente.lastName}`" />
-            <InfoRow label="Classe" :value="studente.classe" />
-            <InfoRow label="Scuola" :value="studente.scuola" />
-            <InfoRow label="Telefono" :value="studente.studentPhone" />
-            <InfoRow label="Email" :value="studente.studentEmail" />
-            <InfoRow v-if="studente.bisogniSpeciali" label="Bisogni speciali" :value="studente.bisogniSpeciali" highlight />
-            <InfoRow v-if="studente.note" label="Note" :value="studente.note" />
-          </dl>
-        </UCard>
-
-        <UCard>
-          <template #header>
-            <div class="flex items-center gap-2">
-              <UIcon name="i-heroicons-user" class="w-4 h-4 text-tfn-500" />
-              <span class="font-medium text-slate-800">Dati Genitore</span>
-            </div>
-          </template>
-          <dl class="space-y-2 text-sm">
-            <InfoRow label="Nome" :value="studente.parentName" />
-            <InfoRow label="Email" :value="studente.parentEmail" />
-            <InfoRow label="Telefono" :value="studente.parentPhone" />
-            <InfoRow label="Indirizzo" :value="studente.parentIndirizzo" />
-            <InfoRow label="Città" :value="studente.parentCitta ? `${studente.parentCitta} ${studente.parentCap ?? ''}`.trim() : null" />
-            <InfoRow label="Cod. Fiscale" :value="studente.parentCF" />
-            <InfoRow label="P. IVA" :value="studente.parentPIva" />
-          </dl>
-        </UCard>
-      </div>
-
-      <!-- Sezione pacchetti -->
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <UIcon name="i-heroicons-cube" class="w-4 h-4 text-tfn-500" />
-              <span class="font-medium text-slate-800">Pacchetti</span>
-              <UBadge color="neutral" variant="subtle">{{ pacchetti.length }}</UBadge>
-            </div>
-            <UButton icon="i-heroicons-plus" size="xs" :to="`/pacchetti?studentId=${studente.id}&studentName=${encodeURIComponent(studente.lastName + ' ' + studente.firstName)}`">
-              Nuovo pacchetto
-            </UButton>
-          </div>
-        </template>
-
-        <div v-if="pendingPacchetti" class="space-y-2 py-2">
-          <USkeleton v-for="i in 2" :key="i" class="h-16 w-full" />
-        </div>
-
-        <div v-else-if="pacchetti.length === 0" class="py-8 text-center text-slate-400 text-sm">
-          Nessun pacchetto per questo studente.
-        </div>
-
-        <div v-else class="space-y-2">
-          <div
-            v-for="pkg in pacchetti"
-            :key="pkg.id"
-            class="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:bg-slate-50"
-          >
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 flex-wrap">
-                <span class="font-medium text-sm text-slate-800">{{ pkg.nome }}</span>
-                <UBadge color="neutral" variant="outline" size="xs">{{ pkg.tipo }}</UBadge>
-                <StatoBadge v-for="s in riassumiStati(pkg.stati)" :key="s" :stato="s" :pacchetto="pkg" />
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- SIDEBAR -->
+        <div class="lg:col-span-4 space-y-6">
+          <UCard :ui="{ body: 'p-6' }">
+            <div class="flex flex-col items-center text-center mb-6">
+              <UAvatar :alt="studente.firstName + ' ' + studente.lastName" size="3xl" class="mb-3 bg-primary-500 text-white font-bold" :ui="{ fallback: 'text-white' }" />
+              <h2 class="text-2xl font-semibold text-slate-900">{{ studente.firstName }} {{ studente.lastName }}</h2>
+              <p class="text-sm text-slate-500 mt-1">{{ studente.classe ?? '' }} <span v-if="studente.scuola">• {{ studente.scuola }}</span></p>
+              
+              <div class="flex items-center gap-2 mt-3">
+                <UBadge :color="studente.active ? 'success' : 'neutral'" variant="subtle" size="sm">
+                  {{ studente.active ? 'Attivo' : 'Inattivo' }}
+                </UBadge>
+                <UBadge v-if="studente.bisogniSpeciali" color="orange" variant="subtle" size="sm">BES / DSA</UBadge>
               </div>
-              <div class="text-sm">
-                <div class="font-medium">
-                  <template v-if="pkg.tipo === 'ORE'">
-                    {{ parseFloat(pkg.oreResiduo) }} / {{ parseFloat(pkg.oreAcquistate) }} ore
-                  </template>
-                  <template v-else-if="pkg.tipo === 'MENSILE'">
-                    {{ pkg.giorniResiduo ?? 0 }} / {{ pkg.giorniAcquistati ?? 0 }} giorni
-                    <span class="text-xs text-slate-400 font-normal block">({{ parseFloat(pkg.oreAcquistate) - parseFloat(pkg.oreResiduo) }} ore cons.)</span>
-                  </template>
-                  <template v-else-if="pkg.tipo === 'A_CONSUMO'">
-                    {{ parseFloat(pkg.oreResiduo) }} ore (libretto)
-                  </template>
+            </div>
+
+            <USeparator class="my-4" />
+
+            <div class="space-y-3 text-sm">
+              <div class="flex items-center gap-3" v-if="studente.studentPhone">
+                <UIcon name="i-heroicons-phone" class="w-4 h-4 text-slate-400" />
+                <div>
+                  <div class="text-xs text-slate-500">Telefono studente</div>
+                  <div class="font-medium text-slate-700">{{ studente.studentPhone }}</div>
                 </div>
-                <span v-if="pkg.importoResiduo && parseFloat(pkg.importoResiduo) > 0" class="text-orange-500 font-medium">
-                  Residuo € {{ parseFloat(pkg.importoResiduo).toFixed(2) }}
-                </span>
+              </div>
+              <div class="flex items-center gap-3" v-if="studente.parentEmail">
+                <UIcon name="i-heroicons-envelope" class="w-4 h-4 text-slate-400" />
+                <div>
+                  <div class="text-xs text-slate-500">Email genitore</div>
+                  <div class="font-medium text-slate-700">{{ studente.parentEmail }}</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-3" v-if="studente.parentName">
+                <UIcon name="i-heroicons-user" class="w-4 h-4 text-slate-400" />
+                <div>
+                  <div class="text-xs text-slate-500">Genitore</div>
+                  <div class="font-medium text-slate-700">{{ studente.parentName }}</div>
+                </div>
               </div>
             </div>
-            <div class="flex items-center gap-4 ml-4 shrink-0">
-              <div class="text-xs text-slate-400 text-right">
-                <div>Inizio: {{ formatData(pkg.dataInizio) }}</div>
-                <div v-if="pkg.dataScadenza">Scade: {{ formatData(pkg.dataScadenza) }}</div>
+          </UCard>
+
+          <!-- PACCHETTO ATTIVO WIDGET -->
+          <UCard v-if="pacchettoPerRinnovo" class="bg-primary-600 text-white border-none shadow-lg" :ui="{ body: 'p-5', background: 'bg-primary-600' }">
+            <div class="flex justify-between items-start mb-1">
+              <div class="text-xs font-semibold tracking-wider text-primary-200 uppercase">Pacchetto Attivo</div>
+              <UBadge color="white" variant="solid" size="xs" class="text-primary-700 font-bold">{{ pacchettoPerRinnovo.tipo }}</UBadge>
+            </div>
+            <h3 class="text-lg font-bold mb-1">{{ pacchettoPerRinnovo.nome }}</h3>
+            <div class="text-xs text-primary-200 mb-4">
+              {{ formatData(pacchettoPerRinnovo.dataInizio) }} — {{ pacchettoPerRinnovo.dataScadenza ? formatData(pacchettoPerRinnovo.dataScadenza) : 'Nessuna scadenza' }}
+            </div>
+
+            <div v-if="pacchettoPerRinnovo.tipo !== 'A_CONSUMO'" class="mb-4">
+              <div class="flex justify-between text-xs font-medium mb-1.5">
+                <span class="text-xl font-bold text-white">{{ pacchettoPerRinnovo.tipo === 'MENSILE' ? pacchettoPerRinnovo.giorniResiduo : parseFloat(pacchettoPerRinnovo.oreResiduo) }} <span class="text-sm font-normal text-primary-200">/ {{ pacchettoPerRinnovo.tipo === 'MENSILE' ? pacchettoPerRinnovo.giorniAcquistati : parseFloat(pacchettoPerRinnovo.oreAcquistate) }} {{ pacchettoPerRinnovo.tipo === 'MENSILE' ? 'giorni' : 'ore' }}</span></span>
               </div>
-              <UDropdownMenu v-if="azioniPacchetto(pkg).length > 0" :items="[azioniPacchetto(pkg)]">
-                <UButton icon="i-heroicons-ellipsis-vertical" variant="ghost" size="xs" color="neutral" />
-              </UDropdownMenu>
+              <UMeter :value="pacchettoPerRinnovo.tipo === 'MENSILE' ? pacchettoPerRinnovo.giorniResiduo : parseFloat(pacchettoPerRinnovo.oreResiduo)" :max="pacchettoPerRinnovo.tipo === 'MENSILE' ? pacchettoPerRinnovo.giorniAcquistati : parseFloat(pacchettoPerRinnovo.oreAcquistate)" color="white" size="sm" />
             </div>
-          </div>
-        </div>
-      </UCard>
-
-      <!-- Sezione Note Didattiche -->
-      <StudentNoteFeed :student-id="id" />
-
-      <!-- ═══ ACCESSO PORTALE (solo ADMIN/SUPER_TUTOR) ═══ -->
-      <UCard v-if="isAdmin">
-        <template #header>
-          <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-globe-alt" class="w-4 h-4 text-tfn-500" />
-            <span class="font-medium text-slate-800">Accesso Portale Famiglie</span>
-          </div>
-        </template>
-
-        <!-- Conferma collegamento genitore già esistente -->
-        <div v-if="confermaCollegamento" class="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
-          <div class="flex items-start gap-3">
-            <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <p class="text-sm font-medium text-slate-800">Genitore già registrato</p>
-              <p class="text-sm text-slate-600 mt-1">
-                L'email <strong>{{ confermaCollegamento.email }}</strong> appartiene già all'account di
-                <strong>{{ confermaCollegamento.firstName }} {{ confermaCollegamento.lastName }}</strong>.
-              </p>
-              <p class="text-sm text-slate-600">
-                Vuoi collegare anche questo studente al loro account esistente?
-                La password non verrà modificata.
-              </p>
+            <div v-else class="mb-4">
+               <div class="text-xl font-bold text-white">{{ parseFloat(pacchettoPerRinnovo.oreResiduo) }} <span class="text-sm font-normal text-primary-200">ore (libretto)</span></div>
             </div>
-          </div>
-          <div class="flex gap-2 justify-end">
-            <UButton size="sm" variant="ghost" @click="confermaCollegamento = null">Annulla</UButton>
-            <UButton size="sm" color="primary" :loading="creandoAccesso" @click="creaAccessoPortale(true)">
-              Sì, collega studente
-            </UButton>
-          </div>
-        </div>
 
-        <!-- Nessun account portale -->
-        <template v-else-if="!(portalAccess as any)?.portalUser">
-          <p class="text-sm text-slate-500 mb-4">
-            Questo studente non ha ancora un account portale.
-            Crea un accesso per il genitore per consentirgli di visualizzare note e richiedere lezioni.
-          </p>
-          <UButton icon="i-heroicons-plus" @click="apriModalCreaAccesso">
-            Crea accesso portale
-          </UButton>
-        </template>
-
-        <!-- Account portale esistente -->
-        <template v-else>
-          <dl class="space-y-2 text-sm mb-4">
-            <div class="flex justify-between py-1 border-b border-slate-100">
-              <span class="text-slate-500">Email genitore</span>
-              <span class="font-medium">{{ (portalAccess as any).portalUser?.email }}</span>
-            </div>
-            <div class="flex justify-between py-1 border-b border-slate-100">
-              <span class="text-slate-500">Nome</span>
-              <span class="font-medium">
-                {{ (portalAccess as any).portalUser?.firstName }}
-                {{ (portalAccess as any).portalUser?.lastName }}
-              </span>
-            </div>
-            <div class="flex items-center justify-between py-1 border-b border-slate-100">
-              <span class="text-slate-500">Prenotazione online</span>
-              <USwitch
-                :model-value="(portalAccess as any).abilitatoPrenotazioneOnline"
-                :loading="togglando"
-                @update:model-value="togglePrenotazione"
-              />
-            </div>
-          </dl>
-
-          <UAlert
-            v-if="resetPassword"
-            color="warning"
-            icon="i-heroicons-key"
-            title="Nuova password temporanea"
-            :description="`Comunica questa password al genitore: ${resetPassword} (mostrata una sola volta)`"
-            class="mb-4"
-            :close-button="{ icon: 'i-heroicons-x-mark' }"
-            @close="resetPassword = null"
-          />
-
-          <UAlert
-            v-if="credenziali"
-            color="info"
-            icon="i-heroicons-key"
-            title="Account creato — comunicare al genitore:"
-            :description="`Email: ${credenziali.email} | Password: ${credenziali.tempPassword}`"
-            class="mb-4"
-            :close-button="{ icon: 'i-heroicons-x-mark' }"
-            @close="credenziali = null"
-          />
-
-          <UButton variant="outline" size="sm" @click="reimpostaPassword">
-            Reimposta password
-          </UButton>
-        </template>
-
-        <!-- Prenotazioni Attive -->
-        <template v-if="bookingsActive.length > 0">
-          <div class="mt-4 pt-4 border-t border-slate-100">
-            <div class="flex items-center gap-2 mb-3">
-              <span class="text-sm font-medium text-slate-800">Prenotazioni Attive</span>
-              <UBadge color="primary" variant="subtle">{{ bookingsActive.length }}</UBadge>
-            </div>
-            <div class="space-y-2">
-              <div
-                v-for="b in bookingsActive"
-                :key="b.id"
-                class="flex items-start justify-between border rounded-lg p-3"
-                :class="b.status === 'CONFIRMED' ? 'bg-success-50/30 border-success-100' : 'bg-amber-50/30 border-amber-100'"
+            <div class="flex items-center justify-between mt-5 pt-4 border-t border-primary-500/50">
+              <div>
+                <div class="text-xs text-primary-200">Da saldare</div>
+                <div class="text-lg font-bold">€ {{ parseFloat(pacchettoPerRinnovo.importoResiduo || 0).toFixed(2) }}</div>
+              </div>
+              <UButton 
+                v-if="parseFloat(pacchettoPerRinnovo.importoResiduo || 0) > 0"
+                color="white" 
+                variant="solid" 
+                size="sm" 
+                class="text-primary-700 font-semibold"
+                icon="i-heroicons-banknotes"
+                @click="aprirePagamento(pacchettoPerRinnovo)"
               >
-                <div class="text-sm space-y-0.5">
-                  <div class="flex items-center gap-2">
-                    <p class="font-medium text-slate-800">{{ formatDateBooking(b.requestedDate) }}</p>
-                    <UBadge size="xs" :color="b.status === 'CONFIRMED' ? 'success' : 'warning'" variant="subtle">
-                      {{ b.status === 'CONFIRMED' ? 'Confermata' : 'In attesa' }}
-                    </UBadge>
-                  </div>
-                  <p class="text-slate-500">{{ b.subjects?.map((s: any) => s.name).join(', ') }}</p>
-                  <p v-if="b.notes" class="text-slate-400 text-xs">{{ b.notes }}</p>
+                Salda
+              </UButton>
+            </div>
+          </UCard>
+          <div v-else class="flex gap-2">
+            <UButton icon="i-heroicons-plus" color="primary" block @click="apriModalCreaPacchetto">Nuovo pacchetto</UButton>
+          </div>
+
+        </div>
+
+        <!-- TABS AREA -->
+        <div class="lg:col-span-8">
+          <UTabs :items="tabItems" class="w-full">
+            <template #panoramica>
+              <div class="space-y-6 mt-4">
+                <!-- KPI Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <UCard>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">Ultima Lezione</div>
+                    <div v-if="ultimaLezione" class="flex flex-col">
+                      <span class="text-lg font-bold text-slate-800">{{ formatDateBooking(ultimaLezione.data) }}</span>
+                      <span class="text-sm text-slate-500">con {{ ultimaLezione.tutorFirstName }} {{ ultimaLezione.tutorLastName }}</span>
+                    </div>
+                    <div v-else class="text-slate-400 text-sm italic">Nessuna lezione registrata</div>
+                  </UCard>
+                  
+                  <UCard>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">Lezioni Svolte</div>
+                    <div class="flex items-baseline gap-2">
+                      <span class="text-3xl font-bold text-slate-800">{{ lezioniSvolteMeseCorrente }}</span>
+                      <span class="text-sm text-slate-500">questo mese</span>
+                    </div>
+                  </UCard>
                 </div>
-                <div class="flex gap-2 ml-3">
-                  <UButton v-if="b.status === 'PENDING'" size="xs" color="success" @click="confermaBooking(b.id)">Conferma</UButton>
-                  <UButton size="xs" color="error" variant="outline" @click="cancellaBooking(b.id)">Cancella</UButton>
+
+                <!-- Note Interne -->
+                <div class="bg-white rounded-xl shadow-sm ring-1 ring-slate-200">
+                  <div class="p-4 border-b border-slate-100 flex items-center gap-2">
+                    <UIcon name="i-heroicons-document-text" class="w-5 h-5 text-tfn-500" />
+                    <h3 class="font-medium text-slate-800">Note Interne</h3>
+                  </div>
+                  <div class="p-4 bg-yellow-50/30">
+                    <p v-if="studente.note" class="text-sm text-slate-700 whitespace-pre-wrap">{{ studente.note }}</p>
+                    <p v-else class="text-sm text-slate-400 italic">Nessuna nota inserita per questo studente.</p>
+                  </div>
+                </div>
+
+
+              </div>
+            </template>
+
+            <template #pacchetti>
+              <div class="mt-4 space-y-4">
+                <div class="flex justify-end gap-2">
+                   <UButton v-if="pacchettoPerRinnovo" icon="i-heroicons-arrow-path-rounded-square" size="sm" variant="outline" color="primary" @click="avviaRinnovo(pacchettoPerRinnovo)">Rinnova</UButton>
+                   <UButton icon="i-heroicons-plus" size="sm" color="primary" @click="apriModalCreaPacchetto">Nuovo</UButton>
+                </div>
+                <div v-if="pendingPacchetti" class="space-y-2 py-2"><USkeleton v-for="i in 2" :key="i" class="h-16 w-full" /></div>
+                <div v-else-if="pacchetti.length === 0" class="py-8 text-center text-slate-400 text-sm">Nessun pacchetto per questo studente.</div>
+                <div v-else class="space-y-2">
+                  <div v-for="pkg in pacchetti" :key="pkg.id" class="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:bg-slate-50 bg-white">
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span class="font-medium text-sm text-slate-800">{{ pkg.nome }}</span>
+                        <UBadge color="neutral" variant="outline" size="xs">{{ pkg.tipo }}</UBadge>
+                        <StatoBadge v-for="s in riassumiStati(pkg.stati)" :key="s" :stato="s" :pacchetto="pkg" />
+                      </div>
+                      <div class="text-sm mt-1">
+                        <div class="font-medium text-slate-600">
+                          <template v-if="pkg.tipo === 'ORE'">{{ parseFloat(pkg.oreResiduo) }} / {{ parseFloat(pkg.oreAcquistate) }} ore</template>
+                          <template v-else-if="pkg.tipo === 'MENSILE'">{{ pkg.giorniResiduo ?? 0 }} / {{ pkg.giorniAcquistati ?? 0 }} giorni</template>
+                          <template v-else-if="pkg.tipo === 'A_CONSUMO'">{{ parseFloat(pkg.oreResiduo) }} ore (libretto)</template>
+                        </div>
+                        <span v-if="pkg.importoResiduo && parseFloat(pkg.importoResiduo) > 0" class="text-orange-500 font-medium text-xs">Residuo € {{ parseFloat(pkg.importoResiduo).toFixed(2) }}</span>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-4 ml-4 shrink-0">
+                      <div class="text-xs text-slate-400 text-right">
+                        <div>Inizio: {{ formatData(pkg.dataInizio) }}</div>
+                        <div v-if="pkg.dataScadenza">Scade: {{ formatData(pkg.dataScadenza) }}</div>
+                      </div>
+                      <UDropdownMenu v-if="azioniPacchetto(pkg).length > 0" :items="[azioniPacchetto(pkg)]">
+                        <UButton icon="i-heroicons-ellipsis-vertical" variant="ghost" size="xs" color="neutral" />
+                      </UDropdownMenu>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </template>
-      </UCard>
+            </template>
+
+            <template #lezioni>
+              <div class="mt-4 space-y-6">
+                <!-- Storico Lezioni -->
+                <UCard :ui="{ body: 'p-0' }">
+                  <template #header>
+                    <div class="flex items-center justify-between">
+                      <h3 class="font-semibold text-slate-800 flex items-center gap-2"><UIcon name="i-heroicons-academic-cap" /> Storico Lezioni</h3>
+                      <UButton v-if="lezioni.length > 0" size="xs" variant="soft" icon="i-heroicons-arrow-down-tray" @click="esportaCsvLezioni">Esporta CSV</UButton>
+                    </div>
+                  </template>
+                  
+                  <!-- Filtri Lezioni -->
+                  <div class="p-3 border-b border-slate-100 bg-slate-50 flex gap-2 flex-wrap">
+                    <UInput v-model="filtroLezioni.dataInizio" type="date" size="sm" placeholder="Dal..." />
+                    <UInput v-model="filtroLezioni.dataFine" type="date" size="sm" placeholder="Al..." />
+                    <UButton size="sm" color="neutral" variant="ghost" @click="filtroLezioni.dataInizio = ''; filtroLezioni.dataFine = ''" v-if="filtroLezioni.dataInizio || filtroLezioni.dataFine">Reset</UButton>
+                  </div>
+
+                  <div v-if="pendingLezioni" class="p-8 flex justify-center"><UIcon name="i-heroicons-arrow-path" class="animate-spin w-6 h-6 text-slate-300" /></div>
+                  <div v-else-if="lezioniFiltrate.length === 0" class="p-8 text-center text-slate-400 text-sm">Nessuna lezione trovata.</div>
+                  <table v-else class="w-full text-left">
+                    <thead>
+                      <tr class="bg-white text-xs text-slate-500 uppercase border-b border-slate-100">
+                        <th class="py-2.5 px-4 font-semibold">Data</th>
+                        <th class="py-2.5 px-4 font-semibold">Tutor</th>
+                        <th class="py-2.5 px-4 font-semibold">Materia</th>
+                        <th class="py-2.5 px-4 font-semibold text-right">Ore</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="l in lezioniFiltrate" :key="l.lessonId" class="border-b border-slate-50 text-sm hover:bg-slate-50">
+                        <td class="py-2.5 px-4 font-medium">{{ formatData(l.data) }}</td>
+                        <td class="py-2.5 px-4">{{ l.tutorFirstName }} {{ l.tutorLastName }}</td>
+                        <td class="py-2.5 px-4 text-slate-500">{{ l.materia }} <UBadge size="xs" variant="subtle" color="neutral" class="ml-1">{{ l.tipo }}</UBadge></td>
+                        <td class="py-2.5 px-4 text-right font-medium">{{ parseFloat(l.oreScalate) }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </UCard>
+
+                <!-- Storico Prenotazioni -->
+                <UCard :ui="{ body: 'p-0' }">
+                  <template #header>
+                    <h3 class="font-semibold text-slate-800 flex items-center gap-2"><UIcon name="i-heroicons-calendar-days" /> Storico Prenotazioni</h3>
+                  </template>
+                  
+                  <div v-if="pendingBookings" class="p-8 flex justify-center"><UIcon name="i-heroicons-arrow-path" class="animate-spin w-6 h-6 text-slate-300" /></div>
+                  <div v-else-if="allBookings.length === 0" class="p-8 text-center text-slate-400 text-sm">Nessuna prenotazione trovata.</div>
+                  <div v-else class="divide-y divide-slate-100">
+                    <div v-for="b in allBookings" :key="b.id" class="p-3 flex items-center justify-between text-sm hover:bg-slate-50">
+                      <div>
+                        <div class="font-medium text-slate-800">{{ formatDateBooking(b.requestedDate) }}</div>
+                        <div class="text-slate-500 text-xs">{{ b.subjects?.map((s: any) => s.name).join(', ') }}</div>
+                        <div v-if="b.notes" class="text-slate-400 text-xs mt-0.5 italic">"{{ b.notes }}"</div>
+                      </div>
+                      <div class="flex items-center gap-3">
+                        <UBadge v-if="b.status === 'PENDING'" color="warning" variant="subtle" size="xs">In attesa</UBadge>
+                        <UBadge v-else-if="b.status === 'CANCELLED'" color="neutral" variant="subtle" size="xs">Annullata</UBadge>
+                        <template v-else-if="b.status === 'CONFIRMED'">
+                          <UBadge :color="hasLessonOnDate(b.requestedDate) ? 'success' : 'neutral'" variant="solid" size="xs">
+                            {{ hasLessonOnDate(b.requestedDate) ? 'Presente' : 'Assente / Da svolgere' }}
+                          </UBadge>
+                        </template>
+                        
+                        <div class="flex gap-1" v-if="b.status === 'PENDING'">
+                          <UButton size="xs" color="success" variant="ghost" icon="i-heroicons-check" @click="confermaBooking(b.id)" />
+                          <UButton size="xs" color="error" variant="ghost" icon="i-heroicons-x-mark" @click="cancellaBooking(b.id)" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </UCard>
+              </div>
+            </template>
+
+            <template #famiglia>
+              <div class="mt-4 space-y-6">
+                <!-- Dati Genitore -->
+                <UCard>
+                  <template #header>
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center gap-2">
+                        <UIcon name="i-heroicons-users" class="w-5 h-5 text-tfn-500" />
+                        <span class="font-medium text-slate-800">Dati Anagrafici Genitore</span>
+                      </div>
+                      <UButton icon="i-heroicons-pencil-square" variant="ghost" size="xs" @click="apriModalModifica">Modifica dati</UButton>
+                    </div>
+                  </template>
+                  <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <InfoRow label="Nome Cognome" :value="studente.parentName" />
+                    <InfoRow label="Email" :value="studente.parentEmail" />
+                    <InfoRow label="Telefono" :value="studente.parentPhone" />
+                    <InfoRow label="Indirizzo" :value="studente.parentIndirizzo" />
+                    <InfoRow label="Città e CAP" :value="studente.parentCitta ? `${studente.parentCitta} ${studente.parentCap ?? ''}`.trim() : null" />
+                    <InfoRow label="Codice Fiscale" :value="studente.parentCF" />
+                    <InfoRow label="Partita IVA" :value="studente.parentPIva" />
+                  </dl>
+                </UCard>
+
+                <!-- Portale Famiglie -->
+                <UCard v-if="isAdmin">
+                  <template #header>
+                    <div class="flex items-center gap-2">
+                      <UIcon name="i-heroicons-globe-alt" class="w-5 h-5 text-tfn-500" />
+                      <span class="font-medium text-slate-800">Credenziali Portale Famiglie</span>
+                    </div>
+                  </template>
+
+                  <div v-if="confermaCollegamento" class="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
+                    <div class="flex items-start gap-3">
+                      <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p class="text-sm font-medium text-slate-800">Genitore già registrato</p>
+                        <p class="text-sm text-slate-600 mt-1">L'email <strong>{{ confermaCollegamento.email }}</strong> appartiene già all'account di <strong>{{ confermaCollegamento.firstName }} {{ confermaCollegamento.lastName }}</strong>.</p>
+                        <p class="text-sm text-slate-600">Vuoi collegare anche questo studente al loro account esistente? La password non verrà modificata.</p>
+                      </div>
+                    </div>
+                    <div class="flex gap-2 justify-end">
+                      <UButton size="sm" variant="ghost" @click="confermaCollegamento = null">Annulla</UButton>
+                      <UButton size="sm" color="primary" :loading="creandoAccesso" @click="creaAccessoPortale(true)">Sì, collega studente</UButton>
+                    </div>
+                  </div>
+                  <template v-else-if="!(portalAccess as any)?.portalUser">
+                    <p class="text-sm text-slate-500 mb-4">Questo studente non ha ancora un account portale. Crea un accesso per il genitore per consentirgli di visualizzare note e richiedere lezioni.</p>
+                    <UButton icon="i-heroicons-plus" @click="apriModalCreaAccesso">Crea accesso portale</UButton>
+                  </template>
+                  <template v-else>
+                    <div class="bg-slate-50 border border-slate-100 rounded-lg p-4">
+                      <dl class="space-y-3 text-sm">
+                        <div class="flex justify-between items-center border-b border-slate-200 pb-2">
+                          <span class="text-slate-500">Email di accesso</span>
+                          <span class="font-medium text-slate-800">{{ (portalAccess as any).portalUser?.email }}</span>
+                        </div>
+                        <div class="flex items-center justify-between pt-1">
+                          <span class="text-slate-500">Prenotazione online abilitata</span>
+                          <USwitch :model-value="(portalAccess as any).abilitatoPrenotazioneOnline" :loading="togglando" @update:model-value="togglePrenotazione" />
+                        </div>
+                      </dl>
+                    </div>
+
+                    <UAlert v-if="resetPassword" color="warning" icon="i-heroicons-key" title="Nuova password temporanea" :description="`Comunica questa password al genitore: ${resetPassword} (mostrata una sola volta)`" class="mt-4" :close-button="{ icon: 'i-heroicons-x-mark' }" @close="resetPassword = null" />
+                    <UAlert v-if="credenziali" color="info" icon="i-heroicons-key" title="Account creato — comunicare al genitore:" :description="`Email: ${credenziali.email} | Password: ${credenziali.tempPassword}`" class="mt-4" :close-button="{ icon: 'i-heroicons-x-mark' }" @close="credenziali = null" />
+
+                    <div class="mt-4 flex gap-2">
+                      <UButton variant="outline" size="sm" icon="i-heroicons-key" @click="reimpostaPassword">Genera nuova password</UButton>
+                    </div>
+                  </template>
+                </UCard>
+              </div>
+            </template>
+
+          </UTabs>
+        </div>
+      </div>
 
     </template>
 
     <!-- ─── MODAL PAGAMENTO, RICARICA E LIBRETTO ─── -->
     <ModalPagamentoPacchetto
       v-model:open="modalPagamentoAperto"
+      :pacchetto="pacchettoSelezionato"
+      @refresh="refreshPacchetti"
+    />
+
+    <ModalModificaPacchetto
+      v-model:open="modalModificaPacchettoAperto"
       :pacchetto="pacchettoSelezionato"
       @refresh="refreshPacchetti"
     />
@@ -301,6 +373,15 @@
     <ModalLibrettoRicariche
       v-model:open="modalLibrettoAperto"
       :pacchetto="pacchettoSelezionato"
+    />
+
+    <!-- ─── MODAL CREA PACCHETTO ─── -->
+    <ModalCreaPacchetto
+      v-model:open="modalCreaAperto"
+      :student-id="id"
+      :student-name="studente?.lastName + ' ' + studente?.firstName"
+      :rinnovo-da="pacchettoDaRinnovare"
+      @refresh="refreshPacchetti"
     />
 
     <!-- ─── MODAL CREA ACCESSO PORTALE ─── -->
@@ -455,9 +536,20 @@
     </UModal>
 
   </div>
+
+  <ConfirmDialog
+    v-model:open="confirmOpen"
+    :title="confirmTitle"
+    :description="confirmDescription"
+    :confirm-label="confirmLabel"
+    :confirm-color="confirmColor"
+    @confirm="eseguiConferma"
+  />
 </template>
 
+
 <script setup lang="ts">
+import ConfirmDialog from '~/components/ConfirmDialog.vue'
 import { UpdateStudentSchema } from '#shared/schemas/student.schema'
 import { normalizzaTelefono } from '~/utils/phone'
 import { riassumiStati } from '~/utils/statiPacchetto'
@@ -468,36 +560,61 @@ const route = useRoute()
 const toast = useToast()
 const id = route.params.id as string
 
-// ─── Scuole e classi (stesso elenco dell'index) ───
-const SCUOLE_TRAPANI = [
-  'Liceo Scientifico "G. Galilei" - Trapani',
-  'Liceo Classico "L. Ximenes" - Trapani',
-  'Liceo delle Scienze Umane "G. B. Fardella" - Trapani',
-  'Liceo Artistico di Trapani',
-  'ITC "P. F. Calvino" - Trapani',
-  'ITIS "G. Ferro" - Trapani',
-  'IPSIA "L. Cassia" - Trapani',
-  'Istituto Alberghiero di Trapani',
-  'I.C. "S. Borsellino-Ajello" - Trapani',
-  'I.C. "G. Mazzini" - Trapani',
-  'I.C. "E. De Amicis" - Trapani',
-  'I.C. "G. Garibaldi" - Trapani',
-  'I.C. "L. Da Vinci" - Trapani',
-  'I.C. "G. Petrosino" - Petrosino (TP)',
-  'Liceo "G. G. Adria" - Marsala',
-  'ITIS "P. Gentili" - Marsala',
-  'ITC "A. Lombardo" - Marsala',
-  'I.C. di Erice',
-  'I.C. di Paceco',
-  'I.C. di Valderice',
+const tabItems = [
+  { label: 'Panoramica', slot: 'panoramica' },
+  { label: 'Pacchetti', slot: 'pacchetti' },
+  { label: 'Lezioni', slot: 'lezioni' },
+  { label: 'Famiglia', slot: 'famiglia' }
 ]
 
-const CLASSI_LISTA = [
-  '1ª Elementare', '2ª Elementare', '3ª Elementare', '4ª Elementare', '5ª Elementare',
-  '1ª Media', '2ª Media', '3ª Media',
-  '1ª Superiore', '2ª Superiore', '3ª Superiore', '4ª Superiore', '5ª Superiore',
-  'Università', 'Concorsi / Adulti',
-]
+const filtroLezioni = reactive({ dataInizio: '', dataFine: '' })
+const { data: dataLezioni, pending: pendingLezioni } = useLazyFetch('/api/lessons', { query: { studentId: id, limit: 1000 } })
+const lezioni = computed(() => dataLezioni.value?.data ?? [])
+const lezioniFiltrate = computed(() => {
+  let list = lezioni.value as any[]
+  if (filtroLezioni.dataInizio) list = list.filter(l => new Date(l.data) >= new Date(filtroLezioni.dataInizio))
+  if (filtroLezioni.dataFine) list = list.filter(l => new Date(l.data) <= new Date(filtroLezioni.dataFine))
+  return list
+})
+
+const ultimaLezione = computed(() => {
+  if (lezioni.value.length === 0) return null
+  return lezioni.value[0]
+})
+
+const lezioniSvolteMeseCorrente = computed(() => {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth()
+  return (lezioni.value as any[]).filter(l => {
+    const d = new Date(l.data)
+    return d.getFullYear() === year && d.getMonth() === month
+  }).length
+})
+
+function esportaCsvLezioni() {
+  const righe = [
+    ['Data', 'Tutor', 'Materia', 'Tipo', 'Ore scalate'],
+    ...lezioniFiltrate.value.map((l: any) => [formatData(l.data), `${l.tutorLastName} ${l.tutorFirstName}`, l.materia || '', l.tipo || '', parseFloat(l.oreScalate)]),
+  ]
+  const csv = righe.map(r => r.join(';')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `lezioni-${studente.value?.lastName ?? id}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function hasLessonOnDate(dateStr: string) {
+  const target = (dateStr as string).slice(0, 10)
+  return (lezioni.value as any[]).some(l => (l.data as string).slice(0, 10) === target)
+}
+
+
+import { SCUOLE_TRAPANI, CLASSI_LISTA } from '~/utils/schools'
+import { formatData } from '~/utils/format'
 
 // ─── Fetch studente ───
 const { data: studente, pending, refresh } = useLazyFetch(`/api/students/${id}`)
@@ -508,27 +625,56 @@ const { data: datiPacchetti, pending: pendingPacchetti, refresh: refreshPacchett
 })
 const pacchetti = computed(() => datiPacchetti.value?.data ?? [])
 
-// ─── Formato data ───
-function formatData(d: string | Date | null) {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
+const pacchettoPerRinnovo = computed(() => {
+  return (pacchetti.value as any[]).find(pkg => {
+    const stati = (pkg.stati as string[]) ?? []
+    return !stati.includes('CHIUSO')
+  }) ?? null
+})
+
+
 
 // ─── Disattiva studente ───
 const disattivando = ref(false)
 
+const confirmOpen = ref(false)
+const confirmTitle = ref('')
+const confirmDescription = ref('')
+const confirmLabel = ref('Conferma')
+const confirmColor = ref<'primary' | 'error'>('primary')
+const pendingAction = ref<(() => void) | null>(null)
+
+function chiediConferma(config: { title: string; description: string; confirmLabel?: string; confirmColor?: 'primary' | 'error' }, action: () => void) {
+  confirmTitle.value = config.title
+  confirmDescription.value = config.description
+  confirmLabel.value = config.confirmLabel ?? 'Conferma'
+  confirmColor.value = config.confirmColor ?? 'primary'
+  pendingAction.value = action
+  confirmOpen.value = true
+}
+
+function eseguiConferma() {
+  confirmOpen.value = false
+  pendingAction.value?.()
+  pendingAction.value = null
+}
+
 async function disattivaStudente() {
-  if (!confirm('Sei sicuro di voler disattivare questo studente?')) return
-  disattivando.value = true
-  try {
-    await $fetch(`/api/students/${id}`, { method: 'DELETE' })
-    toast.add({ title: 'Studente disattivato', color: 'success', icon: 'i-heroicons-check-circle' })
-    refresh()
-  } catch (err: any) {
-    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile disattivare', color: 'error' })
-  } finally {
-    disattivando.value = false
-  }
+  chiediConferma(
+    { title: 'Disattivare questo studente?', description: 'Lo studente verrà contrassegnato come inattivo.', confirmLabel: 'Disattiva', confirmColor: 'error' },
+    async () => {
+      disattivando.value = true
+      try {
+        await $fetch(`/api/students/${id}`, { method: 'DELETE' })
+        toast.add({ title: 'Studente disattivato', color: 'success', icon: 'i-heroicons-check-circle' })
+        refresh()
+      } catch (err: any) {
+        toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile disattivare', color: 'error' })
+      } finally {
+        disattivando.value = false
+      }
+    }
+  )
 }
 
 // ─── Modal modifica ───
@@ -615,7 +761,9 @@ async function salvaModifica() {
 // ─── Azioni pacchetto ───
 function azioniPacchetto(pkg: any) {
   const azioni = [
-    { label: 'Registra pagamento', icon: 'i-heroicons-banknotes', onSelect: () => aprirePagamento(pkg) }
+    { label: 'Dettagli pacchetto', icon: 'i-heroicons-document-magnifying-glass', onSelect: () => navigateTo(`/pacchetti/${pkg.id}`) },
+    { label: 'Registra pagamento', icon: 'i-heroicons-banknotes', onSelect: () => aprirePagamento(pkg) },
+    { label: 'Modifica', icon: 'i-heroicons-pencil-square', onSelect: () => apriModificaPacchetto(pkg) },
   ]
   if (pkg.tipo === 'A_CONSUMO') {
     azioni.push({ label: 'Ricarica', icon: 'i-heroicons-plus-circle', onSelect: () => apriModalRicarica(pkg) })
@@ -629,6 +777,9 @@ const pacchettoSelezionato = ref<any>(null)
 const modalPagamentoAperto = ref(false)
 const modalRicaricaAperto = ref(false)
 const modalLibrettoAperto = ref(false)
+const modalCreaAperto = ref(false)
+const pacchettoDaRinnovare = ref<any>(null)
+const modalModificaPacchettoAperto = ref(false)
 
 function aprirePagamento(pkg: any) {
   pacchettoSelezionato.value = pkg
@@ -643,6 +794,22 @@ function apriModalRicarica(pkg: any) {
 function apriLibretto(pkg: any) {
   pacchettoSelezionato.value = pkg
   modalLibrettoAperto.value = true
+}
+
+function apriModalCreaPacchetto() {
+  pacchettoDaRinnovare.value = null
+  modalCreaAperto.value = true
+}
+
+function avviaRinnovo(pkg: any) {
+  pacchettoDaRinnovare.value = pkg
+  pacchettoSelezionato.value = pkg
+  modalCreaAperto.value = true
+}
+
+function apriModificaPacchetto(pkg: any) {
+  pacchettoSelezionato.value = pkg
+  modalModificaPacchettoAperto.value = true
 }
 
 // ─── Portale Famiglie ───
@@ -660,9 +827,7 @@ const { data: pendingBookings, refresh: refreshBookings } = useLazyFetch(
   `/api/admin/bookings?studentId=${id}`,
   { lazy: true }
 )
-const bookingsActive = computed(() =>
-  ((pendingBookings.value as any[]) ?? []).filter((b: any) => b.status === 'CONFIRMED' || b.status === 'PENDING')
-)
+const allBookings = computed(() => pendingBookings.value as any[] ?? [])
 
 const mostraModalCreaAccesso = ref(false)
 const datiCreaAccesso = reactive({ email: '', firstName: '', lastName: '' })

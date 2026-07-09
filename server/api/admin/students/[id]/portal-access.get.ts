@@ -11,5 +11,10 @@ export default defineEventHandler(async (event) => {
   const studentId = getRouterParam(event, 'id')
   if (!studentId) throw createError({ statusCode: 400, statusMessage: 'ID studente mancante' })
 
-  return await getPortalAccess(studentId)
+  try {
+    return await getPortalAccess(studentId)
+  } catch (err: any) {
+    if (err.statusCode) throw err
+    throw createError({ statusCode: err.message?.includes('non trovato') ? 404 : 400, statusMessage: err.message })
+  }
 })

@@ -23,15 +23,20 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 422, statusMessage: 'Dati non validi', data: result.error.format() })
   }
 
-  if (result.data.action === 'reset-password') {
-    const { tempPassword } = await resetPortalPassword(result.data.userId)
-    return { ok: true, tempPassword }
-  }
+  try {
+    if (result.data.action === 'reset-password') {
+      const { tempPassword } = await resetPortalPassword(result.data.userId)
+      return { ok: true, tempPassword }
+    }
 
-  if (result.data.action === 'toggle-prenotazione') {
-    await updatePrenotazioneFlag(studentId, result.data.abilitato)
-    return { ok: true }
-  }
+    if (result.data.action === 'toggle-prenotazione') {
+      await updatePrenotazioneFlag(studentId, result.data.abilitato)
+      return { ok: true }
+    }
 
-  throw createError({ statusCode: 400, statusMessage: 'Azione non riconosciuta' })
+    throw createError({ statusCode: 400, statusMessage: 'Azione non riconosciuta' })
+  } catch (err: any) {
+    if (err.statusCode) throw err
+    throw createError({ statusCode: err.message?.includes('non trovato') ? 404 : 400, statusMessage: err.message })
+  }
 })

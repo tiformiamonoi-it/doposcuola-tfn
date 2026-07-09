@@ -102,9 +102,20 @@
     </div>
 
   </div>
+
+  <ConfirmDialog
+    v-model:open="confirmOpen"
+    :title="confirmTitle"
+    :description="confirmDescription"
+    confirm-label="Elimina"
+    confirm-color="error"
+    @confirm="eseguiEliminazione"
+  />
 </template>
 
 <script setup lang="ts">
+import ConfirmDialog from '~/components/ConfirmDialog.vue'
+
 const props = defineProps<{ studentId: string }>()
 const toast = useToast()
 const { user: sessionUser } = useUserSession()
@@ -153,15 +164,29 @@ function puoModificare(nota: any) {
 }
 
 // Delete
-async function confermaElimina(id: string) {
-  if (!confirm('Sei sicuro di voler eliminare questa nota?')) return
-  
+const confirmOpen = ref(false)
+const confirmTitle = ref('')
+const confirmDescription = ref('')
+const pendingDeleteId = ref<string | null>(null)
+
+function confermaElimina(id: string) {
+  pendingDeleteId.value = id
+  confirmTitle.value = 'Eliminare questa nota?'
+  confirmDescription.value = 'L\'operazione non può essere annullata.'
+  confirmOpen.value = true
+}
+
+async function eseguiEliminazione() {
+  confirmOpen.value = false
+  if (!pendingDeleteId.value) return
   try {
-    await $fetch(`/api/notes/${id}`, { method: 'DELETE' })
+    await $fetch(`/api/notes/${pendingDeleteId.value}`, { method: 'DELETE' })
     toast.add({ title: 'Nota eliminata', color: 'success' })
     refresh()
   } catch (err: any) {
     toast.add({ title: 'Errore', description: err?.data?.statusMessage || 'Impossibile eliminare', color: 'error' })
+  } finally {
+    pendingDeleteId.value = null
   }
 }
 

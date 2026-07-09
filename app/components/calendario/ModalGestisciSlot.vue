@@ -32,48 +32,49 @@
               <UIcon name="i-heroicons-users" class="w-5 h-5 text-slate-500" />
               Studenti nello slot ({{ students.length }})
             </h3>
-            
+
             <div class="space-y-3">
-              <div v-for="(stu, index) in students" :key="index" class="bg-white border border-slate-200 rounded-lg p-3 relative flex flex-col gap-2 shadow-sm">
-                <UButton icon="i-heroicons-trash" size="xs" color="error" variant="ghost" class="absolute top-2 right-2" @click="removeStudent(index)" />
-                
-                <div class="pr-8">
-                  <USelectMenu
-                    v-model="stu.studentItem"
-                    :items="getAvailableStudents(index)"
-                    placeholder="Cerca studente..."
-                    searchable
-                    class="w-full"
-                    @update:model-value="(val) => onStudenteSelezionato(index, val)"
-                  />
+              <div v-for="(stu, index) in students" :key="index" class="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200 shadow-sm">
+                <div class="flex-1 min-w-0">
+                  <span class="font-medium text-slate-800">{{ stu.studentItem?.label }}</span>
+                  <span v-if="stu.loadingPackages" class="text-xs text-slate-400 ml-2">caricamento...</span>
                 </div>
-                
-                <div v-if="stu.studentItem" class="pr-8">
-                  <!-- Studente già nello slot: pacchetto in sola lettura, mostra il nome corretto -->
-                  <div
-                    v-if="stu.esistente"
-                    class="w-full px-3 py-2 rounded-md bg-slate-50 border border-slate-200 text-sm text-slate-600 flex items-center gap-2"
-                  >
-                    <UIcon name="i-heroicons-cube" class="w-4 h-4 text-slate-400 flex-shrink-0" />
-                    <span class="truncate">{{ stu.packageItem?.label || 'Pacchetto' }}</span>
-                  </div>
-                  <!-- Studente nuovo: pacchetto selezionabile -->
+
+                <!-- Studente già esistente: pacchetto in sola lettura -->
+                <div v-if="stu.esistente" class="flex items-center gap-1 text-xs text-slate-500">
+                  <UIcon name="i-heroicons-cube" class="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span class="truncate max-w-[8rem]">{{ stu.packageItem?.label || 'Pacchetto' }}</span>
+                </div>
+                <!-- Studente nuovo: dropdown pacchetto se più opzioni, altrimenti mostra nome -->
+                <template v-else>
                   <USelectMenu
-                    v-else
+                    v-if="!stu.loadingPackages && stu.packageOptions.length > 1 && !stu.packageItem"
                     v-model="stu.packageItem"
-                    :items="stu.packageOptions || []"
-                    :loading="stu.loadingPackages"
-                    placeholder="Seleziona il pacchetto da scalare..."
-                    class="w-full"
+                    :items="stu.packageOptions"
+                    placeholder="Scegli pacchetto..."
+                    class="w-40"
                   />
-                </div>
+                  <span v-else-if="stu.packageItem" class="text-xs text-emerald-600 font-medium truncate max-w-[8rem]">{{ stu.packageItem.label }}</span>
+                  <span v-else-if="!stu.loadingPackages" class="text-xs text-red-400">Nessun pacchetto</span>
+                </template>
+
+                <UButton icon="i-heroicons-x-mark" size="xs" variant="ghost" color="neutral" @click="removeStudent(index)" />
               </div>
-              
-              <UButton v-if="!allStudentsSelected" size="sm" variant="soft" color="primary" icon="i-heroicons-plus" @click="addEmptyStudent" class="w-full justify-center">
-                Aggiungi Studente
+
+              <!-- Bottone apri picker -->
+              <UButton size="sm" variant="soft" color="primary" icon="i-heroicons-user-plus" class="w-full justify-center" @click="pickerAperto = true">
+                {{ students.length === 0 ? 'Aggiungi studenti (obbligatorio)' : '+ Aggiungi altri studenti' }}
               </UButton>
             </div>
           </div>
+
+          <!-- Picker studenti -->
+          <ModalSelezionaStudenti
+            v-model:open="pickerAperto"
+            :already-selected-ids="students.map(s => s.studentItem?.value).filter(Boolean)"
+            :students-pool="props.studentsPool"
+            @confirm="onPickerConfirm"
+          />
 
           <!-- Opzioni -->
           <div class="space-y-3 border-t border-slate-200 pt-4">
@@ -83,7 +84,7 @@
 
           <!-- Note -->
           <UFormField label="Note (opzionale)">
-            <UTextarea v-model="note" placeholder="Aggiungi note sulla lezione..." rows="2" />
+            <UTextarea v-model="note" placeholder="Aggiungi note sulla lezione..." :rows="2" />
           </UFormField>
         </div>
       </div>
@@ -105,12 +106,24 @@
       </div>
     </template>
   </UModal>
+
+  <ConfirmDialog
+    v-model:open="confirmAperto"
+    :title="confirmConfig.title"
+    :description="confirmConfig.description"
+    :confirm-label="confirmConfig.confirmLabel"
+    :confirm-color="confirmConfig.confirmColor"
+    :loading="confirmLoading"
+    @confirm="eseguiEliminazione"
+  />
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, reactive } from 'vue'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
+import ModalSelezionaStudenti from '~/components/calendario/ModalSelezionaStudenti.vue'
+import ConfirmDialog from '~/components/ConfirmDialog.vue'
 
 const props = defineProps<{
   date: string
@@ -120,6 +133,9 @@ const props = defineProps<{
   slotStart: string
   slotEnd: string
   existingLessonsInSlot: any[] // Le lezioni che appartengono già a questo slot
+  // Se presente (area personale tutor), usa un pool di studenti ristretto invece
+  // della lista completa degli studenti attivi.
+  studentsPool?: { studentId: string; nome: string }[]
 }>()
 
 const emit = defineEmits(['refresh', 'close'])
@@ -136,25 +152,15 @@ const students = ref<any[]>([])
 const forzaGruppo = ref(false)
 const mezzaLezioneGlobale = ref(false)
 const note = ref('')
+const pickerAperto = ref(false)
 
-// Opzioni globali
-const { data: studentsRes } = useFetch('/api/students?active=true&limit=200', { lazy: true })
-const studentsOptions = computed(() => {
-  return (studentsRes.value?.data || []).map((s: any) => ({
-    label: `${s.firstName} ${s.lastName}`,
-    value: s.id
-  }))
-})
-
-function getAvailableStudents(currentIndex: number) {
-  const selectedIds = students.value
-    .map((s, idx) => idx !== currentIndex ? s.studentItem?.value : null)
-    .filter(Boolean)
-  return studentsOptions.value.filter(opt => !selectedIds.includes(opt.value))
-}
-
-const allStudentsSelected = computed(() => {
-  return students.value.length > 0 && students.value.every(s => s.studentItem && s.packageItem) === false
+const confirmAperto = ref(false)
+const confirmLoading = ref(false)
+const confirmConfig = reactive({
+  title: 'Conferma eliminazione',
+  description: '',
+  confirmLabel: 'Elimina',
+  confirmColor: 'error' as 'primary' | 'error' | 'warning',
 })
 
 const canSave = computed(() => {
@@ -199,12 +205,26 @@ function formatDate(dateStr: string) {
   }
 }
 
-function addEmptyStudent() {
-  students.value.push({ studentItem: null, packageItem: null, packageOptions: [], loadingPackages: false, mezzaLezione: mezzaLezioneGlobale.value })
-}
-
 function removeStudent(idx: number) {
   students.value.splice(idx, 1)
+}
+
+async function onPickerConfirm(picked: Array<{ studentId: string; nome: string; oreResiduo: string | null; pkgTipo: string | null }>) {
+  pickerAperto.value = false
+  for (const p of picked) {
+    if (students.value.some(s => s.studentItem?.value === p.studentId)) continue
+    const stu = {
+      studentItem: { label: p.nome, value: p.studentId },
+      packageItem: null,
+      packageOptions: [],
+      loadingPackages: false,
+      mezzaLezione: mezzaLezioneGlobale.value,
+      esistente: false,
+    }
+    students.value.push(stu)
+    const idx = students.value.length - 1
+    await onStudenteSelezionato(idx, { value: p.studentId })
+  }
 }
 
 async function onStudenteSelezionato(idx: number, newVal: any) {
@@ -272,8 +292,7 @@ function initModal() {
       })
     })
   } else {
-    // Slot vuoto, aggiungi una riga vuota
-    addEmptyStudent()
+    // Slot vuoto — l'utente aprirà il picker per aggiungere studenti
   }
 }
 
@@ -292,30 +311,36 @@ async function saveLesson() {
       mezzaLezione: s.mezzaLezione || mezzaLezioneGlobale.value
     }))
 
-    const payload = {
-      tutorId: props.tutorId,
-      timeSlotId: props.timeSlotId,
-      data: props.date,
+    const postPayload = {
+      tutorId:     props.tutorId,
+      timeSlotId:  props.timeSlotId,
+      data:        props.date,
       forzaGruppo: forzaGruppo.value,
-      note: note.value,
-      studenti: validStudents
+      mezzaLezione: mezzaLezioneGlobale.value,
+      note:        note.value,
+      studenti:    validStudents,
+    }
+    const putPayload = {
+      forzaGruppo:  forzaGruppo.value,
+      mezzaLezione: mezzaLezioneGlobale.value,
+      note:         note.value,
+      studenti:     validStudents,
     }
 
     if (existingLesson.value && props.existingLessonsInSlot.length > 0) {
-      // Per semplicità, se stiamo aggiornando, è più sicuro eliminare le lezioni precedenti nello slot e ricreare,
-      // MA l'API PUT /api/lessons/:id supporta l'update degli studenti (cancellando i non presenti e aggiungendo i nuovi).
-      // Se c'erano più "lessons" per lo stesso slot, le cancelliamo e ne creiamo una sola unificata.
       if (props.existingLessonsInSlot.length > 1) {
-        for (const l of props.existingLessonsInSlot) {
+        // Slot doppio (caso raro): prima PUT atomica sulla prima lezione,
+        // poi DELETE delle lezioni extra. Se il PUT fallisce non si perde nulla.
+        await $fetch(`/api/lessons/${existingLesson.value.id}`, { method: 'PUT', body: putPayload })
+        for (const l of props.existingLessonsInSlot.slice(1)) {
           await $fetch(`/api/lessons/${l.id}`, { method: 'DELETE' })
         }
-        await $fetch('/api/lessons', { method: 'POST', body: payload })
       } else {
-        await $fetch(`/api/lessons/${existingLesson.value.id}`, { method: 'PUT', body: payload })
+        await $fetch(`/api/lessons/${existingLesson.value.id}`, { method: 'PUT', body: putPayload })
       }
       toast.add({ title: 'Lezione aggiornata', color: 'success' })
     } else {
-      await $fetch('/api/lessons', { method: 'POST', body: payload })
+      await $fetch('/api/lessons', { method: 'POST', body: postPayload })
       toast.add({ title: 'Lezione creata', color: 'success' })
     }
 
@@ -329,21 +354,33 @@ async function saveLesson() {
   }
 }
 
-async function deleteLesson() {
-  if (!confirm('Sei sicuro di voler eliminare tutte le lezioni di questo slot? Verranno ripristinate le ore.')) return
-  saving.value = true
+function chiediEliminazione() {
+  confirmConfig.title = 'Conferma eliminazione'
+  confirmConfig.description = 'Sei sicuro di voler eliminare tutte le lezioni di questo slot? Verranno ripristinate le ore.'
+  confirmConfig.confirmLabel = 'Elimina'
+  confirmConfig.confirmColor = 'error'
+  confirmAperto.value = true
+}
+
+async function eseguiEliminazione() {
+  confirmLoading.value = true
   try {
     for (const l of props.existingLessonsInSlot) {
       await $fetch(`/api/lessons/${l.id}`, { method: 'DELETE' })
     }
     toast.add({ title: 'Lezione eliminata', color: 'success' })
+    confirmAperto.value = false
     isOpen.value = false
     emit('refresh')
   } catch (err) {
     console.error(err)
     toast.add({ title: 'Errore', color: 'error' })
   } finally {
-    saving.value = false
+    confirmLoading.value = false
   }
+}
+
+async function deleteLesson() {
+  chiediEliminazione()
 }
 </script>

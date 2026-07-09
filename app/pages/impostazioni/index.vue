@@ -11,6 +11,7 @@
       { label: 'Pacchetti Standard', slot: 'pacchetti' },
       { label: 'Slot Orari', slot: 'slot' },
       { label: 'Materie & Tariffe', slot: 'materie_tariffe' },
+      { label: 'Categorie Contabili', slot: 'categorie' },
       { label: 'Spese Fisse', slot: 'spese' },
       { label: 'Chiusure', slot: 'chiusure' }
     ]">
@@ -155,7 +156,80 @@
               <UButton @click="salvaConfigs" :loading="salvandoConfigs">Salva Modifiche</UButton>
             </template>
           </UCard>
+
+          <!-- CARD CONTATTI -->
+          <UCard>
+            <template #header>
+              <div class="flex items-center gap-2">
+                <UIcon name="i-heroicons-device-phone-mobile" class="w-4 h-4 text-tfn-500" />
+                <span class="font-medium text-slate-800">Contatti Portale</span>
+              </div>
+            </template>
+            <div class="space-y-3">
+              <UFormField label="Numero WhatsApp Segreteria">
+                <UInput v-model="whatsappNumero" placeholder="Es. +39 320 123 4567" class="w-full" />
+                <template #description>
+                  <span class="text-xs text-slate-400">Visibile nel portale famiglie durante l'orario di segreteria (9:00–18:00).</span>
+                </template>
+              </UFormField>
+            </div>
+            <template #footer>
+              <UButton @click="salvaConfigs" :loading="salvandoConfigs">Salva Modifiche</UButton>
+            </template>
+          </UCard>
         </div>
+      </template>
+
+      <template #categorie>
+        <UCard class="mt-4">
+          <template #header>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <UIcon name="i-heroicons-tag" class="w-4 h-4 text-tfn-500" />
+                <span class="font-medium text-slate-800">Categorie Contabili</span>
+                <UBadge color="neutral" variant="subtle">{{ categorie.length }}</UBadge>
+              </div>
+              <UButton icon="i-heroicons-check" size="sm" :loading="salvandoCategorie" @click="salvaCategorie">Salva categorie</UButton>
+            </div>
+          </template>
+
+          <p class="text-xs text-slate-500 mb-4">
+            Rinomina le categorie, creane di nuove e marca come <strong>“neutra”</strong> quelle che non devono
+            entrare nel calcolo del guadagno (es. <em>Giroconto</em>, <em>Saldo Iniziale</em>).
+            Le categorie <UBadge color="info" variant="subtle" size="xs">automatiche</UBadge> sono gestite dal sistema e non si possono modificare.
+          </p>
+
+          <!-- Aggiungi nuova categoria -->
+          <div class="flex items-end gap-3 mb-4 p-3 bg-slate-50 rounded-lg">
+            <UFormField label="Nuova categoria" class="flex-1">
+              <UInput v-model="nuovaCategoria.etichetta" placeholder="Es. Borse di studio" class="w-full" @keyup.enter="aggiungiCategoria" />
+            </UFormField>
+            <UFormField label="Neutra">
+              <USwitch v-model="nuovaCategoria.neutra" />
+            </UFormField>
+            <UButton icon="i-heroicons-plus" @click="aggiungiCategoria">Aggiungi</UButton>
+          </div>
+
+          <div v-if="pendingCategorie" class="space-y-2 py-2">
+            <USkeleton v-for="i in 4" :key="i" class="h-10 w-full" />
+          </div>
+          <div v-else class="divide-y divide-slate-100">
+            <div v-for="(c, idx) in categorie" :key="c.chiave || idx" class="flex items-center gap-3 py-2.5 px-1">
+              <UInput v-model="c.etichetta" :disabled="c.sistema" class="flex-1" />
+              <UBadge v-if="c.sistema" color="info" variant="subtle" size="xs">automatica</UBadge>
+              <label class="flex items-center gap-1.5 text-xs text-slate-500 select-none">
+                <USwitch v-model="c.neutra" :disabled="c.sistema" size="sm" /> neutra
+              </label>
+              <UButton
+                icon="i-heroicons-trash"
+                variant="ghost" color="error" size="xs"
+                :disabled="c.sistema"
+                :title="c.sistema ? 'Categoria automatica: non eliminabile' : 'Elimina categoria'"
+                @click="rimuoviCategoria(idx)"
+              />
+            </div>
+          </div>
+        </UCard>
       </template>
 
       <template #spese>
@@ -336,12 +410,46 @@
     </UModal>
 
   </div>
+
+  <ConfirmDialog
+    v-model:open="confirmOpen"
+    :title="confirmTitle"
+    :description="confirmDescription"
+    :confirm-label="confirmLabel"
+    :confirm-color="confirmColor"
+    @confirm="eseguiConferma"
+  />
 </template>
 
 <script setup lang="ts">
+import ConfirmDialog from '~/components/ConfirmDialog.vue'
+
 definePageMeta({ middleware: ['admin-only'] })
 
 const toast = useToast()
+
+// ─── ConfirmDialog shared state ───
+const confirmOpen = ref(false)
+const confirmTitle = ref('')
+const confirmDescription = ref('')
+const confirmLabel = ref('Conferma')
+const confirmColor = ref<'primary' | 'error'>('primary')
+const pendingAction = ref<(() => void) | null>(null)
+
+function chiediConferma(config: { title: string; description: string; confirmLabel?: string; confirmColor?: 'primary' | 'error' }, action: () => void) {
+  confirmTitle.value = config.title
+  confirmDescription.value = config.description
+  confirmLabel.value = config.confirmLabel ?? 'Conferma'
+  confirmColor.value = config.confirmColor ?? 'primary'
+  pendingAction.value = action
+  confirmOpen.value = true
+}
+
+function eseguiConferma() {
+  confirmOpen.value = false
+  pendingAction.value?.()
+  pendingAction.value = null
+}
 
 // ─── Fetch templates ───
 const { data: templatesData, pending: pendingTemplates, refresh } = useLazyFetch('/api/standard-packages')
@@ -420,17 +528,21 @@ async function creaTemplate() {
 const eliminando = ref<string | null>(null)
 
 async function eliminaTemplate(id: string) {
-  if (!confirm('Rimuovere questo template? Non influenzerà i pacchetti già creati.')) return
-  eliminando.value = id
-  try {
-    await $fetch(`/api/standard-packages/${id}`, { method: 'DELETE' })
-    toast.add({ title: 'Template rimosso', color: 'success', icon: 'i-heroicons-check-circle' })
-    refresh()
-  } catch (err: any) {
-    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile rimuovere', color: 'error' })
-  } finally {
-    eliminando.value = null
-  }
+  chiediConferma(
+    { title: 'Rimuovere questo template?', description: 'Non influenzerà i pacchetti già creati.', confirmLabel: 'Elimina', confirmColor: 'error' },
+    async () => {
+      eliminando.value = id
+      try {
+        await $fetch(`/api/standard-packages/${id}`, { method: 'DELETE' })
+        toast.add({ title: 'Template rimosso', color: 'success', icon: 'i-heroicons-check-circle' })
+        refresh()
+      } catch (err: any) {
+        toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile rimuovere', color: 'error' })
+      } finally {
+        eliminando.value = null
+      }
+    }
+  )
 }
 
 // ─── Fetch Slot Orari ───
@@ -476,17 +588,21 @@ async function toggleSlot(slot: any, val: boolean) {
 }
 
 async function eliminaSlot(slot: any) {
-  if (!confirm(`Sei sicuro di eliminare lo slot ${slot.oraInizio}-${slot.oraFine}?`)) return
-  eliminandoSlot.value = slot.id
-  try {
-    await $fetch(`/api/settings/timeslots/${slot.id}`, { method: 'DELETE' })
-    toast.add({ title: 'Slot eliminato', color: 'success' })
-    refreshSlots()
-  } catch (err: any) {
-    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile eliminare', color: 'error' })
-  } finally {
-    eliminandoSlot.value = null
-  }
+  chiediConferma(
+    { title: `Eliminare lo slot ${slot.oraInizio}-${slot.oraFine}?`, description: 'Lo slot verrà rimosso definitivamente.', confirmLabel: 'Elimina', confirmColor: 'error' },
+    async () => {
+      eliminandoSlot.value = slot.id
+      try {
+        await $fetch(`/api/settings/timeslots/${slot.id}`, { method: 'DELETE' })
+        toast.add({ title: 'Slot eliminato', color: 'success' })
+        refreshSlots()
+      } catch (err: any) {
+        toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile eliminare', color: 'error' })
+      } finally {
+        eliminandoSlot.value = null
+      }
+    }
+  )
 }
 
 // ─── Fetch Configs ───
@@ -496,11 +612,13 @@ const configs = computed(() => configsData.value ?? {})
 const materie = ref<string[]>([])
 const tariffe = ref({ SINGOLA: 5, GRUPPO: 8, MAXI: 8.5 })
 const speseFisse = ref<{nome: string, importo: number}[]>([])
+const whatsappNumero = ref('')
 
 watchEffect(() => {
   try { materie.value = JSON.parse(configs.value.materie || '[]') } catch(e){}
   try { tariffe.value = JSON.parse(configs.value.tariffe_tutor || '{"SINGOLA":5,"GRUPPO":8,"MAXI":8.5}') } catch(e){}
   try { speseFisse.value = JSON.parse(configs.value.spese_fisse || '[]') } catch(e){}
+  whatsappNumero.value = configs.value.whatsapp_numero || ''
 })
 
 const nuovaMateria = ref('')
@@ -531,7 +649,8 @@ async function salvaConfigs() {
       body: {
         materie: JSON.stringify(materie.value),
         tariffe_tutor: JSON.stringify(tariffe.value),
-        spese_fisse: JSON.stringify(speseFisse.value)
+        spese_fisse: JSON.stringify(speseFisse.value),
+        whatsapp_numero: whatsappNumero.value,
       }
     })
     toast.add({ title: 'Impostazioni salvate', color: 'success' })
@@ -540,6 +659,43 @@ async function salvaConfigs() {
     toast.add({ title: 'Errore al salvataggio', color: 'error' })
   } finally {
     salvandoConfigs.value = false
+  }
+}
+
+// ─── Categorie Contabili ───
+const { data: categorieData, pending: pendingCategorie, refresh: refreshCategorie } = useLazyFetch('/api/accounting/categories')
+const categorie = ref<{ chiave: string; etichetta: string; neutra: boolean; sistema: boolean }[]>([])
+watchEffect(() => { categorie.value = (categorieData.value ?? []).map((c: any) => ({ ...c })) })
+
+const nuovaCategoria = reactive({ etichetta: '', neutra: false })
+function aggiungiCategoria() {
+  const nome = nuovaCategoria.etichetta.trim()
+  if (!nome) return
+  if (categorie.value.some((c) => c.etichetta.toLowerCase() === nome.toLowerCase())) {
+    toast.add({ title: 'Categoria già presente', color: 'warning', icon: 'i-heroicons-exclamation-circle' })
+    return
+  }
+  // chiave vuota: la genera il server allo salvataggio
+  categorie.value.push({ chiave: '', etichetta: nome, neutra: nuovaCategoria.neutra, sistema: false })
+  nuovaCategoria.etichetta = ''
+  nuovaCategoria.neutra = false
+}
+function rimuoviCategoria(idx: number) {
+  if (categorie.value[idx]?.sistema) return
+  categorie.value.splice(idx, 1)
+}
+
+const salvandoCategorie = ref(false)
+async function salvaCategorie() {
+  salvandoCategorie.value = true
+  try {
+    await $fetch('/api/accounting/categories', { method: 'PUT', body: { categorie: categorie.value } })
+    toast.add({ title: 'Categorie salvate', color: 'success', icon: 'i-heroicons-check-circle' })
+    refreshCategorie()
+  } catch (err: any) {
+    toast.add({ title: 'Impossibile salvare', description: err?.data?.statusMessage ?? 'Operazione non riuscita', color: 'error' })
+  } finally {
+    salvandoCategorie.value = false
   }
 }
 
@@ -561,14 +717,18 @@ async function aggiungiChiusura() {
   }
 }
 async function eliminaChiusura(id: string) {
-  if (!confirm('Eliminare questa data di chiusura?')) return
-  try {
-    await $fetch(`/api/settings/closures/${id}`, { method: 'DELETE' })
-    toast.add({ title: 'Chiusura rimossa', color: 'success' })
-    refreshClosures()
-  } catch(e: any) {
-    toast.add({ title: 'Errore', color: 'error' })
-  }
+  chiediConferma(
+    { title: 'Eliminare questa data di chiusura?', description: 'La data verrà rimossa dal calendario.', confirmLabel: 'Elimina', confirmColor: 'error' },
+    async () => {
+      try {
+        await $fetch(`/api/settings/closures/${id}`, { method: 'DELETE' })
+        toast.add({ title: 'Chiusura rimossa', color: 'success' })
+        refreshClosures()
+      } catch(e: any) {
+        toast.add({ title: 'Errore', color: 'error' })
+      }
+    }
+  )
 }
 </script>
 

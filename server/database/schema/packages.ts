@@ -50,6 +50,8 @@ export const packages = pgTable('packages', {
 
   stati: packageStatusEnum('stati').array().notNull().default(['ATTIVO']),
 
+  sospeso: boolean('sospeso').notNull().default(false),
+
   note:      text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -57,6 +59,7 @@ export const packages = pgTable('packages', {
   studentStatiIdx: index('pkg_student_stati_idx').on(t.studentId, t.stati),
   tipoCreatedIdx:  index('pkg_tipo_created_idx').on(t.tipo, t.createdAt),
   statiGinIdx:     index('pkg_stati_gin_idx').using('gin', t.stati),
+  sospesoIdx:      index('pkg_sospeso_idx').on(t.sospeso),
 }))
 
 export const payments = pgTable('payments', {

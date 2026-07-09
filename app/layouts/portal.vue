@@ -7,10 +7,23 @@
       <span class="font-heading font-semibold text-white text-base tracking-tight">
         tiformiamonoi.it
       </span>
-      <div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-        <span class="text-white text-xs font-semibold">
-          {{ user?.firstName?.[0] ?? 'G' }}
-        </span>
+      <div class="flex items-center gap-2">
+        <!-- WhatsApp FAB -->
+        <a
+          v-if="showWhatsApp"
+          :href="whatsappLink"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors"
+          :title="whatsappOrario ? 'Scrivi su WhatsApp' : 'Fuori orario segreteria (9:00–18:00)'"
+        >
+          <UIcon name="i-heroicons-device-phone-mobile" class="w-4 h-4 text-white" />
+        </a>
+        <div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+          <span class="text-white text-xs font-semibold">
+            {{ user?.firstName?.[0] ?? 'G' }}
+          </span>
+        </div>
       </div>
     </header>
 
@@ -80,4 +93,28 @@ function isActive(path: string) {
   if (path === '/portale') return route.path === '/portale'
   return route.path.startsWith(path)
 }
+
+// ─── WhatsApp logic ───
+const { data: portalConfigs } = useLazyFetch('/api/portal/configs')
+const whatsappNumero = computed(() => (portalConfigs.value as any)?.whatsapp_numero || '')
+
+const whatsappOrario = computed(() => {
+  const now = new Date()
+  const formatter = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hour12: false
+  })
+  const parts = formatter.formatToParts(now)
+  const p = (type: string) => parts.find(x => x.type === type)?.value
+  const h = parseInt(p('hour') || '0', 10)
+  const m = parseInt(p('minute') || '0', 10)
+  const time = h * 60 + m
+  // Orario segreteria 9:00–18:00
+  return time >= 540 && time < 1080
+})
+
+const showWhatsApp = computed(() => !!whatsappNumero.value)
+const whatsappLink = computed(() => {
+  const text = encodeURIComponent('Ciao, scrivo dal portale Ti Formiamo Noi.')
+  return `https://wa.me/${whatsappNumero.value.replace(/\D/g, '')}?text=${text}`
+})
 </script>

@@ -65,11 +65,18 @@ import { z } from 'zod'
 definePageMeta({ layout: false })
 useHead({ title: 'Accedi — Ti Formiamo Noi' })
 
-// Redirect se già loggato
+// Redirect se già loggato (solo client-side per evitare SSR loop)
 const { loggedIn, user } = useUserSession()
-if (loggedIn.value) {
-  await navigateTo(user.value?.role === 'GENITORE' ? '/portale' : (user.value?.role === 'TUTOR' ? '/area-tutor' : '/'))
-}
+onMounted(async () => {
+  if (loggedIn.value) {
+    await navigateTo(user.value?.role === 'GENITORE' ? '/portale' : (user.value?.role === 'TUTOR' ? '/area-tutor' : '/'), { replace: true })
+  }
+})
+watch(loggedIn, async (isLoggedIn) => {
+  if (isLoggedIn) {
+    await navigateTo(user.value?.role === 'GENITORE' ? '/portale' : (user.value?.role === 'TUTOR' ? '/area-tutor' : '/'), { replace: true })
+  }
+})
 
 const schema = z.object({
   email:    z.string().email('Email non valida'),

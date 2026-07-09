@@ -1,0 +1,1 @@
+ALTER TABLE "tutor_availabilities" ALTER COLUMN "date" SET DATA TYPE date;

@@ -46,7 +46,7 @@
       <!-- ─── PERIODO SELEZIONATO ─── -->
       <div>
         <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Periodo selezionato</p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
 
           <UCard class="bg-green-50 border-green-100">
             <div class="flex items-start justify-between">
@@ -86,6 +86,54 @@
             </div>
           </UCard>
 
+          <!-- E7 — Break-even (margine - costi fissi) -->
+          <UCard :class="dash.breakEven >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-xs font-medium uppercase tracking-wide" :class="dash.breakEven >= 0 ? 'text-emerald-600' : 'text-rose-600'">
+                  Break-even
+                </p>
+                <p class="text-2xl font-bold mt-1" :class="dash.breakEven >= 0 ? 'text-emerald-700' : 'text-rose-700'">
+                  € {{ fmt(dash.breakEven) }}
+                </p>
+                <p class="text-[11px] mt-1" :class="dash.breakEven >= 0 ? 'text-emerald-400' : 'text-rose-400'">
+                  Margine − € {{ fmt(dash.costiFissi.periodo) }} costi fissi
+                </p>
+              </div>
+              <UIcon name="i-heroicons-presentation-chart-line" class="w-6 h-6" :class="dash.breakEven >= 0 ? 'text-emerald-400' : 'text-rose-400'" />
+            </div>
+          </UCard>
+
+          <!-- Costi fissi mensili -->
+          <UCard class="bg-slate-50 border-slate-200">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-xs text-slate-500 font-medium uppercase tracking-wide">Costi fissi mensili</p>
+                <p class="text-2xl font-bold text-slate-700 mt-1">
+                  € {{ fmt(dash.costiFissi.mensili) }}
+                </p>
+                <p class="text-[11px] text-slate-400 mt-1">
+                  € {{ fmt(dash.costiFissi.periodo) }} in {{ dash.costiFissi.mesi }} mesi
+                </p>
+              </div>
+              <UIcon name="i-heroicons-building-office" class="w-6 h-6 text-slate-400" />
+            </div>
+          </UCard>
+
+          <!-- E4 — Tasse stimate (25% entrate) -->
+          <UCard class="bg-violet-50 border-violet-100">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-xs text-violet-600 font-medium uppercase tracking-wide">Tasse stimate</p>
+                <p class="text-2xl font-bold text-violet-700 mt-1">
+                  € {{ fmt(dash.periodo.entrate * 0.25) }}
+                </p>
+                <p class="text-[11px] text-violet-400 mt-1">~25% delle entrate</p>
+              </div>
+              <UIcon name="i-heroicons-calculator" class="w-6 h-6 text-violet-400" />
+            </div>
+          </UCard>
+
           <UCard :class="dash.fattureInAttesa.count > 0 ? 'bg-yellow-50 border-yellow-100' : 'bg-slate-50'">
             <div class="flex items-start justify-between">
               <div>
@@ -97,6 +145,58 @@
                 </p>
               </div>
               <UIcon name="i-heroicons-document-text" class="w-6 h-6" :class="dash.fattureInAttesa.count > 0 ? 'text-yellow-400' : 'text-slate-300'" />
+            </div>
+          </UCard>
+
+        </div>
+      </div>
+
+      <!-- ─── BREAKDOWN DOPOSCUOLA vs MARKETING ─── -->
+      <div v-if="dash.breakdown" class="mt-2">
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Suddivisione area (nel periodo)</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+          <UCard class="bg-teal-50 border-teal-100">
+            <div class="flex items-center gap-2 mb-3">
+              <UIcon name="i-heroicons-academic-cap" class="w-5 h-5 text-teal-500" />
+              <p class="text-sm font-semibold text-teal-700">Doposcuola</p>
+              <span class="text-[11px] text-teal-400">(tutte le voci eccetto marketing)</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <p class="text-[10px] text-green-600 uppercase font-medium">Entrate</p>
+                <p class="text-lg font-bold text-green-700">€ {{ fmt(dash.breakdown.doposcuola.entrate) }}</p>
+              </div>
+              <div>
+                <p class="text-[10px] text-red-600 uppercase font-medium">Uscite</p>
+                <p class="text-lg font-bold text-red-700">€ {{ fmt(dash.breakdown.doposcuola.uscite) }}</p>
+              </div>
+              <div>
+                <p class="text-[10px] uppercase font-medium" :class="dash.breakdown.doposcuola.margine >= 0 ? 'text-blue-600' : 'text-orange-600'">Margine</p>
+                <p class="text-lg font-bold" :class="dash.breakdown.doposcuola.margine >= 0 ? 'text-blue-700' : 'text-orange-700'">€ {{ fmt(dash.breakdown.doposcuola.margine) }}</p>
+              </div>
+            </div>
+          </UCard>
+
+          <UCard class="bg-purple-50 border-purple-100">
+            <div class="flex items-center gap-2 mb-3">
+              <UIcon name="i-heroicons-megaphone" class="w-5 h-5 text-purple-500" />
+              <p class="text-sm font-semibold text-purple-700">Marketing</p>
+              <span class="text-[11px] text-purple-400">(categoria = marketing)</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <p class="text-[10px] text-green-600 uppercase font-medium">Entrate</p>
+                <p class="text-lg font-bold text-green-700">€ {{ fmt(dash.breakdown.marketing.entrate) }}</p>
+              </div>
+              <div>
+                <p class="text-[10px] text-red-600 uppercase font-medium">Uscite</p>
+                <p class="text-lg font-bold text-red-700">€ {{ fmt(dash.breakdown.marketing.uscite) }}</p>
+              </div>
+              <div>
+                <p class="text-[10px] uppercase font-medium" :class="dash.breakdown.marketing.margine >= 0 ? 'text-blue-600' : 'text-orange-600'">Margine</p>
+                <p class="text-lg font-bold" :class="dash.breakdown.marketing.margine >= 0 ? 'text-blue-700' : 'text-orange-700'">€ {{ fmt(dash.breakdown.marketing.margine) }}</p>
+              </div>
             </div>
           </UCard>
 
@@ -188,34 +288,56 @@
         </div>
       </div>
 
-      <!-- ─── PREVISIONI (CREDITI E DEBITI) ─── -->
+      <!-- ─── PREVISIONI + E5 DEBITI TUTOR ─── -->
       <div class="mt-8">
-        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Previsionale (Movimenti futuri)</p>
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Previsionale e debiti</p>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
-          <UCard class="bg-indigo-50 border-indigo-100">
+          <!-- E6: cliccabili → apre modal lista voci -->
+          <UCard class="bg-indigo-50 border-indigo-100 cursor-pointer hover:shadow-md transition-shadow" @click="apriPrevisionale('CREDITO')">
             <div class="flex items-start justify-between">
               <div>
                 <p class="text-xs text-indigo-600 font-medium uppercase tracking-wide">Da Incassare (Crediti)</p>
                 <p class="text-2xl font-bold text-indigo-700 mt-1">
                   € {{ fmt(dash.previsioni.crediti) }}
                 </p>
+                <p class="text-[11px] text-indigo-300 mt-1">clicca per vedere il dettaglio</p>
               </div>
               <UIcon name="i-heroicons-arrow-down-tray" class="w-6 h-6 text-indigo-400" />
             </div>
           </UCard>
 
-          <UCard class="bg-pink-50 border-pink-100">
+          <UCard class="bg-pink-50 border-pink-100 cursor-pointer hover:shadow-md transition-shadow" @click="apriPrevisionale('DEBITO')">
             <div class="flex items-start justify-between">
               <div>
                 <p class="text-xs text-pink-600 font-medium uppercase tracking-wide">Da Pagare (Debiti)</p>
                 <p class="text-2xl font-bold text-pink-700 mt-1">
                   € {{ fmt(dash.previsioni.debiti) }}
                 </p>
+                <p class="text-[11px] text-pink-300 mt-1">clicca per vedere il dettaglio</p>
               </div>
               <UIcon name="i-heroicons-arrow-up-tray" class="w-6 h-6 text-pink-400" />
             </div>
           </UCard>
+
+          <!-- E5 — Compensi tutor non liquidati -->
+          <UCard :class="tutorDebitiTotale > 0 ? 'bg-amber-50 border-amber-100' : 'bg-slate-50'">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-xs font-medium uppercase tracking-wide" :class="tutorDebitiTotale > 0 ? 'text-amber-600' : 'text-slate-400'">
+                  Compensi Tutor Dovuti
+                </p>
+                <p class="text-2xl font-bold mt-1" :class="tutorDebitiTotale > 0 ? 'text-amber-700' : 'text-slate-600'">
+                  € {{ fmt(tutorDebitiTotale) }}
+                </p>
+                <p class="text-[11px] mt-1" :class="tutorDebitiCount > 0 ? 'text-amber-500' : 'text-slate-400'">
+                  {{ tutorDebitiCount }} tutor da liquidare
+                </p>
+              </div>
+              <UIcon name="i-heroicons-user-group" class="w-6 h-6" :class="tutorDebitiTotale > 0 ? 'text-amber-400' : 'text-slate-300'" />
+            </div>
+          </UCard>
+
         </div>
       </div>
 
@@ -227,16 +349,16 @@
             <span class="font-medium text-slate-800">Tutti i Movimenti</span>
           </div>
         </template>
-        
+
         <div class="flex flex-wrap gap-3 mb-4 items-end">
           <p class="text-xs text-slate-400 self-center mr-1">
             Periodo: <strong class="text-slate-600">{{ formatData(periodo.dataInizio) }} → {{ formatData(periodo.dataFine) }}</strong> (modificalo dai filtri in alto)
           </p>
           <UFormField label="Tipo">
-            <USelect v-model="filtroEntries.tipo" :items="[{label: 'Tutti', value: 'TUTTI'}, {label: 'Entrata', value: 'ENTRATA'}, {label: 'Uscita', value: 'USCITA'}, {label: 'Credito', value: 'CREDITO'}, {label: 'Debito', value: 'DEBITO'}, {label: 'Nota/Atteso', value: 'NOTA'}, {label: 'Storno', value: 'STORNO'}]" @change="caricaEntries" class="w-40" />
+            <USelect v-model="filtroEntries.tipo" :items="[{label: 'Tutti', value: 'TUTTI'}, {label: 'Entrata', value: 'ENTRATA'}, {label: 'Uscita', value: 'USCITA'}, {label: 'Credito', value: 'CREDITO'}, {label: 'Debito', value: 'DEBITO'}, {label: 'Nota/Atteso', value: 'NOTA'}, {label: 'Storno', value: 'STORNO'}]" class="w-40" />
           </UFormField>
           <UFormField label="Categoria">
-            <UInput v-model="filtroEntries.categoria" placeholder="Es. stipendi..." @change="caricaEntries" @keyup.enter="caricaEntries" />
+            <USelect v-model="filtroEntries.categoria" :items="opzioniFiltro" class="w-52" />
           </UFormField>
         </div>
 
@@ -244,19 +366,37 @@
           <template #data-cell="{ row }">{{ formatData(row.original.data) }}</template>
           <template #tipo-cell="{ row }">
             <UBadge :color="row.original.tipo === 'ENTRATA' ? 'success' : row.original.tipo === 'USCITA' ? 'error' : row.original.tipo === 'CREDITO' ? 'indigo' : row.original.tipo === 'DEBITO' ? 'pink' : row.original.tipo === 'NOTA' ? 'warning' : 'neutral'" variant="subtle" size="xs">
-              {{ row.original.tipo }}
+              {{ labelTipo(row.original.tipo) }}
             </UBadge>
           </template>
           <template #descrizione-cell="{ row }">
             <span class="text-sm text-slate-700">{{ row.original.descrizione }}</span>
           </template>
           <template #categoria-cell="{ row }">
-            <UBadge color="neutral" variant="outline" size="xs">{{ row.original.categoria }}</UBadge>
+            <UBadge color="neutral" variant="outline" size="xs">{{ labelCategoria(row.original.categoria) }}</UBadge>
+          </template>
+          <template #metodoPagamento-cell="{ row }">
+            <span class="text-sm text-slate-600">{{ labelMetodo(row.original.metodoPagamento) }}</span>
           </template>
           <template #importo-cell="{ row }">
             <span class="font-medium" :class="row.original.tipo === 'USCITA' || row.original.tipo === 'DEBITO' ? 'text-error-600' : 'text-slate-800'">
               {{ row.original.tipo === 'USCITA' || row.original.tipo === 'DEBITO' ? '-' : '' }}€ {{ fmt(parseFloat(row.original.importo)) }}
             </span>
+          </template>
+          <!-- E1 — Colonna fattura (solo dove il cliente ha richiesto la fattura) -->
+          <template #fatturaEmessa-cell="{ row }">
+            <template v-if="row.original.richiedeFattura">
+              <UTooltip :text="row.original.fatturaEmessa ? 'Fattura emessa ✓' : 'Fattura NON emessa — clicca per segnare'">
+                <UButton
+                  :icon="row.original.fatturaEmessa ? 'i-heroicons-check-circle' : 'i-heroicons-exclamation-circle'"
+                  :color="row.original.fatturaEmessa ? 'success' : 'warning'"
+                  variant="ghost" size="xs"
+                  :loading="toggling === row.original.id"
+                  @click="toggleFattura(row.original)"
+                />
+              </UTooltip>
+            </template>
+            <span v-else class="text-slate-200 text-xs select-none">—</span>
           </template>
           <template #azioni-cell="{ row }">
             <div class="flex justify-end gap-1">
@@ -325,7 +465,8 @@
     <!-- ─── MODAL NUOVO MOVIMENTO ─── -->
     <UModal v-model:open="modalNuovoMovimentoAperto" title="Nuovo Movimento Manuale">
       <template #body>
-        <UForm :state="nuovoMovimento" class="space-y-4" @submit="salvaMovimento">
+        <!-- E2: schema Zod + @error per focus automatico -->
+        <UForm :schema="nuovoMovimentoSchema" :state="nuovoMovimento" class="space-y-4" @submit="salvaMovimento" @error="onFormError">
           <div class="grid grid-cols-2 gap-4">
             <UFormField name="tipo" label="Tipo" required>
               <USelect v-model="nuovoMovimento.tipo" :items="[{label: 'Entrata (Cassa Reale)', value: 'ENTRATA'}, {label: 'Uscita (Cassa Reale)', value: 'USCITA'}, {label: 'Credito (Da incassare)', value: 'CREDITO'}, {label: 'Debito (Da pagare)', value: 'DEBITO'}]" class="w-full" />
@@ -349,7 +490,7 @@
           </div>
 
           <UFormField name="categoria" label="Categoria">
-            <UInput v-model="nuovoMovimento.categoria" placeholder="Es. spese_generali" class="w-full" />
+            <USelect v-model="nuovoMovimento.categoria" :items="opzioniForm" value-key="value" class="w-full" />
           </UFormField>
 
           <div class="flex justify-end gap-3 pt-4">
@@ -411,7 +552,7 @@
             </UFormField>
           </div>
           <UFormField label="Categoria">
-            <UInput v-model="modificaMovimento.categoria" class="w-full" />
+            <USelect v-model="modificaMovimento.categoria" :items="opzioniForm" value-key="value" class="w-full" />
           </UFormField>
         </div>
       </template>
@@ -423,18 +564,71 @@
       </template>
     </UModal>
 
+    <!-- ─── MODAL E6 — Dettaglio Crediti / Debiti ─── -->
+    <UModal
+      :open="modalPrevisionale !== null"
+      :title="modalPrevisionale === 'CREDITO' ? 'Da Incassare — Crediti' : 'Da Pagare — Debiti'"
+      @update:open="(v) => { if (!v) modalPrevisionale = null }"
+    >
+      <template #body>
+        <div v-if="loadingPrevisionali" class="flex justify-center py-10">
+          <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-slate-400" />
+        </div>
+        <p v-else-if="entriePrevisionali.length === 0" class="text-center py-8 text-sm text-slate-400">
+          Nessun movimento trovato
+        </p>
+        <UTable
+          v-else
+          :data="entriePrevisionali"
+          :columns="[
+            { accessorKey: 'data',            header: 'Data' },
+            { accessorKey: 'descrizione',     header: 'Descrizione' },
+            { accessorKey: 'metodoPagamento', header: 'Metodo' },
+            { accessorKey: 'importo',         header: 'Importo' },
+          ]"
+        >
+          <template #data-cell="{ row }">{{ formatData(row.original.data) }}</template>
+          <template #metodoPagamento-cell="{ row }">{{ labelMetodo(row.original.metodoPagamento) }}</template>
+          <template #importo-cell="{ row }">
+            <span class="font-medium text-slate-800">€ {{ fmt(parseFloat(row.original.importo)) }}</span>
+          </template>
+        </UTable>
+      </template>
+    </UModal>
+
   </div>
 </template>
 
 <script setup lang="ts">
+import { z } from 'zod'
+import { labelMetodo, labelTipo } from '~/utils/contabilita'
+import { mappaEtichette } from '#shared/accounting-categories'
+
 definePageMeta({ middleware: ['admin-only'] })
 
 const toast = useToast()
 
+// ─── Categorie (gestite da Impostazioni → Categorie) ───
+const { data: categorieData, refresh: refreshCategorie } = useLazyFetch('/api/accounting/categories')
+const categorie = computed(() => categorieData.value ?? [])
+const mappaCategorie = computed(() => mappaEtichette(categorie.value))
+function labelCategoria(cat: string | null | undefined): string {
+  if (!cat) return '—'
+  return mappaCategorie.value[cat] ?? cat
+}
+// Filtro: tutte le categorie esistenti. Form manuale: escluse quelle automatiche di sistema.
+const opzioniFiltro = computed(() => [
+  { label: 'Tutte le categorie', value: 'TUTTE' },
+  ...categorie.value.map((c) => ({ label: c.etichetta, value: c.chiave })),
+])
+const opzioniForm = computed(() =>
+  categorie.value.filter((c) => !c.sistema).map((c) => ({ label: c.etichetta, value: c.chiave })),
+)
+
 // ─── Periodo (default: dal 1° gennaio dell'anno corrente a oggi) ───
 const annoCorrente = new Date().getFullYear()
 const INIZIO_ANNO = `${annoCorrente}-01-01`
-const OGGI_ISO = new Date().toISOString().substring(0, 10)
+const OGGI_ISO    = new Date().toISOString().slice(0, 10)
 
 const periodo = reactive({
   dataInizio: INIZIO_ANNO,
@@ -450,12 +644,35 @@ const { data: dash, pending, refresh: refreshDash } = useLazyFetch('/api/account
   watch: false,
 })
 
+// E5 — Debiti tutor
+const { data: debitiTutor, refresh: refreshDebitiTutor } = useLazyFetch('/api/tutors/debiti-summary', {
+  watch: false,
+})
+const tutorDebitiTotale = computed(() => debitiTutor.value?.totale ?? 0)
+const tutorDebitiCount  = computed(() => debitiTutor.value?.tutorsConDebiti ?? 0)
+
+// E6 — Modal dettaglio Crediti / Debiti
+const modalPrevisionale    = ref<'CREDITO' | 'DEBITO' | null>(null)
+const entriePrevisionali   = ref<any[]>([])
+const loadingPrevisionali  = ref(false)
+
+async function apriPrevisionale(tipo: 'CREDITO' | 'DEBITO') {
+  modalPrevisionale.value   = tipo
+  loadingPrevisionali.value = true
+  try {
+    const res = await $fetch<{ data: any[] }>('/api/accounting/entries', { query: { tipo, limit: 100 } })
+    entriePrevisionali.value = res.data ?? []
+  } finally {
+    loadingPrevisionali.value = false
+  }
+}
+
 // ─── Lista Movimenti (stesso periodo + filtri Tipo/Categoria) ───
 const filtroEntries = reactive({
-  tipo: 'TUTTI',
-  categoria: '',
-  page: 1,
-  limit: 50,
+  tipo:      'TUTTI',
+  categoria: 'TUTTE',
+  page:      1,
+  limit:     50,
 })
 
 const { data: entriesData, pending: pendingEntries, refresh: refreshEntries } = useLazyFetch('/api/accounting/entries', {
@@ -463,7 +680,7 @@ const { data: entriesData, pending: pendingEntries, refresh: refreshEntries } = 
     dataInizio: periodo.dataInizio || undefined,
     dataFine: periodo.dataFine || undefined,
     tipo: (filtroEntries.tipo && filtroEntries.tipo !== 'TUTTI') ? filtroEntries.tipo : undefined,
-    categoria: filtroEntries.categoria || undefined,
+    categoria: (filtroEntries.categoria && filtroEntries.categoria !== 'TUTTE') ? filtroEntries.categoria : undefined,
     page: filtroEntries.page,
     limit: filtroEntries.limit,
   })),
@@ -477,23 +694,24 @@ function caricaEntries() {
   refreshEntries()
 }
 
+// USelect (Reka UI) non emette un evento `change` affidabile → osserviamo i filtri.
+watch(() => [filtroEntries.tipo, filtroEntries.categoria], caricaEntries)
+
 function cambiaPagina() {
   refreshEntries()
 }
 
-// Cambio periodo → aggiorna SIA le card SIA la lista
 function onPeriodoChange() {
   filtroEntries.page = 1
   refreshDash()
   refreshEntries()
 }
 
-// Azzera filtri → torna al 1° gennaio → oggi e pulisce Tipo/Categoria
 function azzeraFiltri() {
   periodo.dataInizio = INIZIO_ANNO
   periodo.dataFine = OGGI_ISO
   filtroEntries.tipo = 'TUTTI'
-  filtroEntries.categoria = ''
+  filtroEntries.categoria = 'TUTTE'
   filtroEntries.page = 1
   refreshDash()
   refreshEntries()
@@ -502,9 +720,11 @@ function azzeraFiltri() {
 function refreshAll() {
   refreshDash()
   refreshEntries()
+  refreshDebitiTutor()
+  refreshCategorie()
 }
 
-// ─── Card "per metodo": entrate e uscite del periodo, una card per metodo ───
+// ─── Card "per metodo" ───
 const cardsMetodo = computed(() => {
   const pm = dash.value?.perMetodo
   if (!pm) return []
@@ -521,10 +741,7 @@ function fmt(n: number) {
   return (n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-function formatData(d: string | Date | null) {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
+import { formatData } from '~/utils/format'
 
 // ─── Colonne Tabelle ───
 const colonneEntries = [
@@ -534,6 +751,7 @@ const colonneEntries = [
   { accessorKey: 'descrizione', header: 'Descrizione' },
   { accessorKey: 'metodoPagamento', header: 'Metodo' },
   { accessorKey: 'importo', header: 'Importo' },
+  { id: 'fatturaEmessa', header: 'Fattura' },  // E1
   { id: 'azioni', header: '' },
 ]
 
@@ -545,7 +763,28 @@ const colonneFatture = [
   { id: 'azione', accessorKey: 'entryId', header: '' },
 ]
 
-// ─── Segna fattura emessa ───
+// ─── E1 — Toggle fattura ───
+const toggling = ref<string | null>(null)
+
+async function toggleFattura(entry: any) {
+  toggling.value = entry.id
+  const nuovoStato = !entry.fatturaEmessa
+  try {
+    if (entry.paymentId) {
+      await $fetch(`/api/payments/${entry.paymentId}/invoice`, { method: 'PUT', body: { fatturaEmessa: nuovoStato } })
+    } else {
+      await $fetch(`/api/accounting/entries/${entry.id}`, { method: 'PUT', body: { fatturaEmessa: nuovoStato } })
+    }
+    toast.add({ title: nuovoStato ? 'Fattura segnata come emessa' : 'Fattura rimossa', color: 'success', icon: 'i-heroicons-check-circle' })
+    refreshAll()
+  } catch (err: any) {
+    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Operazione non riuscita', color: 'error' })
+  } finally {
+    toggling.value = null
+  }
+}
+
+// ─── Segna fattura emessa (sezione Fatture in attesa) ───
 const segnandoFattura = ref<string | null>(null)
 
 async function segnaFatturaEmessa(row: any) {
@@ -561,12 +800,32 @@ async function segnaFatturaEmessa(row: any) {
   }
 }
 
+// ─── E2 — Schema Zod per form nuovo movimento + focus automatico ───
+const nuovoMovimentoSchema = z.object({
+  tipo:            z.enum(['ENTRATA', 'USCITA', 'CREDITO', 'DEBITO']),
+  data:            z.string().min(1),
+  descrizione:     z.string().min(1, 'La descrizione è obbligatoria'),
+  importo:         z.number().min(0.01, 'Importo deve essere > 0'),
+  metodoPagamento: z.string().optional(),
+  categoria:       z.string().optional(),
+})
+
+function onFormError(errors: any) {
+  const firstPath = errors?.errors?.[0]?.path
+  if (firstPath) {
+    nextTick(() => {
+      const el = document.querySelector(`[name="${firstPath}"]`) as HTMLElement | null
+      el?.focus()
+    })
+  }
+}
+
 // ─── Nuovo Movimento Manuale ───
 const modalNuovoMovimentoAperto = ref(false)
 const salvandoMovimento = ref(false)
 
 const nuovoMovimento = reactive({
-  tipo: 'USCITA',
+  tipo: 'USCITA' as 'ENTRATA' | 'USCITA' | 'CREDITO' | 'DEBITO',
   importo: 0,
   descrizione: '',
   categoria: 'spese_generali',
@@ -575,7 +834,6 @@ const nuovoMovimento = reactive({
 })
 
 async function salvaMovimento() {
-  if (!nuovoMovimento.importo || !nuovoMovimento.descrizione) return
   salvandoMovimento.value = true
   try {
     await $fetch('/api/accounting/entries', {
@@ -591,11 +849,8 @@ async function salvaMovimento() {
     })
     toast.add({ title: 'Movimento registrato', color: 'success' })
     modalNuovoMovimentoAperto.value = false
-    
-    // Reset form
     nuovoMovimento.importo = 0
     nuovoMovimento.descrizione = ''
-    
     refreshAll()
   } catch (err: any) {
     toast.add({ title: 'Errore', description: 'Impossibile salvare il movimento', color: 'error' })
@@ -604,7 +859,7 @@ async function salvaMovimento() {
   }
 }
 
-// ─── Azioni movimenti: elimina (con storno) / modifica (solo manuali) ───
+// ─── Azioni movimenti ───
 function isAuto(row: any) {
   return !!(row.paymentId || row.tutorPaymentId || row.reimbursementId)
 }
@@ -678,4 +933,3 @@ async function salvaModifica() {
   }
 }
 </script>
-

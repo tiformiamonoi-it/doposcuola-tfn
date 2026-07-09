@@ -5,6 +5,11 @@ import { getPackageById, updatePackage } from '../../services/package.service'
 // Aggiorna un pacchetto e ricalcola automaticamente gli stati (macchina a stati).
 // Restituisce 409 se il pacchetto è CHIUSO (stato finale non modificabile).
 export default defineEventHandler(async (event) => {
+  const { user } = await requireUserSession(event)
+  if (user.role !== 'ADMIN' && user.role !== 'SUPER_TUTOR') {
+    throw createError({ statusCode: 403, statusMessage: 'Forbidden' })
+  }
+
   const id = getRouterParam(event, 'id')
 
   if (!id) {

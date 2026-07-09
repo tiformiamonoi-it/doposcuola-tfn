@@ -9,7 +9,7 @@
       </div>
       <UButton
         icon="i-heroicons-plus"
-        @click="apriModalCrea"
+        @click="wizardAperto = true"
       >
         Nuovo Studente
       </UButton>
@@ -55,7 +55,7 @@
           { label: 'Inattivi', value: 'false' },
         ]"
         class="w-full sm:w-32"
-        @change="caricaStudenti"
+
       />
       <USelect
         v-model="filtroPacchetto"
@@ -68,12 +68,12 @@
           { label: 'Nessun pacchetto', value: 'NESSUNO' },
         ]"
         class="w-full sm:w-48"
-        @change="caricaStudenti"
+
       />
       <UCheckbox
         v-model="nascondiInattivi"
         label="Nascondi senza pacchetto/inattivi"
-        @change="caricaStudenti"
+
       />
     </div>
 
@@ -203,98 +203,13 @@
       />
     </div>
 
-    <!-- ─── MODAL CREA STUDENTE ─── -->
-    <UModal v-model:open="modalCreaAperto" title="Nuovo Studente" :ui="{ width: 'max-w-2xl' }">
-      <template #body>
-        <UForm ref="formCrea" :schema="CreateStudentSchema" :state="nuovoStudente" @submit="creaStudente" class="space-y-4">
-
-          <div class="grid grid-cols-2 gap-4">
-            <UFormField name="firstName" label="Nome" required>
-              <UInput v-model="nuovoStudente.firstName" placeholder="Mario" class="w-full" />
-            </UFormField>
-            <UFormField name="lastName" label="Cognome" required>
-              <UInput v-model="nuovoStudente.lastName" placeholder="Rossi" class="w-full" />
-            </UFormField>
-          </div>
-
-          <div class="grid grid-cols-2 gap-4">
-            <UFormField name="classe" label="Classe">
-              <USelectMenu
-                v-model="nuovoStudente.classe"
-                :items="CLASSI_LISTA"
-                searchable
-                placeholder="Seleziona classe..."
-                class="w-full"
-              />
-            </UFormField>
-            <UFormField name="scuola" label="Scuola">
-              <template v-if="!altreScuolaCrea">
-                <USelectMenu
-                  v-model="nuovoStudente.scuola"
-                  :items="SCUOLE_TRAPANI"
-                  searchable
-                  placeholder="Cerca scuola..."
-                  class="w-full"
-                />
-                <button
-                  type="button"
-                  class="text-xs text-tfn-500 hover:underline mt-1 block"
-                  @click="altreScuolaCrea = true"
-                >
-                  Non trovi la scuola? Inserisci manualmente
-                </button>
-              </template>
-              <template v-else>
-                <div class="flex gap-2">
-                  <UInput v-model="nuovoStudente.scuola" placeholder="Nome scuola" class="flex-1" />
-                  <UButton variant="ghost" size="xs" @click="altreScuolaCrea = false; nuovoStudente.scuola = ''">
-                    ← Lista
-                  </UButton>
-                </div>
-              </template>
-            </UFormField>
-          </div>
-
-          <USeparator label="Dati Genitore" />
-
-          <div class="grid grid-cols-2 gap-4">
-            <UFormField name="parentName" label="Nome Genitore">
-              <UInput v-model="nuovoStudente.parentName" placeholder="Luigi Rossi" class="w-full" />
-            </UFormField>
-            <UFormField name="parentPhone" label="Telefono Genitore">
-              <UInput
-                v-model="nuovoStudente.parentPhone"
-                placeholder="+39 333 1234567"
-                class="w-full"
-                @blur="nuovoStudente.parentPhone = normalizzaTelefono(nuovoStudente.parentPhone)"
-              />
-            </UFormField>
-          </div>
-
-          <UFormField name="parentEmail" label="Email genitore / alunno" required>
-            <UInput v-model="nuovoStudente.parentEmail" type="email" placeholder="genitore@email.it" class="w-full" />
-          </UFormField>
-
-          <UFormField name="note" label="Note">
-            <UTextarea v-model="nuovoStudente.note" placeholder="Eventuali note su questo studente..." :rows="3" class="w-full" />
-          </UFormField>
-
-        </UForm>
-      </template>
-      <template #footer>
-        <div class="flex justify-end gap-3">
-          <UButton variant="ghost" @click="modalCreaAperto = false">Annulla</UButton>
-          <UButton :loading="salvando" @click="formCrea?.submit()">Salva Studente</UButton>
-        </div>
-      </template>
-    </UModal>
+    <!-- ─── WIZARD NUOVO STUDENTE ─── -->
+    <WizardNuovoStudente v-model:open="wizardAperto" @refresh="caricaStudenti" />
 
   </div>
 </template>
 
 <script setup lang="ts">
-import { CreateStudentSchema } from '#shared/schemas/student.schema'
-import { normalizzaTelefono } from '~/utils/phone'
 import { inizialiDa, coloreAvatar } from '~/utils/avatar'
 
 definePageMeta({ middleware: ['admin-or-super'] })
@@ -302,43 +217,7 @@ definePageMeta({ middleware: ['admin-or-super'] })
 const router = useRouter()
 const toast = useToast()
 
-// ─── Scuole e classi ───
-const SCUOLE_TRAPANI = [
-  // Trapani città - superiori
-  'Liceo Scientifico "G. Galilei" - Trapani',
-  'Liceo Classico "L. Ximenes" - Trapani',
-  'Liceo delle Scienze Umane "G. B. Fardella" - Trapani',
-  'Liceo Artistico di Trapani',
-  'ITC "P. F. Calvino" - Trapani',
-  'ITIS "G. Ferro" - Trapani',
-  'IPSIA "L. Cassia" - Trapani',
-  'Istituto Alberghiero di Trapani',
-  // Trapani città - medie/elementari
-  'I.C. "S. Borsellino-Ajello" - Trapani',
-  'I.C. "G. Mazzini" - Trapani',
-  'I.C. "E. De Amicis" - Trapani',
-  'I.C. "G. Garibaldi" - Trapani',
-  'I.C. "L. Da Vinci" - Trapani',
-  'I.C. "G. Petrosino" - Petrosino (TP)',
-  // Comuni limitrofi
-  'Liceo "G. G. Adria" - Marsala',
-  'ITIS "P. Gentili" - Marsala',
-  'ITC "A. Lombardo" - Marsala',
-  'I.C. di Erice',
-  'I.C. di Paceco',
-  'I.C. di Valderice',
-]
-
-const CLASSI_LISTA = [
-  // Elementari
-  '1ª Elementare', '2ª Elementare', '3ª Elementare', '4ª Elementare', '5ª Elementare',
-  // Medie
-  '1ª Media', '2ª Media', '3ª Media',
-  // Superiori
-  '1ª Superiore', '2ª Superiore', '3ª Superiore', '4ª Superiore', '5ª Superiore',
-  // Altro
-  'Università', 'Concorsi / Adulti',
-]
+import { SCUOLE_TRAPANI, CLASSI_LISTA } from '~/utils/schools'
 
 const columns = [
   { id: 'studente', accessorKey: 'lastName', header: 'Studente' },
@@ -441,55 +320,6 @@ function onSearch() {
 }
 
 
-// ─── Modal crea ───
-const modalCreaAperto  = ref(false)
-const formCrea         = ref()
-const salvando         = ref(false)
-const altreScuolaCrea  = ref(false)
-
-const nuovoStudente = reactive({
-  firstName: '',
-  lastName:  '',
-  classe:    '',
-  scuola:    '',
-  parentName:  '',
-  parentPhone: '',
-  parentEmail: '',
-  note:        '',
-})
-
-function apriModalCrea() {
-  Object.assign(nuovoStudente, {
-    firstName: '', lastName: '', classe: '', scuola: '',
-    parentName: '', parentPhone: '', parentEmail: '', note: '',
-  })
-  altreScuolaCrea.value = false
-  modalCreaAperto.value = true
-}
-
-async function creaStudente() {
-  salvando.value = true
-  try {
-    await $fetch('/api/students', {
-      method: 'POST',
-      body: {
-        ...nuovoStudente,
-        classe:      nuovoStudente.classe      || undefined,
-        scuola:      nuovoStudente.scuola      || undefined,
-        parentName:  nuovoStudente.parentName  || undefined,
-        parentPhone: nuovoStudente.parentPhone || undefined,
-        parentEmail: nuovoStudente.parentEmail || undefined,
-        note:        nuovoStudente.note        || undefined,
-      },
-    })
-    toast.add({ title: 'Studente creato', color: 'success', icon: 'i-heroicons-check-circle' })
-    modalCreaAperto.value = false
-    refresh()
-    refreshStats()
-  } catch (err: any) {
-    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile creare lo studente', color: 'error', icon: 'i-heroicons-x-circle' })
-  } finally {
-    salvando.value = false
-  }
-}
+// ─── Wizard crea ───
+const wizardAperto = ref(false)
 </script>

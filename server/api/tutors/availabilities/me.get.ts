@@ -10,14 +10,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Missing from or to parameters' })
   }
 
-  const from = new Date(query.from as string)
-  const to = new Date(query.to as string)
+  const fromStr = String(query.from).slice(0, 10)
+  const toStr   = String(query.to).slice(0, 10)
 
   const data = await db.query.tutorAvailabilities.findMany({
     where: and(
       eq(tutorAvailabilities.userId, user.id),
-      gte(tutorAvailabilities.date, from),
-      lte(tutorAvailabilities.date, to)
+      gte(tutorAvailabilities.date, fromStr),
+      lte(tutorAvailabilities.date, toStr)
     ),
     columns: {
       id: true,

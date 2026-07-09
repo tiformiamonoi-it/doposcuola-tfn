@@ -1,5 +1,4 @@
 import { eq, and, gte, lte, ne } from 'drizzle-orm'
-import { startOfDay, endOfDay } from 'date-fns'
 import { db } from '../../database/client'
 import * as tables from '../../database/schema'
 
@@ -10,20 +9,14 @@ export default defineEventHandler(async (event) => {
   const dateParam = getRouterParam(event, 'date')
   if (!dateParam) throw createError({ statusCode: 400, message: 'Data mancante' })
 
-  const targetDate = new Date(dateParam)
-  if (isNaN(targetDate.getTime())) {
-    throw createError({ statusCode: 400, message: 'Data non valida' })
+  const targetDate = dateParam.slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+    throw createError({ statusCode: 400, message: 'Data non valida (formato richiesto: YYYY-MM-DD)' })
   }
-
-  const start = startOfDay(targetDate)
-  const end = endOfDay(targetDate)
 
   // 1. Troviamo i Tutor Disponibili per questo giorno
   const availabilities = await db.query.tutorAvailabilities.findMany({
-    where: and(
-      gte(tables.tutorAvailabilities.date, start),
-      lte(tables.tutorAvailabilities.date, end)
-    ),
+    where: eq(tables.tutorAvailabilities.date, targetDate),
     with: {
       user: {
         columns: { id: true, firstName: true, lastName: true, phone: true },
@@ -43,10 +36,14 @@ export default defineEventHandler(async (event) => {
   }))
 
   // 2. Troviamo le Prenotazioni (Bookings) per questo giorno
+  // Le date delle prenotazioni sono timestamp: usiamo il range del giorno in UTC
+  // per evitare slittamenti di fuso orario (la data inserita è già YYYY-MM-DD).
+  const dayStart = new Date(`${targetDate}T00:00:00.000Z`)
+  const dayEnd   = new Date(`${targetDate}T23:59:59.999Z`)
   const dayBookings = await db.query.bookings.findMany({
     where: and(
-      gte(tables.bookings.requestedDate, start),
-      lte(tables.bookings.requestedDate, end),
+      gte(tables.bookings.requestedDate, dayStart),
+      lte(tables.bookings.requestedDate, dayEnd),
       ne(tables.bookings.status, 'CANCELLED')
     ),
     with: {

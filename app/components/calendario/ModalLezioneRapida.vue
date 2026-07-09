@@ -9,9 +9,11 @@
 
         <!-- Tutor -->
         <UFormField label="Tutor" required>
-          <USelectMenu 
-            v-model="tutorItem" 
-            :items="tutorsOptions" 
+          <UInput v-if="lockedTutorId" :value="lockedTutorName" readonly class="w-full bg-slate-50 cursor-not-allowed text-slate-500" />
+          <USelectMenu
+            v-else
+            v-model="tutorItem"
+            :items="tutorsOptions"
             placeholder="Seleziona tutor..."
             searchable
             class="w-full"
@@ -46,38 +48,41 @@
             <UIcon name="i-heroicons-users" class="w-5 h-5 text-slate-500" />
             Studenti
           </h3>
-          
+
           <div class="space-y-3">
-            <div v-for="(stu, index) in students" :key="index" class="bg-white border border-slate-200 rounded-lg p-3 relative flex flex-col gap-2 shadow-sm">
-              <UButton icon="i-heroicons-trash" size="xs" color="error" variant="ghost" class="absolute top-2 right-2" @click="removeStudent(index)" />
-              
-              <div class="pr-8">
-                <USelectMenu
-                  v-model="stu.studentItem"
-                  :items="getAvailableStudents(index)"
-                  placeholder="Cerca studente..."
-                  searchable
-                  class="w-full"
-                  @update:model-value="(val) => onStudenteSelezionato(index, val)"
-                />
+            <!-- Lista studenti aggiunti -->
+            <div v-for="(stu, idx) in students" :key="idx" class="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200 shadow-sm">
+              <div class="flex-1 min-w-0">
+                <span class="font-medium text-slate-800">{{ stu.studentItem.label }}</span>
+                <span v-if="stu.loadingPackages" class="text-xs text-slate-400 ml-2">caricamento...</span>
               </div>
-              
-              <div v-if="stu.studentItem" class="pr-8">
-                <USelectMenu
-                  v-model="stu.packageItem"
-                  :items="stu.packageOptions || []"
-                  :loading="stu.loadingPackages"
-                  placeholder="Seleziona il pacchetto da scalare..."
-                  class="w-full"
-                />
-              </div>
+              <!-- Dropdown pacchetto solo se non auto-selezionato e ci sono più opzioni -->
+              <USelectMenu
+                v-if="!stu.loadingPackages && stu.packageOptions.length > 1 && !stu.packageItem"
+                v-model="stu.packageItem"
+                :items="stu.packageOptions"
+                placeholder="Scegli pacchetto..."
+                class="w-40"
+              />
+              <span v-else-if="stu.packageItem" class="text-xs text-emerald-600 font-medium truncate max-w-[8rem]">{{ stu.packageItem.label }}</span>
+              <span v-else-if="!stu.loadingPackages" class="text-xs text-red-400">Nessun pacchetto</span>
+              <UButton icon="i-heroicons-x-mark" size="xs" variant="ghost" color="neutral" @click="removeStudent(idx)" />
             </div>
-            
-            <UButton v-if="!allStudentsSelected" size="sm" variant="soft" color="primary" icon="i-heroicons-plus" @click="addEmptyStudent" class="w-full justify-center">
-              {{ students.length === 0 ? 'Aggiungi studenti (obbligatorio)' : 'Aggiungi altro studente' }}
+
+            <!-- Bottone apri picker -->
+            <UButton icon="i-heroicons-user-plus" variant="soft" color="primary" class="w-full justify-center" @click="pickerAperto = true">
+              {{ students.length === 0 ? 'Aggiungi studenti (obbligatorio)' : '+ Aggiungi altri studenti' }}
             </UButton>
           </div>
         </div>
+
+        <!-- Picker studenti -->
+        <ModalSelezionaStudenti
+          v-model:open="pickerAperto"
+          :already-selected-ids="students.map(s => s.studentItem?.value).filter(Boolean)"
+          :students-pool="props.studentsPool"
+          @confirm="onPickerConfirm"
+        />
 
         <!-- Anteprima -->
         <div v-if="students.filter(s => s.studentItem).length > 0" class="bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-wrap gap-4">
@@ -101,7 +106,7 @@
 
         <!-- Note -->
         <UFormField label="Note (opzionale)">
-          <UTextarea v-model="note" placeholder="Es: Lezione di recupero..." rows="2" />
+          <UTextarea v-model="note" placeholder="Es: Lezione di recupero..." :rows="2" />
         </UFormField>
       </div>
     </template>
@@ -121,9 +126,15 @@
 import { ref, computed, watch } from 'vue'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
+import ModalSelezionaStudenti from '~/components/calendario/ModalSelezionaStudenti.vue'
 
 const props = defineProps<{
   date: string
+  // Se presenti, blocca il tutor (area personale tutor) e usa un pool di studenti
+  // ristretto invece della lista completa degli studenti attivi.
+  lockedTutorId?: string
+  lockedTutorName?: string
+  studentsPool?: { studentId: string; nome: string }[]
 }>()
 
 const emit = defineEmits(['refresh', 'close'])
@@ -140,23 +151,14 @@ const forzaGruppo = ref(false)
 const mezzaLezioneGlobale = ref(false)
 const note = ref('')
 const saving = ref(false)
+const pickerAperto = ref(false)
 
-// Fetch Data
-const { data: tutorsRes } = useFetch('/api/tutors?active=true', { lazy: true })
+// Fetch Data (la lista tutor non serve, e non è accessibile, quando il tutor è bloccato)
+const { data: tutorsRes } = useFetch('/api/tutors?active=true', { lazy: true, immediate: !props.lockedTutorId })
 const tutorsOptions = computed(() => (tutorsRes.value?.data || []).map((t: any) => ({ label: `${t.firstName} ${t.lastName}`, value: t.id })))
 
 const { data: slotsRes } = useFetch('/api/settings/timeslots?active=true', { lazy: true })
 const timeslotsOptions = computed(() => (slotsRes.value || []).map((s: any) => ({ label: `${s.oraInizio.substring(0,5)} - ${s.oraFine.substring(0,5)}`, value: s.id })))
-
-const { data: studentsRes } = useFetch('/api/students?active=true&limit=200', { lazy: true })
-const studentsOptions = computed(() => (studentsRes.value?.data || []).map((s: any) => ({ label: `${s.firstName} ${s.lastName}`, value: s.id })))
-
-function getAvailableStudents(currentIndex: number) {
-  const selectedIds = students.value.map((s, idx) => idx !== currentIndex ? s.studentItem?.value : null).filter(Boolean)
-  return studentsOptions.value.filter(opt => !selectedIds.includes(opt.value))
-}
-
-const allStudentsSelected = computed(() => students.value.length > 0 && students.value.every(s => s.studentItem && s.packageItem) === false)
 
 const canSave = computed(() => {
   return tutorItem.value?.value && timeSlotItem.value?.value && students.value.length > 0 && students.value.every(s => s.studentItem?.value && s.packageItem?.value)
@@ -189,8 +191,24 @@ function formatDate(dateStr: string) {
   catch { return dateStr }
 }
 
-function addEmptyStudent() { students.value.push({ studentItem: null, packageItem: null, packageOptions: [], loadingPackages: false, mezzaLezione: mezzaLezioneGlobale.value }) }
 function removeStudent(idx: number) { students.value.splice(idx, 1) }
+
+async function onPickerConfirm(picked: Array<{ studentId: string; nome: string; oreResiduo: string | null; pkgTipo: string | null }>) {
+  pickerAperto.value = false
+  for (const p of picked) {
+    if (students.value.some(s => s.studentItem?.value === p.studentId)) continue
+    const stu = {
+      studentItem: { label: p.nome, value: p.studentId },
+      packageItem: null,
+      packageOptions: [],
+      loadingPackages: false,
+      mezzaLezione: mezzaLezioneGlobale.value,
+    }
+    students.value.push(stu)
+    const idx = students.value.length - 1
+    await onStudenteSelezionato(idx, { value: p.studentId })
+  }
+}
 
 async function onStudenteSelezionato(idx: number, newVal: any) {
   const stu = students.value[idx]
@@ -234,7 +252,7 @@ async function checkDuplicate() {
 
 watch(() => isOpen.value, (newVal) => {
   if (newVal) {
-    tutorItem.value = null
+    tutorItem.value = props.lockedTutorId ? { label: props.lockedTutorName, value: props.lockedTutorId } : null
     timeSlotItem.value = null
     students.value = []
     forzaGruppo.value = false

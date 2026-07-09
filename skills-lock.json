@@ -25,6 +25,12 @@
       "skillPath": "skills/nuxt-ui/SKILL.md",
       "computedHash": "6954d6eee3f091d66d76c3c1d006e3e5f2ae101bfb46c3fbe714adad39f6caef"
     },
+    "supabase": {
+      "source": "supabase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/supabase/SKILL.md",
+      "computedHash": "61638e85394d2e39d1109cbf607593afb9733e0de19cdf0b52ec9bc32d95ea74"
+    },
     "vue": {
       "source": "onmax/nuxt-skills",
       "sourceType": "github",

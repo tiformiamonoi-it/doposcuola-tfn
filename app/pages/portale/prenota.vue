@@ -206,10 +206,11 @@ definePageMeta({
 })
 useHead({ title: 'Prenota — Portale Famiglie' })
 
-const MATERIE = [
+const { data: portalConfigs } = useLazyFetch('/api/portal/configs')
+const MATERIE = computed(() => (portalConfigs.value as any)?.materie ?? [
   'Matematica', 'Fisica', 'Chimica', 'Italiano', 'Inglese',
   'Storia', 'Geografia', 'Latino', 'Greco', 'Scienze', 'Informatica',
-]
+])
 
 const toast = useToast()
 const step = ref(1)

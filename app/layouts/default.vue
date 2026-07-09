@@ -232,6 +232,8 @@ const uscendo = ref(false)
 async function logout() {
   uscendo.value = true
   try {
+    // Chiamata esplicita al backend per invalidare la sessione server-side
+    await $fetch('/api/auth/logout', { method: 'POST' })
     await clear()
     await navigateTo('/login', { external: true })
   } catch {
@@ -264,7 +266,8 @@ const portalLinks = [
 const navItems = computed(() => {
   if (user.value?.role === 'TUTOR') {
     return [
-      { icon: 'i-heroicons-user', label: 'Area Tutor', route: '/area-tutor' }
+      { icon: 'i-heroicons-calendar', label: 'Il mio Calendario', route: '/tutor-calendario' },
+      { icon: 'i-heroicons-user',     label: 'Area Tutor',        route: '/area-tutor' },
     ]
   }
   return [

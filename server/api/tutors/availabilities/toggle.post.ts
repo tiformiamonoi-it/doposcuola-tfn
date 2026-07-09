@@ -10,14 +10,12 @@ const toggleSchema = z.object({
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
   const body = await readValidatedBody(event, toggleSchema.parse)
-  const targetDate = new Date(body.date)
-  // Assicuriamoci che l'ora sia azzerata per evitare duplicati sulla stessa giornata
-  targetDate.setHours(0, 0, 0, 0)
+  const dateStr = body.date.slice(0, 10) // 'YYYY-MM-DD'
 
   const existing = await db.query.tutorAvailabilities.findFirst({
     where: and(
       eq(tutorAvailabilities.userId, user.id),
-      eq(tutorAvailabilities.date, targetDate)
+      eq(tutorAvailabilities.date, dateStr)
     )
   })
 
@@ -27,7 +25,7 @@ export default defineEventHandler(async (event) => {
   } else {
     await db.insert(tutorAvailabilities).values({
       userId: user.id,
-      date: targetDate
+      date: dateStr
     })
     return { status: 'added' }
   }

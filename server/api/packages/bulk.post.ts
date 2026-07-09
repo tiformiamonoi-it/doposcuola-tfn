@@ -7,6 +7,11 @@ const BulkPackageSchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
+  const { user } = await requireUserSession(event)
+  if (user.role !== 'ADMIN' && user.role !== 'SUPER_TUTOR') {
+    throw createError({ statusCode: 403, statusMessage: 'Forbidden' })
+  }
+
   const body = await readBody(event)
   const parsed = BulkPackageSchema.safeParse(body)
 
@@ -19,7 +24,10 @@ export default defineEventHandler(async (event) => {
   }
 
   // Creazione massiva in parallelo o sequenziale. Meglio sequenziale/parallela controllata per non caricare il DB.
-  const results = await Promise.all(parsed.data.packages.map((pkgData) => createPackage(pkgData)))
+  const results = []
+  for (const pkgData of parsed.data.packages) {
+    results.push(await createPackage(pkgData))
+  }
 
   setResponseStatus(event, 201)
   return { success: true, count: results.length, data: results }

@@ -57,6 +57,34 @@
       "when": 1781551028090,
       "tag": "0007_jittery_yellowjacket",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1781736573262,
+      "tag": "0008_familiar_turbo",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781905948846,
+      "tag": "0009_add_sospeso_to_packages",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781908037787,
+      "tag": "0010_add_lesson_confirmazione_visione",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1781908538850,
+      "tag": "0011_fix_tutor_availabilities_date_string",
+      "breakpoints": true
     }
   ]
 }
