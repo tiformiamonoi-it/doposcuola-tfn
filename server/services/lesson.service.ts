@@ -191,12 +191,12 @@ export async function createLesson(data: CreateLessonInput) {
       }
 
       // Valida sugli stati RICALCOLATI: la colonna salvata può essere obsoleta
-      // (es. pacchetto chiuso/esaurito dopo l'ultima scrittura).
+      // (es. pacchetto chiuso/esaurito/scaduto dopo l'ultima scrittura).
       const statiFreschi = computePackageStates(pkgCheck)
-      const hasInvalidState = statiFreschi.includes('CHIUSO') || statiFreschi.includes('ESAURITO')
+      const hasInvalidState = statiFreschi.includes('CHIUSO') || statiFreschi.includes('ESAURITO') || statiFreschi.includes('SCADUTO')
 
       if (Number(pkgCheck.oreResiduo) < oreScalate || hasInvalidState) {
-        throw new Error(`${nomeStudente(studente.studentId)}: il pacchetto non ha ore sufficienti o è chiuso/esaurito.`)
+        throw new Error(`${nomeStudente(studente.studentId)}: il pacchetto non ha ore sufficienti oppure è chiuso, esaurito o scaduto.`)
       }
 
       // Inserisce il record studente nella lezione
@@ -405,10 +405,10 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
 
         // Valida sugli stati RICALCOLATI (la colonna salvata può essere obsoleta)
         const statiFreschi = computePackageStates(pkgCheck)
-        const hasInvalidState = statiFreschi.includes('CHIUSO') || statiFreschi.includes('ESAURITO')
+        const hasInvalidState = statiFreschi.includes('CHIUSO') || statiFreschi.includes('ESAURITO') || statiFreschi.includes('SCADUTO')
 
         if (Number(pkgCheck.oreResiduo) < oreScalate || hasInvalidState) {
-          throw new Error(`${nomeStudenteUpd(nuovo.studentId)}: il pacchetto non ha ore sufficienti o è chiuso/esaurito.`)
+          throw new Error(`${nomeStudenteUpd(nuovo.studentId)}: il pacchetto non ha ore sufficienti oppure è chiuso, esaurito o scaduto.`)
         }
 
         await tx.insert(lessonStudents).values({
@@ -499,9 +499,9 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
         }
         // Valida sugli stati RICALCOLATI (la colonna salvata può essere obsoleta)
         const statiFreschiF7 = computePackageStates(newPkgCheck)
-        const hasInvalidStateF7 = statiFreschiF7.includes('CHIUSO') || statiFreschiF7.includes('ESAURITO')
+        const hasInvalidStateF7 = statiFreschiF7.includes('CHIUSO') || statiFreschiF7.includes('ESAURITO') || statiFreschiF7.includes('SCADUTO')
         if (Number(newPkgCheck.oreResiduo) < oreScalate || hasInvalidStateF7) {
-          throw new Error(`${nomeStudenteUpd(newStu.studentId)}: il nuovo pacchetto non ha ore sufficienti o è chiuso/esaurito.`)
+          throw new Error(`${nomeStudenteUpd(newStu.studentId)}: il nuovo pacchetto non ha ore sufficienti oppure è chiuso, esaurito o scaduto.`)
         }
 
         // Scala ore dal nuovo pacchetto
