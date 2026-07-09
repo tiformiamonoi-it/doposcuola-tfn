@@ -16,8 +16,10 @@ export const PUBLIC_API_PREFIXES = [
   '/api/contact',       // endpoint pubblico del form
 ]
 
-// Regole ordinate: la PRIMA che matcha decide i ruoli ammessi
-export const API_POLICY: Array<{ prefix: string; roles: Role[] }> = [
+// Regole ordinate: la PRIMA che matcha decide i ruoli ammessi.
+// `mutationRoles` (opzionale): ruoli ammessi per i metodi di scrittura (POST/PUT/PATCH/DELETE);
+// se assente, `roles` vale per tutti i metodi.
+export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: Role[] }> = [
   { prefix: '/api/accounting',              roles: ADMIN_ONLY },
   // Portale: GENITORE + ADMIN/SUPER in preview (gli handler restituiscono [] ai non-genitori)
   { prefix: '/api/portal',                  roles: ['GENITORE', 'ADMIN', 'SUPER_TUTOR'] },
@@ -27,15 +29,15 @@ export const API_POLICY: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: '/api/tutor-payments',          roles: ADMIN_SUPER },
   { prefix: '/api/notes',                   roles: STAFF },
   { prefix: '/api/students',                roles: STAFF },
-  // Lettura pacchetti aperta allo STAFF (serve al tutor per scalare le ore in una lezione);
-  // le mutazioni (POST/PUT/recharge/bulk) hanno un controllo ADMIN_SUPER esplicito nel proprio handler.
-  { prefix: '/api/packages',                roles: STAFF },
+  // Lettura pacchetti aperta allo STAFF (serve al tutor per scalare le ore in una lezione),
+  // ma i campi economici vengono rimossi per i TUTOR nei handler GET; scritture solo ADMIN/SUPER.
+  { prefix: '/api/packages',                roles: STAFF, mutationRoles: ADMIN_SUPER },
   { prefix: '/api/standard-packages',       roles: ADMIN_SUPER },
   // I tutor possono creare/modificare solo le proprie lezioni del giorno, entro le 20:00
   // (controllo granulare dentro service/handler) — la policy qui apre solo l'accesso di massima.
   { prefix: '/api/lessons',                 roles: STAFF },
   { prefix: '/api/payments',                roles: ADMIN_SUPER },
-  { prefix: '/api/settings/timeslots',      roles: STAFF },
+  { prefix: '/api/settings/timeslots',      roles: STAFF, mutationRoles: ADMIN_SUPER },
   { prefix: '/api/settings',                roles: ADMIN_SUPER },
   { prefix: '/api/matching',                roles: ADMIN_SUPER },
   { prefix: '/api/tutors',                  roles: ADMIN_SUPER },
@@ -50,7 +52,11 @@ export function isPublicApi(path: string): boolean {
   return PUBLIC_API_PREFIXES.some((p) => path.startsWith(p))
 }
 
-export function allowedRolesFor(path: string): Role[] {
+const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+export function allowedRolesFor(path: string, method = 'GET'): Role[] {
   const rule = API_POLICY.find((r) => path.startsWith(r.prefix))
-  return rule?.roles ?? DEFAULT_ROLES
+  if (!rule) return DEFAULT_ROLES
+  if (rule.mutationRoles && MUTATION_METHODS.has(method.toUpperCase())) return rule.mutationRoles
+  return rule.roles
 }

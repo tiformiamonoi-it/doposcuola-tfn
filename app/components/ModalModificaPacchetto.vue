@@ -211,7 +211,7 @@ async function salvaModifiche() {
     console.error(err)
     toast.add({ 
       title: 'Errore Server', 
-      description: err?.data?.data?.originalError || err?.data?.statusMessage || 'Errore durante la modifica', 
+      description: err?.data?.statusMessage || 'Errore durante la modifica',
       color: 'error' 
     })
   } finally {

@@ -400,7 +400,7 @@ function caricaPacchetti() { pagina.value = 1; refresh() }
 
 // ─── Fetch studenti per selector ───
 const { data: studentiData } = useLazyFetch('/api/students', {
-  query: { active: 'true', limit: 1000, sortBy: 'lastName', sortDir: 'asc' },
+  query: { active: 'true', limit: 1000, sortBy: 'lastName', sortDir: 'asc', light: 'true' },
 })
 
 const studenteOptions = computed(() => {

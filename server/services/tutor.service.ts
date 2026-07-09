@@ -244,6 +244,11 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
     if (profileFields.includes(key)) profileChanges[key] = val
   }
 
+  // Reset password (admin): salvata solo hashata, mai in chiaro
+  if (data.password) {
+    userChanges.password = await bcrypt.hash(data.password, 10)
+  }
+
   return db.transaction(async (tx) => {
     const [user] = await tx.update(users)
       .set(userChanges as any)

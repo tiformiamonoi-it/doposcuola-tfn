@@ -78,7 +78,7 @@
 
           <!-- Opzioni -->
           <div class="space-y-3 border-t border-slate-200 pt-4">
-            <UCheckbox v-model="mezzaLezioneGlobale" @update:model-value="onMezzaLezioneChange" label="Mezza Lezione (applicata a tutti gli studenti)" />
+            <UCheckbox v-model="mezzaLezioneGlobale" label="Mezza Lezione (applicata a tutti gli studenti)" />
             <UCheckbox v-model="forzaGruppo" :disabled="students.length < 2" label="Forza tipo GRUPPO (anche per 1 studente)" />
           </div>
 
@@ -124,6 +124,7 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import ModalSelezionaStudenti from '~/components/calendario/ModalSelezionaStudenti.vue'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
+import { TARIFFE_DEFAULT, TARIFFE_MEZZA } from '#shared/tariffe'
 
 const props = defineProps<{
   date: string
@@ -179,19 +180,11 @@ const calculatedType = computed(() => {
 })
 
 const calculatedCompenso = computed(() => {
-  const tipo = calculatedType.value
-  const hasMezza = mezzaLezioneGlobale.value
-  const tariffe: Record<string, number> = {
-    SINGOLA: hasMezza ? 2.50 : 5.00,
-    GRUPPO: hasMezza ? 4.00 : 8.00,
-    MAXI: hasMezza ? 4.00 : 8.50,
-  }
-  return tariffe[tipo] || 0
+  const tipo = calculatedType.value as keyof typeof TARIFFE_DEFAULT
+  if (!tipo) return 0
+  // Anteprima con tariffe di default condivise; il valore autoritativo lo calcola il server
+  return (mezzaLezioneGlobale.value ? TARIFFE_MEZZA[tipo] : TARIFFE_DEFAULT[tipo]) || 0
 })
-
-function onMezzaLezioneChange() {
-  students.value.forEach(s => s.mezzaLezione = mezzaLezioneGlobale.value)
-}
 
 function formatCurrency(val: number) {
   return val.toFixed(2)
@@ -275,6 +268,10 @@ function initModal() {
     
     // Raccogliamo tutti gli studenti da tutte le lezioni nello slot
     props.existingLessonsInSlot.forEach(lesson => {
+      // Il flag mezzaLezione vive sulla LEZIONE (non sulle righe studente):
+      // leggerlo da lì evita che riaprire e salvare converta una mezza in lezione piena
+      if (lesson.mezzaLezione) mezzaLezioneGlobale.value = true
+
       lesson.lessonStudents?.forEach((ls: any) => {
         // Mocking the loaded items for USelectMenu
         const nomePacchetto = ls.package?.nome || 'Pacchetto'
@@ -282,13 +279,11 @@ function initModal() {
           id: ls.studentId, // original DB id, used for tracking deletions
           lessonId: lesson.id,
           esistente: true, // studente già nello slot → pacchetto in sola lettura
-          mezzaLezione: ls.mezzaLezione,
           studentItem: { label: `${ls.student?.firstName} ${ls.student?.lastName}`, value: ls.studentId },
           packageItem: { label: nomePacchetto, value: ls.packageId },
           packageOptions: [{ label: nomePacchetto, value: ls.packageId }],
           loadingPackages: false
         })
-        if (ls.mezzaLezione) mezzaLezioneGlobale.value = true
       })
     })
   } else {
@@ -308,7 +303,6 @@ async function saveLesson() {
     const validStudents = students.value.map(s => ({
       studentId: s.studentItem.value,
       packageId: s.packageItem.value,
-      mezzaLezione: s.mezzaLezione || mezzaLezioneGlobale.value
     }))
 
     const postPayload = {

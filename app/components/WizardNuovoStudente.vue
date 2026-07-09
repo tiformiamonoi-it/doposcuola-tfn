@@ -53,7 +53,7 @@
                 @blur="dati.genitore.parentPhone = normalizzaTelefono(dati.genitore.parentPhone)" />
             </UFormField>
           </div>
-          <UFormField name="parentEmail" label="Email genitore" required>
+          <UFormField name="parentEmail" label="Email genitore" hint="Obbligatoria solo se creerai l'account portale">
             <UInput v-model="dati.genitore.parentEmail" type="email" placeholder="genitore@email.it" class="w-full" />
           </UFormField>
           <div class="grid grid-cols-2 gap-4">
@@ -287,7 +287,9 @@ const Step1Schema = z.object({
 const Step2Schema = z.object({
   parentName: z.string().optional().nullable(),
   parentPhone: z.string().optional().nullable(),
-  parentEmail: z.string().email('Email non valida').min(1, 'L\'email è obbligatoria'),
+  // Opzionale come nello schema canonico (student.schema.ts); diventa necessaria
+  // solo se si crea l'account portale (controllo in salvaTutto)
+  parentEmail: z.string().email('Email non valida').optional().or(z.literal('')),
   parentCF: z.string().optional().nullable(),
   parentPIva: z.string().optional().nullable(),
   parentIndirizzo: z.string().optional().nullable(),
@@ -408,6 +410,17 @@ function copiaPassword() {
 }
 
 async function salvaTutto() {
+  // L'account portale richiede un'email (campo portale o email genitore)
+  if (dati.portale.crea && !dati.portale.email && !dati.genitore.parentEmail) {
+    toast.add({
+      title: 'Email mancante per il portale',
+      description: "Inserisci l'email del genitore o dell'account portale.",
+      color: 'error',
+    })
+    step.value = 3
+    return
+  }
+
   salvando.value = true
   try {
     // 1. Crea studente

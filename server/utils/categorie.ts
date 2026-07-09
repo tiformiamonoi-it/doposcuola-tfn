@@ -23,25 +23,22 @@ async function getCategorieSalvate(): Promise<Categoria[]> {
  * Così nessun movimento resta "orfano" senza etichetta.
  */
 export async function getCategorie(): Promise<Categoria[]> {
-  const salvate = await getCategorieSalvate()
+  const [salvate, usate] = await Promise.all([getCategorieSalvate(), getCategorieUsate()])
   const presenti = new Set(salvate.map((c) => c.chiave))
 
-  const usate = await db
-    .selectDistinct({ categoria: accountingEntries.categoria })
-    .from(accountingEntries)
-    .where(isNotNull(accountingEntries.categoria))
-
   const extra: Categoria[] = usate
-    .map((r) => r.categoria!)
     .filter((k) => k && !presenti.has(k))
     .map((k) => ({ chiave: k, etichetta: k, neutra: false, sistema: false }))
 
   return [...salvate, ...extra]
 }
 
-/** Chiavi delle categorie neutre (escluse dal margine). */
+/** Chiavi delle categorie neutre (escluse dal margine).
+ *  Solo le categorie salvate possono essere neutre (quelle scoperte dai movimenti
+ *  nascono sempre neutra:false), quindi basta la lettura di system_configs —
+ *  niente scansione DISTINCT dei movimenti a ogni calcolo del margine. */
 export async function getNeutralKeys(): Promise<string[]> {
-  return (await getCategorie()).filter((c) => c.neutra).map((c) => c.chiave)
+  return (await getCategorieSalvate()).filter((c) => c.neutra).map((c) => c.chiave)
 }
 
 /** Chiavi categoria effettivamente usate da almeno un movimento. */

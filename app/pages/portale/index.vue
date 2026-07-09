@@ -137,6 +137,9 @@
                 </UBadge>
               </div>
               <p class="text-xs text-slate-500 font-medium">Studente: <span class="text-slate-700">{{ b.studentName }} {{ b.studentSurname }}</span></p>
+              <p v-if="tutorAssegnati(b).length" class="text-xs text-slate-500 font-medium">
+                Tutor: <span class="text-slate-700">{{ tutorAssegnati(b).join(', ') }}</span>
+              </p>
 
               <!-- Materie -->
               <div class="flex flex-wrap gap-1 mt-1.5">
@@ -345,11 +348,18 @@ function formatDateLong(dateStr: string) {
 }
 
 
+// Nomi (unici) dei tutor assegnati alle materie della prenotazione
+function tutorAssegnati(b: any): string[] {
+  const nomi = (b.subjects || [])
+    .map((s: any) => (s.assignedTutor ? `${s.assignedTutor.firstName} ${s.assignedTutor.lastName}` : null))
+    .filter(Boolean)
+  return [...new Set(nomi)] as string[]
+}
+
 // ─── VERIFICA LIMITI TEMPORALI ───
 function isOggi(dateStr: string) {
-  const d = new Date(dateStr)
-  const today = new Date()
-  return d.toISOString().split('T')[0] === today.toISOString().split('T')[0]
+  // oggiISO() = giorno civile italiano (evita lo slittamento UTC dopo mezzanotte)
+  return new Date(dateStr).toISOString().split('T')[0] === oggiISO()
 }
 
 function canModify(dateStr: string) {
@@ -456,13 +466,13 @@ const minDate = computed(() => {
   const italyHour = parseInt(p('hour') || '0', 10)
   const italyMinute = parseInt(p('minute') || '0', 10)
 
-  // Se dopo le 11:30, la prima data utile è domani
+  // Se dopo le 11:30, la prima data utile è domani (giorno civile italiano)
   if (italyHour > 11 || (italyHour === 11 && italyMinute >= 30)) {
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
+    const tomorrow = new Date(`${oggiISO()}T12:00:00.000Z`)
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
     return tomorrow.toISOString().split('T')[0]
   }
-  return new Date().toISOString().split('T')[0]
+  return oggiISO()
 })
 
 function apriModifica(booking: any) {

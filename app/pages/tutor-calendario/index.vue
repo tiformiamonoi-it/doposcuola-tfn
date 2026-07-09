@@ -393,7 +393,7 @@ const notaState = reactive({
   contenuto: ''
 })
 
-const { data: studentsRes } = useLazyFetch('/api/students?active=true&limit=1000')
+const { data: studentsRes } = useLazyFetch('/api/students?active=true&limit=1000&light=true')
 const studentsOptionsNota = computed(() => {
   return (studentsRes.value?.data || []).map((s: any) => ({
     label: `${s.firstName} ${s.lastName}`,

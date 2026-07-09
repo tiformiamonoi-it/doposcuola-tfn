@@ -20,7 +20,22 @@
             </h2>
             <div class="flex items-center gap-4 mt-1 text-sm text-slate-500">
               <span v-if="tutor.email">{{ tutor.email }}</span>
-              <span v-if="tutor.phone">{{ tutor.phone }}</span>
+              <span v-if="tutor.phone" class="flex items-center gap-1">
+                {{ tutor.phone }}
+                <UButton
+                  icon="i-heroicons-phone"
+                  size="xs" variant="ghost" color="neutral"
+                  :to="`tel:${normalizzaTelefono(tutor.phone)}`"
+                  title="Chiama"
+                />
+                <UButton
+                  icon="i-heroicons-chat-bubble-left-ellipsis"
+                  size="xs" variant="ghost" color="success"
+                  :to="`https://wa.me/${normalizzaTelefono(tutor.phone).replace('+', '')}`"
+                  target="_blank"
+                  title="WhatsApp"
+                />
+              </span>
             </div>
           </div>
           <div class="flex items-center gap-2">
@@ -357,6 +372,14 @@
           </div>
           <UFormField name="email" label="Email"><UInput v-model="datiModifica.email" type="email" class="w-full" /></UFormField>
           <UFormField name="phone" label="Telefono"><UInput v-model="datiModifica.phone" class="w-full" /></UFormField>
+          <UFormField name="password" label="Nuova password (opzionale)" hint="Lascia vuoto per non cambiarla; comunicala al tutor">
+            <div class="flex gap-2">
+              <UInput v-model="datiModifica.password" type="text" placeholder="min. 8 caratteri" class="flex-1" />
+              <UButton icon="i-heroicons-arrow-path" variant="soft" color="neutral" @click="datiModifica.password = generaPasswordCasuale()">
+                Genera
+              </UButton>
+            </div>
+          </UFormField>
           <div class="grid grid-cols-2 gap-4">
             <UFormField name="codiceFiscale" label="Cod. Fiscale"><UInput v-model="datiModifica.codiceFiscale" class="w-full" /></UFormField>
             <UFormField name="partitaIva" label="P.IVA"><UInput v-model="datiModifica.partitaIva" class="w-full" /></UFormField>
@@ -677,6 +700,7 @@ const datiModifica = reactive({
   modalitaPagamento: tutor.value?.modalitaPagamento ?? 'ORE',
   importoForfait: tutor.value?.importoForfait ?? '',
   noteInterne: tutor.value?.noteInterne ?? '',
+  password: '', // reset password opzionale: vuoto = non cambiare
 })
 
 watch(tutor, (t) => {
@@ -695,6 +719,7 @@ watch(tutor, (t) => {
     modalitaPagamento: t.modalitaPagamento ?? 'ORE',
     importoForfait: t.importoForfait ?? '',
     noteInterne: t.noteInterne ?? '',
+    password: '',
   })
 })
 
@@ -705,6 +730,7 @@ async function salvaTutor() {
       method: 'PUT',
       body: {
         ...datiModifica,
+        password: datiModifica.password || undefined,
         phone: datiModifica.phone || null,
         codiceFiscale: datiModifica.codiceFiscale || null,
         partitaIva: datiModifica.partitaIva || null,

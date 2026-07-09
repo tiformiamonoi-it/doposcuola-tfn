@@ -21,6 +21,7 @@ export async function createPayment(data: CreatePaymentInput) {
         id: packages.id,
         nome: packages.nome,
         stati: packages.stati,
+        sospeso: packages.sospeso,
         importoResiduo: packages.importoResiduo,
         oreAcquistate: packages.oreAcquistate,
         oreResiduo: packages.oreResiduo,
@@ -34,6 +35,14 @@ export async function createPayment(data: CreatePaymentInput) {
       .limit(1)
 
     if (!pkg) throw new Error('Pacchetto non trovato')
+
+    // Un pacchetto chiuso o sospeso non accetta più pagamenti
+    if (pkg.stati.includes('CHIUSO')) {
+      throw new Error('Impossibile aggiungere un pagamento a un pacchetto CHIUSO')
+    }
+    if (pkg.sospeso) {
+      throw new Error('Impossibile aggiungere un pagamento a un pacchetto SOSPESO')
+    }
 
     // Verifica che il pagamento non superi l'importo residuo
     const residuo = parseFloat(pkg.importoResiduo)
@@ -82,6 +91,8 @@ export async function createPayment(data: CreatePaymentInput) {
         oreResiduo:     updatedPkg.oreResiduo,
         importoResiduo: updatedPkg.importoResiduo,
         dataScadenza:   updatedPkg.dataScadenza,
+        giorniResiduo:  updatedPkg.giorniResiduo,
+        sospeso:        updatedPkg.sospeso,
       })
       await tx
         .update(packages)
@@ -205,6 +216,7 @@ export async function updatePayment(paymentId: string, data: UpdatePaymentInput)
         importoResiduo: pkgAggiornato.importoResiduo,
         dataScadenza:   pkgAggiornato.dataScadenza,
         giorniResiduo:  pkgAggiornato.giorniResiduo,
+        sospeso:        pkgAggiornato.sospeso,
       })
       await tx.update(packages).set({ stati: nuoviStati, updatedAt: new Date() }).where(eq(packages.id, pkg.id))
     }
@@ -216,6 +228,7 @@ export async function updatePayment(paymentId: string, data: UpdatePaymentInput)
         importo:         String(data.importo),
         metodoPagamento: data.metodoPagamento,
         descrizione:     `Pagamento ${data.tipoPagamento} — ${pkg.studentLastName} ${pkg.studentFirstName} (${pkg.nome})`,
+        data:            data.dataPagamento,
         updatedAt:       new Date(),
       })
       .where(eq(accountingEntries.paymentId, paymentId))
@@ -246,7 +259,8 @@ export async function listPayments(query: PaymentQuery) {
     ? and(...(conditions as [ReturnType<typeof eq>, ...ReturnType<typeof eq>[]]))
     : undefined
 
-  const rawRows = await db
+  const [rawRows, [countRow]] = await Promise.all([
+    db
       .select({
         payment: payments,
         fatturaEmessa: accountingEntries.fatturaEmessa
@@ -256,14 +270,14 @@ export async function listPayments(query: PaymentQuery) {
       .where(where)
       .orderBy(desc(payments.dataPagamento))
       .limit(query.limit)
-      .offset((query.page - 1) * query.limit)
-      
+      .offset((query.page - 1) * query.limit),
+    db.select({ total: count() }).from(payments).where(where),
+  ])
+
   const rows = rawRows.map(r => ({
     ...r.payment,
     fatturaEmessa: r.fatturaEmessa ?? false
   }))
-      
-  const [countRow] = await db.select({ total: count() }).from(payments).where(where)
 
   return {
     data: rows,
@@ -312,6 +326,7 @@ export async function deletePayment(paymentId: string) {
         importoResiduo: pkg.importoResiduo,
         dataScadenza:   pkg.dataScadenza,
         giorniResiduo:  pkg.giorniResiduo,
+        sospeso:        pkg.sospeso,
       })
       await tx.update(packages).set({ stati, updatedAt: new Date() }).where(eq(packages.id, pkg.id))
     }

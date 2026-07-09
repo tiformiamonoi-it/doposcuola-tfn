@@ -63,13 +63,27 @@ export async function listStudents(query: StudentQuery) {
   const sortCol = SORT_COLUMNS[query.sortBy as keyof typeof SORT_COLUMNS] ?? students.lastName
   const orderBy = query.sortDir === 'desc' ? desc(sortCol) : asc(sortCol)
 
-  const rows = await db.select().from(students)
-    .where(where)
-    .orderBy(orderBy)
-    .limit(query.limit)
-    .offset((query.page - 1) * query.limit)
-  
-  const [countRow] = await db.select({ total: count() }).from(students).where(where)
+  const [rows, [countRow]] = await Promise.all([
+    db.select().from(students)
+      .where(where)
+      .orderBy(orderBy)
+      .limit(query.limit)
+      .offset((query.page - 1) * query.limit),
+    db.select({ total: count() }).from(students).where(where),
+  ])
+
+  // Modalità leggera (tendine/autocomplete): niente join sui pacchetti né badge di stato
+  if (query.light === 'true') {
+    return {
+      data: rows,
+      meta: {
+        page:       query.page,
+        limit:      query.limit,
+        total:      countRow!.total,
+        totalPages: Math.ceil(countRow!.total / query.limit),
+      },
+    }
+  }
 
   const studentIds = rows.map(r => r.id)
   let studentPackages: { studentId: string, stati: string[], createdAt: Date, oreResiduo: string | null, tipo: string | null }[] = []
@@ -161,10 +175,12 @@ export async function getStudentsStats() {
       ),
     )
 
-  const [totRow] = await db.select({ n: count() }).from(students)
-  const [attRow] = await db.select({ n: count() }).from(students).where(eq(students.active, true))
-  const [pagRow] = await db.select({ n: count() }).from(students).where(conPacchettoStato('DA_PAGARE'))
-  const [rinRow] = await db.select({ n: count() }).from(students).where(conPacchettoStato('DA_RINNOVARE'))
+  const [[totRow], [attRow], [pagRow], [rinRow]] = await Promise.all([
+    db.select({ n: count() }).from(students),
+    db.select({ n: count() }).from(students).where(eq(students.active, true)),
+    db.select({ n: count() }).from(students).where(conPacchettoStato('DA_PAGARE')),
+    db.select({ n: count() }).from(students).where(conPacchettoStato('DA_RINNOVARE')),
+  ])
 
   return {
     total:       totRow!.n,

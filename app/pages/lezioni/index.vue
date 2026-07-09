@@ -252,7 +252,7 @@ const pagina           = ref(1)
 const { data: tutorsRes } = useLazyFetch('/api/tutors', { query: { active: 'true' } })
 const tutors = computed(() => tutorsRes.value?.data ?? [])
 
-const { data: studentsRes } = useLazyFetch('/api/students', { query: { active: 'true', limit: 1000 } })
+const { data: studentsRes } = useLazyFetch('/api/students', { query: { active: 'true', limit: 1000, light: 'true' } })
 const students = computed(() => studentsRes.value?.data ?? [])
 
 // ─── Fetch lezioni ───

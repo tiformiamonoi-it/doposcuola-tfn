@@ -199,6 +199,7 @@
 import { ref, computed, watch } from 'vue'
 import { format } from 'date-fns'
 import ModalSelezionaStudenti from '~/components/calendario/ModalSelezionaStudenti.vue'
+import { TARIFFE_DEFAULT, TARIFFE_MEZZA } from '#shared/tariffe'
 
 const emit = defineEmits(['refresh', 'close'])
 const isOpen = defineModel('open', { type: Boolean, default: false })
@@ -220,7 +221,7 @@ const tutorsOptions = computed(() => (tutorsRes.value?.data || []).map((t: any) 
 const { data: slotsRes } = useFetch('/api/settings/timeslots?active=true', { lazy: true })
 const allSlotsOptions = computed(() => (slotsRes.value || []).map((s: any) => ({ label: `${s.oraInizio.substring(0,5)} - ${s.oraFine.substring(0,5)}`, value: s.id, oraInizio: s.oraInizio.substring(0,5), oraFine: s.oraFine.substring(0,5) })))
 
-const { data: studentsRes } = useFetch('/api/students?active=true&limit=500', { lazy: true })
+const { data: studentsRes } = useFetch('/api/students?active=true&limit=500&light=true', { lazy: true })
 const studentsOptions = computed(() => (studentsRes.value?.data || []).map((s: any) => ({ label: `${s.firstName} ${s.lastName}`, value: s.id })))
 
 const { data: configsRes } = useFetch('/api/settings/configs', { lazy: true })
@@ -396,12 +397,14 @@ const totalCompenso = computed(() => {
     else if (validStudents <= 3) tipo = 'GRUPPO'
     else tipo = 'MAXI'
     
+    // Mezza lezione: tariffe fisse da shared/tariffe.ts (mezza MAXI = €4,00, NON tariffa/2)
+    // — stessa regola applicata dal server in calcCompenso.
     const isMezza = slot.mezzaLezione
     const base = tariffeConfig.value
     const tariffe: Record<string, number> = {
-      SINGOLA: isMezza ? (base.SINGOLA ?? 5) / 2 : (base.SINGOLA ?? 5),
-      GRUPPO:  isMezza ? (base.GRUPPO  ?? 8) / 2 : (base.GRUPPO  ?? 8),
-      MAXI:    isMezza ? (base.MAXI    ?? 8.5) / 2 : (base.MAXI    ?? 8.5),
+      SINGOLA: isMezza ? TARIFFE_MEZZA.SINGOLA : (base.SINGOLA ?? TARIFFE_DEFAULT.SINGOLA),
+      GRUPPO:  isMezza ? TARIFFE_MEZZA.GRUPPO  : (base.GRUPPO  ?? TARIFFE_DEFAULT.GRUPPO),
+      MAXI:    isMezza ? TARIFFE_MEZZA.MAXI    : (base.MAXI    ?? TARIFFE_DEFAULT.MAXI),
     }
 
     total += tariffe[tipo] || 0

@@ -100,7 +100,7 @@
 
         <!-- Opzioni -->
         <div class="space-y-3 border-t border-slate-200 pt-4">
-          <UCheckbox v-model="mezzaLezioneGlobale" @update:model-value="onMezzaLezioneChange" label="Mezza Lezione (applicata a tutti gli studenti)" />
+          <UCheckbox v-model="mezzaLezioneGlobale" label="Mezza Lezione (applicata a tutti gli studenti)" />
           <UCheckbox v-model="forzaGruppo" :disabled="students.length < 2" label="Forza tipo GRUPPO (anche per 1 studente)" />
         </div>
 
@@ -113,7 +113,7 @@
     
     <template #footer>
       <div class="flex justify-end gap-3 w-full">
-        <UButton variant="ghost" color="gray" @click="isOpen = false">Annulla</UButton>
+        <UButton variant="ghost" color="neutral" @click="isOpen = false">Annulla</UButton>
         <UButton color="primary" :loading="saving" :disabled="!canSave" @click="saveLesson">
           Salva Lezione
         </UButton>
@@ -127,6 +127,7 @@ import { ref, computed, watch } from 'vue'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import ModalSelezionaStudenti from '~/components/calendario/ModalSelezionaStudenti.vue'
+import { TARIFFE_DEFAULT, TARIFFE_MEZZA } from '#shared/tariffe'
 
 const props = defineProps<{
   date: string
@@ -145,6 +146,7 @@ const tutorItem = ref<any>(null)
 const timeSlotItem = ref<any>(null)
 const duplicateWarning = ref<string | null>(null)
 const existingLessonId = ref<string | null>(null)
+const existingLessonStudents = ref<any[]>([])
 
 const students = ref<any[]>([])
 const forzaGruppo = ref(false)
@@ -175,15 +177,11 @@ const calculatedType = computed(() => {
 })
 
 const calculatedCompenso = computed(() => {
-  const tipo = calculatedType.value
-  const hasMezza = mezzaLezioneGlobale.value
-  const tariffe: Record<string, number> = { SINGOLA: hasMezza ? 2.50 : 5.00, GRUPPO: hasMezza ? 4.00 : 8.00, MAXI: hasMezza ? 4.00 : 8.50 }
-  return tariffe[tipo] || 0
+  const tipo = calculatedType.value as keyof typeof TARIFFE_DEFAULT
+  if (!tipo) return 0
+  // Anteprima con tariffe di default condivise; il valore autoritativo lo calcola il server
+  return (mezzaLezioneGlobale.value ? TARIFFE_MEZZA[tipo] : TARIFFE_DEFAULT[tipo]) || 0
 })
-
-function onMezzaLezioneChange() {
-  students.value.forEach(s => s.mezzaLezione = mezzaLezioneGlobale.value)
-}
 
 function formatCurrency(val: number) { return val.toFixed(2) }
 function formatDate(dateStr: string) {
@@ -202,7 +200,6 @@ async function onPickerConfirm(picked: Array<{ studentId: string; nome: string; 
       packageItem: null,
       packageOptions: [],
       loadingPackages: false,
-      mezzaLezione: mezzaLezioneGlobale.value,
     }
     students.value.push(stu)
     const idx = students.value.length - 1
@@ -235,8 +232,9 @@ async function onStudenteSelezionato(idx: number, newVal: any) {
 async function checkDuplicate() {
   duplicateWarning.value = null
   existingLessonId.value = null
+  existingLessonStudents.value = []
   if (!tutorItem.value?.value || !timeSlotItem.value?.value) return
-  
+
   try {
     const response: any = await $fetch('/api/lessons', {
       query: { dataInizio: props.date, dataFine: props.date, tutorId: tutorItem.value.value }
@@ -244,6 +242,7 @@ async function checkDuplicate() {
     const existing = response.data.find((l: any) => l.timeSlotId === timeSlotItem.value.value)
     if (existing) {
       existingLessonId.value = existing.id
+      existingLessonStudents.value = existing.lessonStudents || []
       const names = existing.lessonStudents.map((ls: any) => `${ls.student?.firstName} ${ls.student?.lastName}`).join(', ')
       duplicateWarning.value = `Questo tutor ha già una lezione in questo slot con: ${names}. Se salvi, gli studenti verranno aggiunti alla stessa lezione.`
     }
@@ -260,6 +259,7 @@ watch(() => isOpen.value, (newVal) => {
     note.value = ''
     duplicateWarning.value = null
     existingLessonId.value = null
+    existingLessonStudents.value = []
   }
 })
 
@@ -269,30 +269,42 @@ async function saveLesson() {
     const validStudents = students.value.map(s => ({
       studentId: s.studentItem.value,
       packageId: s.packageItem.value,
-      mezzaLezione: s.mezzaLezione || mezzaLezioneGlobale.value
     }))
 
-    const payload = {
-      tutorId: tutorItem.value.value,
-      timeSlotId: timeSlotItem.value.value,
-      data: props.date,
-      forzaGruppo: forzaGruppo.value,
-      note: note.value,
-      studenti: validStudents
-    }
-
     if (existingLessonId.value) {
-      // Come nel ManageSlotModal, aggiorniamo la lezione fondendola (o creandone una nuova fondendo i backend)
-      // L'API /api/lessons POST non "fonde" automaticamente nel backend se non strutturata per farlo, 
-      // ma il vecchio backend usava PUT o cancellava e ricreava.
-      // Qui facciamo una POST semplice o chiamiamo update. Il vecchio form diceva "Aggiunto alla lezione esistente".
-      // L'API della v2 di /api/lessons POST potrebbe non unire. Nel dubbio, dato che le lezioni possono coesistere con lo stesso tutor/timeslot nel DB, 
-      // POSTeremo una nuova lesson, e il calendar renderer le accorperà visivamente, oppure userà una logica di delete-insert in un futuro endpoint.
-      // Per sicurezza qui facciamo semplicemente POST.
+      // Fusione nella lezione esistente (come promesso dall'avviso): PUT con l'elenco
+      // studenti combinato. Mezza lezione/forzaGruppo vengono inviati solo se spuntati,
+      // per non sovrascrivere le impostazioni della lezione esistente.
+      const giaPresenti = new Set(existingLessonStudents.value.map((ls: any) => ls.studentId))
+      const studentiCombinati = [
+        ...existingLessonStudents.value.map((ls: any) => ({ studentId: ls.studentId, packageId: ls.packageId })),
+        ...validStudents.filter(v => !giaPresenti.has(v.studentId)),
+      ]
+      await $fetch(`/api/lessons/${existingLessonId.value}`, {
+        method: 'PUT',
+        body: {
+          studenti: studentiCombinati,
+          ...(mezzaLezioneGlobale.value ? { mezzaLezione: true } : {}),
+          ...(forzaGruppo.value ? { forzaGruppo: true } : {}),
+          ...(note.value ? { note: note.value } : {}),
+        },
+      })
+      toast.add({ title: 'Studenti aggiunti alla lezione esistente', color: 'success' })
+    } else {
+      await $fetch('/api/lessons', {
+        method: 'POST',
+        body: {
+          tutorId: tutorItem.value.value,
+          timeSlotId: timeSlotItem.value.value,
+          data: props.date,
+          mezzaLezione: mezzaLezioneGlobale.value,
+          forzaGruppo: forzaGruppo.value,
+          note: note.value,
+          studenti: validStudents,
+        },
+      })
+      toast.add({ title: 'Lezione salvata', color: 'success' })
     }
-    
-    await $fetch('/api/lessons', { method: 'POST', body: payload })
-    toast.add({ title: 'Lezione salvata', color: 'success' })
 
     isOpen.value = false
     emit('refresh')

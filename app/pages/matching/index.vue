@@ -196,7 +196,7 @@ const unassignedBadges = computed(() => badges.value.filter(b => !b.isAssigned))
 const assignedBadges = computed(() => badges.value.filter(b => b.isAssigned))
 
 // Tutti gli studenti attivi (per l'aggiunta manuale)
-const { data: studentsRes } = useFetch('/api/students?active=true&limit=1000', { lazy: true })
+const { data: studentsRes } = useFetch('/api/students?active=true&limit=1000&light=true', { lazy: true })
 const studentOptions = computed(() => {
   return (studentsRes.value?.data || []).map((s: any) => ({
     label: `${s.lastName} ${s.firstName}`,

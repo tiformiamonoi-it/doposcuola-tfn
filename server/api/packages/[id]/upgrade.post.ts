@@ -100,8 +100,19 @@ export default defineEventHandler(async (event) => {
       }
 
       // Calcolo nuove ore/giorni
-      const diffOre = data.nuoveOreAcquistate !== undefined ? data.nuoveOreAcquistate - parseFloat(existing.oreAcquistate) : 0
+      let diffOre = data.nuoveOreAcquistate !== undefined ? data.nuoveOreAcquistate - parseFloat(existing.oreAcquistate) : 0
       const diffGiorni = data.nuoviGiorniAcquistati !== undefined ? data.nuoviGiorniAcquistati - (existing.giorniAcquistati ?? 0) : 0
+
+      // MENSILE: il modal invia solo i giorni, ma le lezioni scalano SEMPRE le ore.
+      // Senza questo, i giorni aggiunti restano inutilizzabili (createLesson blocca su oreResiduo).
+      if (existing.tipo === 'MENSILE' && diffGiorni !== 0 && data.nuoveOreAcquistate === undefined) {
+        const giorniEsistenti = Number(existing.giorniAcquistati ?? 0)
+        const orePerGiorno = Number(existing.orarioGiornaliero ?? 0)
+          || (giorniEsistenti > 0 ? parseFloat(existing.oreAcquistate) / giorniEsistenti : 0)
+        diffOre = diffGiorni * orePerGiorno
+      }
+
+      const nuovaOreAcquistate = parseFloat(existing.oreAcquistate) + diffOre
 
       // Calcolo nuovi importi
       const importoIntegrazione = data.pagamentoIntegrazione?.importo ?? 0
@@ -161,16 +172,17 @@ export default defineEventHandler(async (event) => {
 
       // Ricalcola gli stati
       const nuoviStati = computePackageStates({
-        oreAcquistate: String(data.nuoveOreAcquistate ?? existing.oreAcquistate),
+        oreAcquistate: String(nuovaOreAcquistate),
         oreResiduo: String(nuovaOreResiduo),
         importoResiduo: String(nuovoImportoResiduo),
         dataScadenza: data.nuovaDataScadenza !== undefined ? data.nuovaDataScadenza : existing.dataScadenza,
         giorniResiduo: existing.tipo === 'MENSILE' ? nuoviGiorniResiduo : null,
+        sospeso: existing.sospeso,
       })
 
       // Aggiorna il pacchetto
       const [updated] = await tx.update(packages).set({
-        oreAcquistate: data.nuoveOreAcquistate !== undefined ? String(data.nuoveOreAcquistate) : undefined,
+        oreAcquistate: String(nuovaOreAcquistate),
         oreResiduo: String(nuovaOreResiduo),
         giorniAcquistati: data.nuoviGiorniAcquistati,
         giorniResiduo: existing.tipo === 'MENSILE' ? nuoviGiorniResiduo : null,
@@ -185,11 +197,11 @@ export default defineEventHandler(async (event) => {
       return { data: updated }
     })
   } catch (err: any) {
+    // I dettagli interni (stack, messaggi driver) restano nei log server, mai nella risposta
     console.error('ERRORE UPGRADE PACCHETTO:', err)
     throw createError({
       statusCode: err.statusCode || 500,
       statusMessage: err.statusMessage || 'Errore interno del server',
-      data: { originalError: err.message, stack: err.stack }
     })
   }
 })

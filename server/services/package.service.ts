@@ -1,6 +1,6 @@
 import { db } from '../database/client'
 import { accountingEntries, packages, packageRecharges, payments, students, lessonStudents } from '../database/schema'
-import { and, count, desc, eq, getTableColumns, sql } from 'drizzle-orm'
+import { and, count, desc, eq, getTableColumns } from 'drizzle-orm'
 import type { CreatePackageInput, PackageQuery, RechargePackageInput, UpdatePackageInput } from '../../shared/schemas/package.schema'
 
 // ─────────────────────────────────────────────
@@ -24,12 +24,18 @@ type PackageStateInput = {
   importoResiduo: string
   dataScadenza:  Date | null
   giorniResiduo?: number | null
+  // Se true la macchina a stati restituisce sempre ['SOSPESO']: così nessun
+  // percorso di scrittura (lezioni, pagamenti, ricariche) può "riattivare"
+  // per errore un pacchetto sospeso sovrascrivendone gli stati.
+  sospeso?: boolean | null
 }
 
 // Tolleranza centesimi per confronti floating point (evita 0.1+0.2=0.300...04)
 const EPSILON = 0.001
 
 export function computePackageStates(pkg: PackageStateInput): PackageStatus[] {
+  if (pkg.sospeso) return ['SOSPESO']
+
   const oreResiduo    = parseFloat(pkg!.oreResiduo)
   const oreAcquistate = parseFloat(pkg!.oreAcquistate)
   const importoResiduo = parseFloat(pkg.importoResiduo)
@@ -150,26 +156,14 @@ export async function listPackages(query: PackageQuery) {
     query.tipo      ? eq(packages.tipo, query.tipo)           : undefined,
   ].filter(Boolean) as ReturnType<typeof eq>[]
 
-  if (query.stati) {
-    const parsedStati = query.stati
-      .split(',')
-      .map(s => s.trim())
-      .filter(s => STATI_VALIDI.includes(s))
-
-    if (parsedStati.length === 1) {
-      // Controlla se lo stato è presente nell'array PostgreSQL: 'ATTIVO' = ANY(stati)
-      conditions.push(sql`${parsedStati[0]}::package_status = ANY(${packages.stati})` as any)
-    } else if (parsedStati.length > 1) {
-      // Controlla se ALMENO UNO degli stati richiesti è presente (OR su = ANY)
-      const checks = parsedStati.map(s => sql`${s}::package_status = ANY(${packages.stati})`)
-      const combined = checks.slice(1).reduce((acc, cur) => sql`${acc} OR ${cur}`, checks[0]!)
-      conditions.push(sql`(${combined})` as any)
-    }
-  }
-
   const where = conditions.length > 0 ? and(...(conditions as [ReturnType<typeof eq>, ...ReturnType<typeof eq>[]])) : undefined
 
-  const [rows, [countRow]] = await Promise.all([
+  const parsedStati = (query.stati ?? '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(s => STATI_VALIDI.includes(s))
+
+  const selectPacchetti = () =>
     db.select({
       id: packages.id,
       studentId: packages.studentId,
@@ -200,28 +194,48 @@ export async function listPackages(query: PackageQuery) {
       .leftJoin(students, eq(packages.studentId, students.id))
       .where(where)
       .orderBy(desc(packages.createdAt))
-      .limit(query.limit)
-      .offset((query.page - 1) * query.limit),
-    db.select({ total: count() }).from(packages).where(where),
-  ])
 
   // Ricalcola stati al volo per ogni pacchetto (senza scrivere nel DB in bulk)
-  const rowsWithFreshStates = rows.map((pkg) => {
-    if (pkg.sospeso) {
-      return { ...pkg, stati: ['SOSPESO' as PackageStatus] }
-    }
-    const freshStati = computePackageStates({
+  const conStatiFreschi = (pkg: any) => ({
+    ...pkg,
+    stati: computePackageStates({
       oreAcquistate:  pkg.oreAcquistate,
       oreResiduo:     pkg.oreResiduo,
       importoResiduo: pkg.importoResiduo,
       dataScadenza:   pkg.dataScadenza,
       giorniResiduo:  pkg.giorniResiduo,
-    })
-    return { ...pkg, stati: freshStati }
+      sospeso:        pkg.sospeso,
+    }),
   })
 
+  if (parsedStati.length > 0) {
+    // Il filtro per stato lavora sugli stati RICALCOLATI, non sulla colonna salvata
+    // (che può essere obsoleta, es. scadenza superata dopo l'ultima scrittura).
+    // ponytail: fetch di tutte le righe + filtro in memoria — ok fino a qualche
+    // migliaio di pacchetti; portare il calcolo stati in SQL se il volume cresce.
+    const rows = (await selectPacchetti()).map(conStatiFreschi)
+    const filtered = rows.filter(p => p.stati.some((s: PackageStatus) => parsedStati.includes(s)))
+    const start = (query.page - 1) * query.limit
+    return {
+      data: filtered.slice(start, start + query.limit),
+      meta: {
+        page:       query.page,
+        limit:      query.limit,
+        total:      filtered.length,
+        totalPages: Math.ceil(filtered.length / query.limit),
+      },
+    }
+  }
+
+  const [rows, [countRow]] = await Promise.all([
+    selectPacchetti()
+      .limit(query.limit)
+      .offset((query.page - 1) * query.limit),
+    db.select({ total: count() }).from(packages).where(where),
+  ])
+
   return {
-    data: rowsWithFreshStates,
+    data: rows.map(conStatiFreschi),
     meta: {
       page:       query.page,
       limit:      query.limit,
@@ -407,36 +421,18 @@ export async function updatePackage(id: string, data: UpdatePackageInput) {
     ? (changes.giorniResiduo as number | undefined) ?? existing.giorniResiduo
     : existing.giorniResiduo
 
-  // Se il pacchetto è stato sospeso (o era sospeso e lo si riattiva), gestiamo gli stati
-  if (data.sospeso === true) {
-    changes.stati = ['SOSPESO']
-  } else if (data.sospeso === false && existing.sospeso === true) {
-    // Riattivazione: ricalcola gli stati normalmente
-    changes.stati = computePackageStates({
-      oreAcquistate:  (changes.oreAcquistate as string | undefined) ?? existing.oreAcquistate,
-      oreResiduo:     (changes.oreResiduo as string | undefined) ?? existing.oreResiduo,
-      importoResiduo: String(nuovoImportoResiduo),
-      dataScadenza:   (changes.dataScadenza as Date | null | undefined) !== undefined
-        ? (changes.dataScadenza as Date | null)
-        : existing.dataScadenza,
-      giorniResiduo:  nuoviGiorniResiduo,
-    })
-  } else if (data.sospeso === undefined) {
-    // Nessun cambio di sospensione: se era sospeso, mantieni SOSPESO
-    if (existing.sospeso) {
-      changes.stati = ['SOSPESO']
-    } else {
-      changes.stati = computePackageStates({
-        oreAcquistate:  (changes.oreAcquistate as string | undefined) ?? existing.oreAcquistate,
-        oreResiduo:     (changes.oreResiduo as string | undefined) ?? existing.oreResiduo,
-        importoResiduo: String(nuovoImportoResiduo),
-        dataScadenza:   (changes.dataScadenza as Date | null | undefined) !== undefined
-          ? (changes.dataScadenza as Date | null)
-          : existing.dataScadenza,
-        giorniResiduo:  nuoviGiorniResiduo,
-      })
-    }
-  }
+  // Ricalcola SEMPRE gli stati con i valori finali (sospeso incluso): la macchina
+  // a stati restituisce ['SOSPESO'] da sola se il flag finale è true.
+  changes.stati = computePackageStates({
+    oreAcquistate:  (changes.oreAcquistate as string | undefined) ?? existing.oreAcquistate,
+    oreResiduo:     (changes.oreResiduo as string | undefined) ?? existing.oreResiduo,
+    importoResiduo: String(nuovoImportoResiduo),
+    dataScadenza:   (changes.dataScadenza as Date | null | undefined) !== undefined
+      ? (changes.dataScadenza as Date | null)
+      : existing.dataScadenza,
+    giorniResiduo:  nuoviGiorniResiduo,
+    sospeso:        data.sospeso ?? existing.sospeso,
+  })
 
   const [updated] = await db.update(packages)
     .set(changes as Partial<typeof packages.$inferInsert>)
@@ -517,6 +513,7 @@ export async function rechargePackage(id: string, data: RechargePackageInput) {
       oreResiduo:     String(nuovaOreResiduo),
       importoResiduo: String(nuovoImportoResiduo),
       dataScadenza:   pkg!.dataScadenza,
+      sospeso:        pkg!.sospeso,
     })
 
     // Aggiorna il pacchetto

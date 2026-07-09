@@ -65,9 +65,28 @@
         </template>
 
         <template #contatti-cell="{ row }">
-          <div class="text-sm">
-            <div class="text-slate-700">{{ row.original.email }}</div>
-            <div class="text-slate-400 text-xs">{{ row.original.phone ?? '—' }}</div>
+          <div class="flex items-center gap-1">
+            <div class="text-sm flex-1 min-w-0">
+              <div class="text-slate-700">{{ row.original.email }}</div>
+              <div class="text-slate-400 text-xs">{{ row.original.phone ?? '—' }}</div>
+            </div>
+            <template v-if="row.original.phone">
+              <UButton
+                icon="i-heroicons-phone"
+                size="xs" variant="ghost" color="neutral"
+                :to="`tel:${normalizzaTelefono(row.original.phone)}`"
+                title="Chiama"
+                @click.stop
+              />
+              <UButton
+                icon="i-heroicons-chat-bubble-left-ellipsis"
+                size="xs" variant="ghost" color="success"
+                :to="`https://wa.me/${normalizzaTelefono(row.original.phone).replace('+', '')}`"
+                target="_blank"
+                title="WhatsApp"
+                @click.stop
+              />
+            </template>
           </div>
         </template>
 
@@ -127,8 +146,13 @@
           <UFormField name="email" label="Email (per il login)" required>
             <UInput v-model="nuovoTutor.email" type="email" placeholder="marco@email.it" class="w-full" />
           </UFormField>
-          <UFormField name="password" label="Password iniziale" required>
-            <UInput v-model="nuovoTutor.password" type="password" placeholder="min. 8 caratteri" class="w-full" />
+          <UFormField name="password" label="Password iniziale" required hint="Visibile solo ora: comunicala al tutor">
+            <div class="flex gap-2">
+              <UInput v-model="nuovoTutor.password" type="text" placeholder="min. 8 caratteri" class="flex-1" />
+              <UButton icon="i-heroicons-arrow-path" variant="soft" color="neutral" @click="nuovoTutor.password = generaPasswordCasuale()">
+                Genera
+              </UButton>
+            </div>
           </UFormField>
           <UFormField name="phone" label="Telefono">
             <UInput v-model="nuovoTutor.phone" placeholder="+39 333 1234567" class="w-full" />

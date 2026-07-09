@@ -148,6 +148,8 @@ export const StudentQuerySchema = z.object({
   active:   z.enum(['true', 'false']).optional(),
   packageStatus: z.enum(['DA_PAGARE', 'DA_RINNOVARE', 'SCADUTO', 'ATTIVO', 'NESSUNO', 'all']).optional(),
   hideInactive: z.enum(['true', 'false']).optional(),
+  // Modalità leggera per tendine/autocomplete: salta join pacchetti e badge di stato
+  light:    z.enum(['true', 'false']).optional(),
   classe:   z.string().optional(),
   page:     z.coerce.number().int().positive().default(1),
   limit:    z.coerce.number().int().positive().max(2000).default(20),

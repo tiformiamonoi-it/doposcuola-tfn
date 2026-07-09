@@ -14,6 +14,7 @@ import {
 import { and, count, desc, eq, gte, inArray, isNotNull, lte, ne, sql } from 'drizzle-orm'
 import { computePackageStates } from './package.service'
 import { confiniGiornoOggiRome } from '../utils/tutor-time-window'
+import { TARIFFE_DEFAULT, TARIFFE_MEZZA } from '../../shared/tariffe'
 import type {
   CreateLessonInput,
   UpdateLessonInput,
@@ -30,21 +31,9 @@ import type {
 
 type LessonType = 'SINGOLA' | 'GRUPPO' | 'MAXI'
 
-// Default: usati se il record system_configs non esiste o è malformato
-const DEFAULT_TARIFFE: Record<LessonType, number> = {
-  SINGOLA: 5.00,
-  GRUPPO:  8.00,
-  MAXI:    8.50,
-}
-
-// Tariffe per le mezze lezioni: arrotondate per difetto (NON semplice TARIFFE * 0.5)
-// La mezza MAXI = €4,00, non €4,25 — regola di business confermata dall'utente.
-// I valori mezza sono hardcoded in quanto regola di business, non configurabili dall'admin.
-const TARIFFE_MEZZA: Record<LessonType, number> = {
-  SINGOLA: 2.50,
-  GRUPPO:  4.00,
-  MAXI:    4.00,
-}
+// Tariffe di fallback e tariffe mezza lezione: centralizzate in shared/tariffe.ts
+// (stessa fonte usata dalle anteprime frontend — niente divergenze UI/server)
+const DEFAULT_TARIFFE: Record<LessonType, number> = TARIFFE_DEFAULT
 
 // Cache in-memory con TTL 60 secondi (il valore cambia raramente)
 let tariffeCache: Record<LessonType, number> | null = null
@@ -181,7 +170,14 @@ export async function createLesson(data: CreateLessonInput) {
 
       // 4.a Verifica che il pacchetto sia valido e abbia ore sufficienti
       const [pkgCheck] = await tx
-        .select({ oreResiduo: packages.oreResiduo, stati: packages.stati, sospeso: packages.sospeso })
+        .select({
+          oreAcquistate:  packages.oreAcquistate,
+          oreResiduo:     packages.oreResiduo,
+          importoResiduo: packages.importoResiduo,
+          dataScadenza:   packages.dataScadenza,
+          giorniResiduo:  packages.giorniResiduo,
+          sospeso:        packages.sospeso,
+        })
         .from(packages)
         .where(eq(packages.id, studente.packageId))
         .limit(1)
@@ -194,10 +190,10 @@ export async function createLesson(data: CreateLessonInput) {
         throw new Error(`${nomeStudente(studente.studentId)}: il pacchetto è sospeso e non può essere usato.`)
       }
 
-      const hasInvalidState = Array.isArray(pkgCheck.stati)
-        ? (pkgCheck.stati.includes('CHIUSO') || pkgCheck.stati.includes('ESAURITO'))
-        // fallback in caso non sia un array
-        : (String(pkgCheck.stati).includes('CHIUSO') || String(pkgCheck.stati).includes('ESAURITO'))
+      // Valida sugli stati RICALCOLATI: la colonna salvata può essere obsoleta
+      // (es. pacchetto chiuso/esaurito dopo l'ultima scrittura).
+      const statiFreschi = computePackageStates(pkgCheck)
+      const hasInvalidState = statiFreschi.includes('CHIUSO') || statiFreschi.includes('ESAURITO')
 
       if (Number(pkgCheck.oreResiduo) < oreScalate || hasInvalidState) {
         throw new Error(`${nomeStudente(studente.studentId)}: il pacchetto non ha ore sufficienti o è chiuso/esaurito.`)
@@ -268,6 +264,7 @@ export async function createLesson(data: CreateLessonInput) {
           importoResiduo: updatedPkg.importoResiduo,
           dataScadenza:   updatedPkg.dataScadenza,
           giorniResiduo:  updatedPkg.giorniResiduo,
+          sospeso:        updatedPkg.sospeso,
         })
         await tx
           .update(packages)
@@ -377,6 +374,7 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
             importoResiduo: updatedPkg.importoResiduo,
             dataScadenza:   updatedPkg.dataScadenza,
             giorniResiduo:  updatedPkg.giorniResiduo,
+            sospeso:        updatedPkg.sospeso,
           })
           await tx.update(packages).set({ stati: newStati, updatedAt: new Date() }).where(eq(packages.id, old.packageId))
         }
@@ -387,7 +385,14 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
         const oreScalate = 1.0
 
         const [pkgCheck] = await tx
-          .select({ oreResiduo: packages.oreResiduo, stati: packages.stati, sospeso: packages.sospeso })
+          .select({
+            oreAcquistate:  packages.oreAcquistate,
+            oreResiduo:     packages.oreResiduo,
+            importoResiduo: packages.importoResiduo,
+            dataScadenza:   packages.dataScadenza,
+            giorniResiduo:  packages.giorniResiduo,
+            sospeso:        packages.sospeso,
+          })
           .from(packages)
           .where(eq(packages.id, nuovo.packageId))
           .limit(1)
@@ -398,9 +403,9 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
           throw new Error(`${nomeStudenteUpd(nuovo.studentId)}: il pacchetto è sospeso e non può essere usato.`)
         }
 
-        const hasInvalidState = Array.isArray(pkgCheck.stati)
-          ? (pkgCheck.stati.includes('CHIUSO') || pkgCheck.stati.includes('ESAURITO'))
-          : (String(pkgCheck.stati).includes('CHIUSO') || String(pkgCheck.stati).includes('ESAURITO'))
+        // Valida sugli stati RICALCOLATI (la colonna salvata può essere obsoleta)
+        const statiFreschi = computePackageStates(pkgCheck)
+        const hasInvalidState = statiFreschi.includes('CHIUSO') || statiFreschi.includes('ESAURITO')
 
         if (Number(pkgCheck.oreResiduo) < oreScalate || hasInvalidState) {
           throw new Error(`${nomeStudenteUpd(nuovo.studentId)}: il pacchetto non ha ore sufficienti o è chiuso/esaurito.`)
@@ -443,6 +448,7 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
             importoResiduo: updatedPkg.importoResiduo,
             dataScadenza:   updatedPkg.dataScadenza,
             giorniResiduo:  updatedPkg.giorniResiduo,
+            sospeso:        updatedPkg.sospeso,
           })
           await tx.update(packages).set({ stati: newStati, updatedAt: new Date() }).where(eq(packages.id, nuovo.packageId))
         }
@@ -478,15 +484,22 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
         }
 
         // Verifica nuovo pacchetto
-        const [newPkgCheck] = await tx.select({ oreResiduo: packages.oreResiduo, stati: packages.stati, sospeso: packages.sospeso })
+        const [newPkgCheck] = await tx.select({
+          oreAcquistate:  packages.oreAcquistate,
+          oreResiduo:     packages.oreResiduo,
+          importoResiduo: packages.importoResiduo,
+          dataScadenza:   packages.dataScadenza,
+          giorniResiduo:  packages.giorniResiduo,
+          sospeso:        packages.sospeso,
+        })
           .from(packages).where(eq(packages.id, newStu.packageId)).limit(1)
         if (!newPkgCheck) throw new Error(`Pacchetto non trovato per ${nomeStudenteUpd(newStu.studentId)}`)
         if (newPkgCheck.sospeso) {
           throw new Error(`${nomeStudenteUpd(newStu.studentId)}: il nuovo pacchetto è sospeso e non può essere usato.`)
         }
-        const hasInvalidStateF7 = Array.isArray(newPkgCheck.stati)
-          ? (newPkgCheck.stati.includes('CHIUSO') || newPkgCheck.stati.includes('ESAURITO'))
-          : (String(newPkgCheck.stati).includes('CHIUSO') || String(newPkgCheck.stati).includes('ESAURITO'))
+        // Valida sugli stati RICALCOLATI (la colonna salvata può essere obsoleta)
+        const statiFreschiF7 = computePackageStates(newPkgCheck)
+        const hasInvalidStateF7 = statiFreschiF7.includes('CHIUSO') || statiFreschiF7.includes('ESAURITO')
         if (Number(newPkgCheck.oreResiduo) < oreScalate || hasInvalidStateF7) {
           throw new Error(`${nomeStudenteUpd(newStu.studentId)}: il nuovo pacchetto non ha ore sufficienti o è chiuso/esaurito.`)
         }
@@ -529,6 +542,7 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
               importoResiduo: updPkg.importoResiduo,
               dataScadenza:   updPkg.dataScadenza,
               giorniResiduo:  updPkg.giorniResiduo,
+              sospeso:        updPkg.sospeso,
             })
             await tx.update(packages).set({ stati: newStati, updatedAt: new Date() }).where(eq(packages.id, pkgId))
           }
@@ -641,6 +655,7 @@ export async function deleteLesson(id: string) {
           importoResiduo: updatedPkg.importoResiduo,
           dataScadenza:   updatedPkg.dataScadenza,
           giorniResiduo:  updatedPkg.giorniResiduo,
+          sospeso:        updatedPkg.sospeso,
         })
         await tx
           .update(packages)
@@ -695,7 +710,8 @@ export async function listLessons(query: LessonQuery) {
     ? and(...(conditions as [ReturnType<typeof eq>, ...ReturnType<typeof eq>[]]))
     : undefined
 
-  const rows = await db.query.lessons.findMany({
+  const [rows, [countRow]] = await Promise.all([
+    db.query.lessons.findMany({
       where: where,
       orderBy: [desc(lessons.data)],
       limit: query.limit,
@@ -716,9 +732,9 @@ export async function listLessons(query: LessonQuery) {
           }
         }
       }
-    })
-    
-  const [countRow] = await db.select({ total: count() }).from(lessons).where(where)
+    }),
+    db.select({ total: count() }).from(lessons).where(where),
+  ])
 
   return {
     data: rows,

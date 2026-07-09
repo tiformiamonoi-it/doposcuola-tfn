@@ -20,6 +20,8 @@ export const UpdateTutorSchema = z.object({
   lastName:          z.string().min(1).max(100).trim().optional(),
   email:             z.string().email('Email non valida').toLowerCase().trim().optional(),
   phone:             z.string().optional().nullable(),
+  // Reset password da parte dell'admin (todo 2.5): viene hashata nel service
+  password:          z.string().min(8, 'Password: almeno 8 caratteri').optional(),
   role:              z.enum(['TUTOR', 'ADMIN', 'SUPER_TUTOR']).optional(),
   indirizzo:         z.string().optional().nullable(),
   citta:             z.string().max(100).optional().nullable(),

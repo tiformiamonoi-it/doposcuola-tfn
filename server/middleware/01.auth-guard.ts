@@ -14,8 +14,8 @@ export default defineEventHandler(async (event) => {
   // Richiede una sessione valida — lancia 401 se assente
   const { user } = await requireUserSession(event)
 
-  // Controllo ruolo in base alla policy
-  const allowed = allowedRolesFor(path)
+  // Controllo ruolo in base alla policy (metodo HTTP incluso: le scritture possono richiedere ruoli più alti)
+  const allowed = allowedRolesFor(path, event.method)
   if (!allowed.includes(user.role as any)) {
     throw createError({ statusCode: 403, statusMessage: 'Accesso non consentito per il tuo ruolo' })
   }

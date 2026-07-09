@@ -626,9 +626,10 @@ const opzioniForm = computed(() =>
 )
 
 // ─── Periodo (default: dal 1° gennaio dell'anno corrente a oggi) ───
-const annoCorrente = new Date().getFullYear()
-const INIZIO_ANNO = `${annoCorrente}-01-01`
-const OGGI_ISO    = new Date().toISOString().slice(0, 10)
+// oggiISO() = giorno civile italiano (con toISOString il periodo escludeva
+// i movimenti di oggi tra mezzanotte e le ~2 di notte)
+const OGGI_ISO    = oggiISO()
+const INIZIO_ANNO = `${OGGI_ISO.slice(0, 4)}-01-01`
 
 const periodo = reactive({
   dataInizio: INIZIO_ANNO,
