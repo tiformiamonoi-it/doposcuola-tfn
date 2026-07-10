@@ -207,10 +207,15 @@ const studentOptions = computed(() => {
   }))
 })
 
-const MATERIE = [
-  'Matematica', 'Fisica', 'Chimica', 'Italiano', 'Inglese',
-  'Storia', 'Geografia', 'Latino', 'Greco', 'Scienze', 'Informatica',
-]
+// Materie da Impostazioni → Materie & Tariffe (fallback se non configurate)
+const { data: configsRes } = useLazyFetch<Record<string, string>>('/api/settings/configs')
+const MATERIE = computed<string[]>(() => {
+  try {
+    const lista = JSON.parse(configsRes.value?.materie ?? '[]')
+    if (Array.isArray(lista) && lista.length > 0) return lista
+  } catch {}
+  return ['Matematica', 'Fisica', 'Chimica', 'Italiano', 'Inglese', 'Storia', 'Geografia', 'Latino', 'Greco', 'Scienze', 'Informatica']
+})
 
 const manualeStudentId = ref('')
 const manualeMateria = ref('')
