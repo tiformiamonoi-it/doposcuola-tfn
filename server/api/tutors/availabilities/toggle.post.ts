@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { db } from '../../../database/client'
-import { tutorAvailabilities } from '../../../database/schema'
-import { eq, and } from 'drizzle-orm'
+import { tutorAvailabilities, closureDates } from '../../../database/schema'
+import { eq, and, sql } from 'drizzle-orm'
+import { oggiRomeStr, disponibilitaOggiAncoraAperta } from '../../../utils/tutor-time-window'
 
 const toggleSchema = z.object({
   date: z.string()
@@ -11,6 +12,25 @@ export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
   const body = await readValidatedBody(event, toggleSchema.parse)
   const dateStr = body.date.slice(0, 10) // 'YYYY-MM-DD'
+
+  // Regole (validate qui, non solo nella UI): niente giorni passati,
+  // oggi solo entro le 11:30 (ora italiana), mai domenica, mai giorni di chiusura
+  const oggi = oggiRomeStr()
+  if (dateStr < oggi) {
+    throw createError({ statusCode: 403, statusMessage: 'Non puoi modificare le disponibilità dei giorni passati' })
+  }
+  if (dateStr === oggi && !disponibilitaOggiAncoraAperta()) {
+    throw createError({ statusCode: 403, statusMessage: 'La disponibilità di oggi si può modificare solo entro le 11:30' })
+  }
+  if (new Date(dateStr + 'T00:00:00Z').getUTCDay() === 0) {
+    throw createError({ statusCode: 403, statusMessage: 'La domenica il centro è chiuso' })
+  }
+  const chiusura = await db.query.closureDates.findFirst({
+    where: sql`DATE(${closureDates.date}) = ${dateStr}`,
+  })
+  if (chiusura) {
+    throw createError({ statusCode: 403, statusMessage: `Giorno di chiusura${chiusura.description ? ` (${chiusura.description})` : ''}` })
+  }
 
   const existing = await db.query.tutorAvailabilities.findFirst({
     where: and(

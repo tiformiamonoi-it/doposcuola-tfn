@@ -19,7 +19,19 @@ function romeParts(now: Date) {
   return {
     dateStr: `${get('year')}-${get('month')}-${get('day')}`,
     hour:    parseInt(get('hour'), 10),
+    minute:  parseInt(get('minute'), 10),
   }
+}
+
+// Giorno civile odierno a Roma ('YYYY-MM-DD')
+export function oggiRomeStr(): string {
+  return romeParts(new Date()).dateStr
+}
+
+// La disponibilità di OGGI si può modificare solo entro le 11:30 (ora italiana)
+export function disponibilitaOggiAncoraAperta(): boolean {
+  const { hour, minute } = romeParts(new Date())
+  return hour < 11 || (hour === 11 && minute < 30)
 }
 
 export function isOggiRome(dateStr: string): boolean {

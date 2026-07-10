@@ -26,10 +26,12 @@
         </template>
         
         <!-- Legenda -->
-        <div class="flex gap-4 text-xs mb-4 text-slate-500">
+        <div class="flex flex-wrap gap-4 text-xs mb-4 text-slate-500">
           <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-sm bg-primary-100 border border-primary-300"></div> Disponibile</div>
           <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-sm bg-white border border-slate-200"></div> Non disponibile</div>
+          <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-sm bg-slate-100 border border-slate-200"></div> Non selezionabile (passato, chiusura, domenica)</div>
         </div>
+        <p class="text-xs text-slate-400 mb-4">La disponibilità di oggi si può modificare solo entro le 11:30.</p>
 
         <!-- Griglia Giorni -->
         <div class="grid grid-cols-7 gap-1 text-center">
@@ -37,10 +39,10 @@
           <div v-for="g in ['Lun','Mar','Mer','Gio','Ven','Sab','Dom']" :key="g" class="text-xs font-medium text-slate-400 py-1">
             {{ g }}
           </div>
-          
+
           <!-- Celle Vuote Iniziali -->
           <div v-for="blank in blankDays" :key="'b'+blank" class="p-2"></div>
-          
+
           <!-- Giorni del Mese -->
           <button
             v-for="day in giorniMese"
@@ -48,9 +50,12 @@
             @click="toggleDisponibilita(day.dateStr)"
             class="p-2 rounded-md border text-sm transition-colors relative flex items-center justify-center min-h-[40px]"
             :class="[
-              isDisponibile(day.dateStr) ? 'bg-primary-50 border-primary-300 text-primary-700 font-bold' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+              motivoBlocco(day.dateStr)
+                ? (isDisponibile(day.dateStr) ? 'bg-primary-50/50 border-primary-100 text-primary-300 cursor-not-allowed' : 'bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed')
+                : (isDisponibile(day.dateStr) ? 'bg-primary-50 border-primary-300 text-primary-700 font-bold' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300')
             ]"
-            :disabled="salvandoGiorno === day.dateStr"
+            :disabled="salvandoGiorno === day.dateStr || !!motivoBlocco(day.dateStr)"
+            :title="motivoBlocco(day.dateStr) ?? ''"
           >
             <UIcon v-if="salvandoGiorno === day.dateStr" name="i-heroicons-arrow-path" class="animate-spin w-4 h-4 text-slate-400" />
             <span v-else>{{ day.numero }}</span>
@@ -101,19 +106,37 @@ function cambiaMese(dir: number) {
 const fromStr = computed(() => format(meseRiferimento.value, 'yyyy-MM-dd'))
 const toStr = computed(() => format(endOfMonth(meseRiferimento.value), 'yyyy-MM-dd'))
 
-const { data: availabilities, refresh: refreshAvail } = useLazyFetch('/api/tutors/availabilities/me', {
+const { data: availData, refresh: refreshAvail } = useLazyFetch<any>('/api/tutors/availabilities/me', {
   query: computed(() => ({ from: fromStr.value, to: toStr.value })),
   watch: [meseRiferimento]
 })
 
 function isDisponibile(dateStr: string) {
-  if (!availabilities.value) return false
-  return availabilities.value.some((a: any) => format(new Date(a.date), 'yyyy-MM-dd') === dateStr)
+  const lista = availData.value?.disponibilita ?? []
+  return lista.some((a: any) => format(new Date(a.date), 'yyyy-MM-dd') === dateStr)
+}
+
+// ─── Giorni bloccati: passati, oggi dopo le 11:30 (ora del SERVER), domeniche, chiusure ───
+const chiusure = computed(() => new Set<string>(availData.value?.chiusure ?? []))
+const oggiServer = computed(() => availData.value?.oggi ?? '')
+const oggiBloccato = computed(() => availData.value?.oggiBloccato ?? false)
+
+function motivoBlocco(dateStr: string): string | null {
+  if (new Date(dateStr + 'T00:00:00Z').getUTCDay() === 0) return 'La domenica il centro è chiuso'
+  if (chiusure.value.has(dateStr)) return 'Giorno di chiusura'
+  if (oggiServer.value && dateStr < oggiServer.value) return 'Giorno passato'
+  if (dateStr === oggiServer.value && oggiBloccato.value) return 'Modificabile solo entro le 11:30'
+  return null
 }
 
 const salvandoGiorno = ref<string | null>(null)
 
 async function toggleDisponibilita(dateStr: string) {
+  const blocco = motivoBlocco(dateStr)
+  if (blocco) {
+    toast.add({ title: 'Giorno non modificabile', description: blocco, color: 'warning' })
+    return
+  }
   salvandoGiorno.value = dateStr
   try {
     await $fetch('/api/tutors/availabilities/toggle', {
@@ -121,8 +144,8 @@ async function toggleDisponibilita(dateStr: string) {
       body: { date: dateStr }
     })
     await refreshAvail()
-  } catch (err) {
-    toast.add({ title: 'Errore', description: 'Impossibile salvare la disponibilità', color: 'error' })
+  } catch (err: any) {
+    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile salvare la disponibilità', color: 'error' })
   } finally {
     salvandoGiorno.value = null
   }
