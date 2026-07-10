@@ -258,18 +258,10 @@
                         <div v-if="b.notes" class="text-slate-400 text-xs mt-0.5 italic">"{{ b.notes }}"</div>
                       </div>
                       <div class="flex items-center gap-3">
-                        <UBadge v-if="b.status === 'PENDING'" color="warning" variant="subtle" size="xs">In attesa</UBadge>
-                        <UBadge v-else-if="b.status === 'CANCELLED'" color="neutral" variant="subtle" size="xs">Annullata</UBadge>
-                        <template v-else-if="b.status === 'CONFIRMED'">
-                          <UBadge :color="hasLessonOnDate(b.requestedDate) ? 'success' : 'neutral'" variant="solid" size="xs">
-                            {{ hasLessonOnDate(b.requestedDate) ? 'Presente' : 'Assente / Da svolgere' }}
-                          </UBadge>
-                        </template>
-
-                        <div class="flex gap-1" v-if="b.status === 'PENDING'">
-                          <UButton size="xs" color="success" variant="ghost" icon="i-heroicons-check" @click="confermaBooking(b.id)" />
-                          <UButton size="xs" color="error" variant="ghost" icon="i-heroicons-x-mark" @click="cancellaBooking(b.id)" />
-                        </div>
+                        <!-- Le prenotazioni nascono già confermate: niente accetta/rifiuta.
+                             La presenza si gestisce inserendo lo studente nella lezione. -->
+                        <UBadge v-if="b.status === 'CANCELLED'" color="neutral" variant="subtle" size="xs">Annullata</UBadge>
+                        <UBadge v-else color="success" variant="subtle" size="xs">Confermata</UBadge>
                       </div>
                     </div>
                   </div>
@@ -616,12 +608,6 @@ function esportaCsvLezioni() {
   URL.revokeObjectURL(url)
 }
 
-function hasLessonOnDate(dateStr: string) {
-  const target = (dateStr as string).slice(0, 10)
-  return (lezioni.value as any[]).some(l => (l.data as string).slice(0, 10) === target)
-}
-
-
 import { SCUOLE_TRAPANI, CLASSI_LISTA } from '~/utils/schools'
 import { formatData } from '~/utils/format'
 
@@ -841,10 +827,7 @@ const { data: bookingsData, pending: pendingBookings, refresh: refreshBookings }
 const allBookings = computed(() => (bookingsData.value as any[]) ?? [])
 
 function statoBookingLabel(b: any): string {
-  if (b.status === 'PENDING') return 'In attesa'
-  if (b.status === 'CANCELLED') return 'Annullata'
-  if (b.status === 'CONFIRMED') return hasLessonOnDate(b.requestedDate) ? 'Confermata — presente' : 'Confermata — da svolgere/assente'
-  return b.status ?? ''
+  return b.status === 'CANCELLED' ? 'Annullata' : 'Confermata'
 }
 
 function esportaCsvPrenotazioni() {
@@ -974,32 +957,6 @@ async function togglePrenotazione(value: boolean) {
     })
   } finally {
     togglando.value = false
-  }
-}
-
-async function confermaBooking(bookingId: string) {
-  try {
-    await $fetch(`/api/admin/bookings/${bookingId}/status`, {
-      method: 'PUT',
-      body: { status: 'CONFIRMED' },
-    })
-    await refreshBookings()
-    toast.add({ title: 'Prenotazione confermata', color: 'success' })
-  } catch {
-    toast.add({ title: 'Errore', color: 'error' })
-  }
-}
-
-async function cancellaBooking(bookingId: string) {
-  try {
-    await $fetch(`/api/admin/bookings/${bookingId}/status`, {
-      method: 'PUT',
-      body: { status: 'CANCELLED' },
-    })
-    await refreshBookings()
-    toast.add({ title: 'Prenotazione cancellata', color: 'neutral' })
-  } catch {
-    toast.add({ title: 'Errore', color: 'error' })
   }
 }
 
