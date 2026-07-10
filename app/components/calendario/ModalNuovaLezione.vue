@@ -48,15 +48,16 @@
                 Slot Orari
               </h4>
               <USelectMenu
+                v-if="availableExtraSlots.length > 0"
                 v-model="selectedExtraSlot"
                 :items="availableExtraSlots"
                 @update:model-value="onExtraSlotChange"
                 :popper="{ placement: 'bottom-end' }"
                 class="w-48"
-                :disabled="availableExtraSlots.length === 0"
               >
-                <UButton color="gray" variant="soft" icon="i-heroicons-plus" label="Aggiungi Slot Extra" class="w-full justify-between" :disabled="availableExtraSlots.length === 0" />
+                <UButton color="gray" variant="soft" icon="i-heroicons-plus" label="Aggiungi Slot Extra" class="w-full justify-between" />
               </USelectMenu>
+              <span v-else class="text-xs text-slate-400 italic">Tutti gli slot orari sono già presenti</span>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -173,15 +174,17 @@
             icon="i-heroicons-exclamation-triangle"
           />
         </template>
+
+        <!-- Picker studenti (condiviso, una sola istanza per tutti gli slot).
+             Deve stare dentro #body: fuori dal body viene montato prima della
+             modale madre e si apre sotto di essa (stesso pattern di ModalLezioneRapida). -->
+        <ModalSelezionaStudenti
+          v-model:open="pickerAperto"
+          :already-selected-ids="pickerSlotIndex >= 0 ? activeSlots[pickerSlotIndex]?.studenti.map((s: any) => s.studentItem?.value).filter(Boolean) : []"
+          @confirm="onPickerConfirm"
+        />
       </div>
     </template>
-    
-    <!-- Picker studenti (condiviso, una sola istanza per tutti gli slot) -->
-    <ModalSelezionaStudenti
-      v-model:open="pickerAperto"
-      :already-selected-ids="pickerSlotIndex >= 0 ? activeSlots[pickerSlotIndex]?.studenti.map((s: any) => s.studentItem?.value).filter(Boolean) : []"
-      @confirm="onPickerConfirm"
-    />
 
     <template #footer>
       <div class="flex justify-end gap-3 w-full">
