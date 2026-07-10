@@ -26,6 +26,16 @@ export default defineNuxtConfig({
     'nuxt-auth-utils',
   ],
 
+  runtimeConfig: {
+    // Email transazionali via Brevo (https://brevo.com). Se le chiavi mancano,
+    // l'invio è disattivato e l'app continua a funzionare (utile in sviluppo).
+    // Override con variabili d'ambiente: NUXT_BREVO_API_KEY, NUXT_EMAIL_FROM, ecc.
+    brevoApiKey:   '',
+    emailFrom:     '',                    // mittente verificato su Brevo
+    emailFromName: 'Ti Formiamo Noi',
+    appUrl:        '',                    // es. https://gestionale.tiformiamonoi.it (per i link nelle email)
+  },
+
   googleFonts: {
     families: {
       Montserrat: [600, 700],

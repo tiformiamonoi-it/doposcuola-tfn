@@ -11,6 +11,7 @@
         <div class="flex gap-2">
           <UButton to="/area-tutor" icon="i-heroicons-check-circle" variant="soft" size="sm">Disponibilità</UButton>
           <UButton to="/area-tutor/cronologia" icon="i-heroicons-document-text" variant="soft" size="sm">Cronologia Note</UButton>
+          <UButton to="/stampe/tutor-lezioni" icon="i-heroicons-printer" variant="soft" size="sm">Stampa</UButton>
         </div>
 
         <div class="flex items-center bg-white rounded-xl ring-1 ring-slate-200 shadow-sm p-1">

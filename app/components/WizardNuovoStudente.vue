@@ -243,6 +243,8 @@
             <UButton size="xs" variant="ghost" icon="i-heroicons-clipboard" @click="copiaPassword" />
           </div>
           <p class="text-xs text-amber-600 mt-1">Copia e condividi con il genitore</p>
+          <p v-if="risultato.emailInviata" class="text-xs text-emerald-600 mt-1">✅ Credenziali inviate anche via email al genitore</p>
+          <p v-else class="text-xs text-amber-600 mt-1">⚠️ Email non inviata (servizio non configurato): comunica la password a mano</p>
         </div>
         <div v-if="risultato.portaleEsistente" class="text-sm text-amber-600">
           ⚠️ Esiste già un account con email {{ risultato.portaleEmail }}. Lo studente è stato collegato all'account esistente.
@@ -402,6 +404,7 @@ const risultato = reactive({
   portaleEsistente: false,
   portaleEmail: '',
   tempPassword: '',
+  emailInviata: false,
 })
 
 function copiaPassword() {
@@ -488,25 +491,27 @@ async function salvaTutto() {
         body: portalBody,
       }) as any
 
-      risultato.portaleEmail = portalRes.data?.user?.email || portalBody.email
-      if (portalRes.data?.tempPassword) {
+      // L'endpoint risponde con i campi al livello principale (niente wrapper .data)
+      risultato.portaleEmail = portalRes.email || portalBody.email
+      if (portalRes.tempPassword) {
         risultato.portaleCreato = true
-        risultato.tempPassword = portalRes.data.tempPassword
-      } else if (portalRes.data?.requiresConfirmation) {
+        risultato.tempPassword = portalRes.tempPassword
+        risultato.emailInviata = portalRes.emailInviata === true
+      } else if (portalRes.requiresConfirmation) {
         // Esiste già, forziamo il collegamento
         const forceRes = await $fetch('/api/admin/students/' + studenteId + '/portal-access', {
           method: 'POST',
           body: { ...portalBody, force: true },
         }) as any
         risultato.portaleEsistente = true
-        risultato.portaleEmail = forceRes.data?.user?.email || portalBody.email
+        risultato.portaleEmail = forceRes.user?.email || portalBody.email
       }
 
       // Abilita prenotazione se richiesto
       if (dati.portale.abilitaPrenotazione) {
         await $fetch('/api/admin/students/' + studenteId + '/portal-access', {
           method: 'PUT',
-          body: { abilitatoPrenotazioneOnline: true },
+          body: { action: 'toggle-prenotazione', abilitato: true },
         })
       }
     }

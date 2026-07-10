@@ -12,6 +12,10 @@ declare module '#auth-utils' {
     role: UserRole
     // Solo per GENITORE: ID degli studenti collegati al portale (supporto fratelli)
     linkedStudentIds?: string[]
+    // Password temporanea: obbligo di cambio al primo accesso
+    mustChangePassword?: boolean
+    // Solo per GENITORE: false finché non accetta la versione corrente di termini & privacy
+    termsAccepted?: boolean
   }
 
   interface UserSession {

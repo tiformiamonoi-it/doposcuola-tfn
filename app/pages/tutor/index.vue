@@ -324,15 +324,21 @@ async function creaTutor() {
   }
   salvando.value = true
   try {
-    await $fetch('/api/tutors', {
+    const res = await $fetch('/api/tutors', {
       method: 'POST',
       body: {
         ...nuovoTutor,
         phone:          nuovoTutor.phone || null,
         importoForfait: nuovoTutor.importoForfait || null,
       },
+    }) as any
+    toast.add({
+      title: 'Tutor creato con successo',
+      description: res?.emailInviata
+        ? 'Credenziali inviate via email al tutor'
+        : 'Email non configurata: comunica la password al tutor a mano',
+      color: 'success',
     })
-    toast.add({ title: 'Tutor creato con successo', color: 'success' })
     modalCreaAperto.value = false
     Object.assign(nuovoTutor, {
       firstName: '', lastName: '', email: '', password: '',

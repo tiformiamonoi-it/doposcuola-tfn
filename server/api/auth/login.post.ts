@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { db } from '../../database/client'
 import { users, students } from '../../database/schema'
+import { TERMS_VERSION } from '#shared/legal'
 
 const loginSchema = z.object({
   email:    z.string().email('Email non valida'),
@@ -36,19 +37,25 @@ export default defineEventHandler(async (event) => {
     linkedStudentIds = linked.map((s) => s.id)
   }
 
+  // GENITORE: deve aver accettato la versione corrente di termini & privacy
+  const termsAccepted = user.role !== 'GENITORE' || user.termsAcceptedVersion === TERMS_VERSION
+
   await setUserSession(event, {
     user: {
-      id:               user.id,
-      email:            user.email,
-      firstName:        user.firstName,
-      lastName:         user.lastName,
-      role:             user.role,
+      id:                 user.id,
+      email:              user.email,
+      firstName:          user.firstName,
+      lastName:           user.lastName,
+      role:               user.role,
       linkedStudentIds,
+      mustChangePassword: user.mustChangePassword,
+      termsAccepted,
     },
   })
 
-  return {
-    ok: true,
-    redirectTo: user.role === 'GENITORE' ? '/portale' : (user.role === 'TUTOR' ? '/area-tutor' : '/'),
-  }
+  let redirectTo = user.role === 'GENITORE' ? '/portale' : (user.role === 'TUTOR' ? '/area-tutor' : '/')
+  if (user.mustChangePassword) redirectTo = '/cambio-password'
+  else if (!termsAccepted) redirectTo = '/portale/accetta-termini'
+
+  return { ok: true, redirectTo }
 })

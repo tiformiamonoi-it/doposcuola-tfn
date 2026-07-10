@@ -3,9 +3,10 @@ import bcrypt from 'bcryptjs'
 import { randomInt } from 'node:crypto'
 import { db } from '../database/client'
 import { users, students } from '../database/schema'
+import { sendEmail, emailBenvenutoCredenziali } from '../utils/email'
 import type { CreatePortalAccessInput } from '#shared/schemas/portal-user.schema'
 
-function generateTempPassword(length = 10): string {
+export function generateTempPassword(length = 10): string {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
   let result = ''
   for (let i = 0; i < length; i++) {
@@ -71,7 +72,7 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
   const tempPassword = generateTempPassword()
   const hashedPassword = await bcrypt.hash(tempPassword, 10)
 
-  return await db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     const [user] = await tx.insert(users).values({
       email:     input.email.toLowerCase(),
       password:  hashedPassword,
@@ -79,6 +80,7 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
       lastName:  input.lastName,
       role:      'GENITORE',
       active:    true,
+      mustChangePassword: true, // password temporanea: obbligo cambio al primo accesso
     }).returning()
 
     if (!user) throw new Error('Inserimento utente portale fallito')
@@ -90,6 +92,14 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
     const { password: _pw, ...safeUser } = user
     return { ok: true, user: safeUser, tempPassword, alreadyExisted: false as const }
   })
+
+  // Dopo la transazione: benvenuto con credenziali (non blocca mai la creazione)
+  const { sent } = await sendEmail({
+    to: created.user.email,
+    ...emailBenvenutoCredenziali({ nome: created.user.firstName, email: created.user.email, tempPassword }),
+  })
+
+  return { ...created, emailInviata: sent }
 }
 
 // Genera e imposta una nuova password temporanea
@@ -106,10 +116,15 @@ export async function resetPortalPassword(userId: string) {
   const hashedPassword = await bcrypt.hash(tempPassword, 10)
 
   await db.update(users)
-    .set({ password: hashedPassword, updatedAt: new Date() })
+    .set({ password: hashedPassword, mustChangePassword: true, updatedAt: new Date() })
     .where(eq(users.id, userId))
 
-  return { tempPassword }
+  const { sent } = await sendEmail({
+    to: user.email,
+    ...emailBenvenutoCredenziali({ nome: user.firstName, email: user.email, tempPassword }),
+  })
+
+  return { tempPassword, emailInviata: sent }
 }
 
 // Aggiorna il flag abilitatoPrenotazioneOnline

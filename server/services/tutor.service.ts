@@ -7,6 +7,7 @@ import {
 } from '../database/schema'
 import { and, asc, desc, eq, gte, ilike, lte, or, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
+import { sendEmail, emailBenvenutoCredenziali } from '../utils/email'
 import type {
   CreateTutorInput, UpdateTutorInput, TutorQuery,
   PayTutorInput, CreateReimbursementInput, PayReimbursementInput,
@@ -204,7 +205,7 @@ export async function getTutorById(id: string) {
 export async function createTutor(data: CreateTutorInput) {
   const hashed = await bcrypt.hash(data.password, 10)
 
-  return db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     const [user] = await tx.insert(users).values({
       email:     data.email,
       password:  hashed,
@@ -212,6 +213,7 @@ export async function createTutor(data: CreateTutorInput) {
       lastName:  data.lastName,
       role:      data.role ?? 'TUTOR',
       phone:     data.phone ?? null,
+      mustChangePassword: true, // password impostata dall'admin: obbligo cambio al primo accesso
     }).returning()
 
     if (!user) throw new Error('Creazione utente fallita')
@@ -225,6 +227,14 @@ export async function createTutor(data: CreateTutorInput) {
     const { password: _, ...safeUser } = user
     return { user: safeUser, profile }
   })
+
+  // Dopo la transazione: benvenuto con credenziali (non blocca mai la creazione)
+  const { sent } = await sendEmail({
+    to: created.user.email,
+    ...emailBenvenutoCredenziali({ nome: created.user.firstName, email: created.user.email, tempPassword: data.password }),
+  })
+
+  return { ...created, emailInviata: sent }
 }
 
 // ─────────────────────────────────────────────
@@ -247,9 +257,10 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
   // Reset password (admin): salvata solo hashata, mai in chiaro
   if (data.password) {
     userChanges.password = await bcrypt.hash(data.password, 10)
+    userChanges.mustChangePassword = true // il tutor dovrà cambiarla al prossimo accesso
   }
 
-  return db.transaction(async (tx) => {
+  const updated = await db.transaction(async (tx) => {
     const [user] = await tx.update(users)
       .set(userChanges as any)
       .where(and(eq(users.id, id), eq(users.role, 'TUTOR')))
@@ -264,6 +275,17 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
     const { password: _, ...safeUser } = user
     return { user: safeUser }
   })
+
+  // Password reimpostata dall'admin: invia le nuove credenziali al tutor
+  if (updated && data.password) {
+    const { sent } = await sendEmail({
+      to: updated.user.email,
+      ...emailBenvenutoCredenziali({ nome: updated.user.firstName, email: updated.user.email, tempPassword: data.password }),
+    })
+    return { ...updated, emailInviata: sent }
+  }
+
+  return updated
 }
 
 // ─────────────────────────────────────────────

@@ -1,14 +1,25 @@
 import { PublicContactSchema } from '#shared/schemas/contact.schema'
 import { db } from '../../database/client'
 import { contactRequests } from '../../database/schema'
+import { rateLimitExceeded } from '../../utils/rate-limit'
 
 // POST /api/contact
 // Endpoint pubblico per la ricezione dei contatti dal form /prenota
 export default defineEventHandler(async (event) => {
-  // Limita le richieste per IP (Rate limiting basilare) per evitare spam
-  // In un ambiente reale si potrebbe usare un modulo rate-limit
-  
+  // Anti-spam: max 3 invii ogni 10 minuti per IP
+  const ip = getRequestIP(event, { xForwardedFor: true }) ?? 'sconosciuto'
+  if (rateLimitExceeded(`contact:${ip}`)) {
+    throw createError({ statusCode: 429, statusMessage: 'Troppi invii: riprova tra qualche minuto' })
+  }
+
   const body = await readBody(event)
+
+  // Honeypot: campo invisibile agli umani — se è compilato è un bot (fingiamo successo)
+  if (body?.sitoWeb) {
+    setResponseStatus(event, 201)
+    return { success: true }
+  }
+
   const parsed = PublicContactSchema.safeParse(body)
 
   if (!parsed.success) {

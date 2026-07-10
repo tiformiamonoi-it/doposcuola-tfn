@@ -52,6 +52,10 @@ export const packages = pgTable('packages', {
 
   sospeso: boolean('sospeso').notNull().default(false),
 
+  // Dedup avvisi email al genitore (azzerati da ricarica/modifica ore o scadenza)
+  avvisoOreInviatoAt:      timestamp('avviso_ore_inviato_at', { withTimezone: true }),
+  avvisoScadenzaInviatoAt: timestamp('avviso_scadenza_inviato_at', { withTimezone: true }),
+
   note:      text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

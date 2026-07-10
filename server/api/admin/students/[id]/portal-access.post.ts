@@ -51,6 +51,7 @@ export default defineEventHandler(async (event) => {
         email: outcome.user.email,
         tempPassword: ('tempPassword' in outcome ? (outcome as any).tempPassword : null) ?? null,
         alreadyExisted: outcome.alreadyExisted,
+        emailInviata: ('emailInviata' in outcome ? (outcome as any).emailInviata : false) ?? false,
       }
     }
   } catch (err: any) {

@@ -64,6 +64,17 @@
               :rows="3"
             />
           </UFormField>
+
+          <!-- Honeypot anti-bot: invisibile agli umani, i bot lo compilano -->
+          <input
+            v-model="form.sitoWeb"
+            type="text"
+            name="sitoWeb"
+            tabindex="-1"
+            autocomplete="off"
+            aria-hidden="true"
+            class="absolute -left-[9999px] h-0 w-0 opacity-0"
+          />
         </div>
 
         <template #footer>
@@ -98,6 +109,7 @@ const form = reactive({
   materie: '',
   contatto: '',
   note: '',
+  sitoWeb: '', // honeypot: deve restare vuoto
 })
 
 const errors = reactive<Record<string, string>>({})

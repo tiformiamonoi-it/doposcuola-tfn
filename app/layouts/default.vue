@@ -268,6 +268,7 @@ const navItems = computed(() => {
     return [
       { icon: 'i-heroicons-calendar', label: 'Il mio Calendario', route: '/tutor-calendario' },
       { icon: 'i-heroicons-user',     label: 'Area Tutor',        route: '/area-tutor' },
+      { icon: 'i-heroicons-identification', label: 'Il mio profilo', route: '/area-tutor/profilo' },
     ]
   }
   return [

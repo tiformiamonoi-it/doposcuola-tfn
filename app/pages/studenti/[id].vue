@@ -20,6 +20,7 @@
       <div class="flex items-center justify-between mb-4">
         <UButton to="/studenti" variant="ghost" icon="i-heroicons-arrow-left" size="sm">Torna alla lista</UButton>
         <div class="flex items-center gap-2">
+          <UButton :to="`/stampe/studente-${id}`" icon="i-heroicons-printer" variant="ghost" size="sm">Stampa lezioni</UButton>
           <UButton icon="i-heroicons-pencil-square" variant="ghost" size="sm" @click="apriModalModifica">Modifica</UButton>
           <UButton v-if="studente.active" icon="i-heroicons-user-minus" variant="ghost" color="error" size="sm" :loading="disattivando" @click="disattivaStudente">Disattiva</UButton>
         </div>
@@ -334,8 +335,8 @@
                       </dl>
                     </div>
 
-                    <UAlert v-if="resetPassword" color="warning" icon="i-heroicons-key" title="Nuova password temporanea" :description="`Comunica questa password al genitore: ${resetPassword} (mostrata una sola volta)`" class="mt-4" :close-button="{ icon: 'i-heroicons-x-mark' }" @close="resetPassword = null" />
-                    <UAlert v-if="credenziali" color="info" icon="i-heroicons-key" title="Account creato — comunicare al genitore:" :description="`Email: ${credenziali.email} | Password: ${credenziali.tempPassword}`" class="mt-4" :close-button="{ icon: 'i-heroicons-x-mark' }" @close="credenziali = null" />
+                    <UAlert v-if="resetPassword" color="warning" icon="i-heroicons-key" title="Nuova password temporanea" :description="`Comunica questa password al genitore: ${resetPassword} (mostrata una sola volta)${resetEmailInviata ? ' — inviata anche via email al genitore' : ''}`" class="mt-4" :close-button="{ icon: 'i-heroicons-x-mark' }" @close="resetPassword = null" />
+                    <UAlert v-if="credenziali" color="info" icon="i-heroicons-key" title="Account creato — comunicare al genitore:" :description="`Email: ${credenziali.email} | Password: ${credenziali.tempPassword}${credenziali.emailInviata ? ' — credenziali inviate anche via email' : ''}`" class="mt-4" :close-button="{ icon: 'i-heroicons-x-mark' }" @close="credenziali = null" />
 
                     <div class="mt-4 flex gap-2">
                       <UButton variant="outline" size="sm" icon="i-heroicons-key" @click="reimpostaPassword">Genera nuova password</UButton>
@@ -831,9 +832,10 @@ const allBookings = computed(() => pendingBookings.value as any[] ?? [])
 
 const mostraModalCreaAccesso = ref(false)
 const datiCreaAccesso = reactive({ email: '', firstName: '', lastName: '' })
-const credenziali = ref<{ email: string; tempPassword: string } | null>(null)
+const credenziali = ref<{ email: string; tempPassword: string; emailInviata?: boolean } | null>(null)
 const creandoAccesso = ref(false)
 const resetPassword = ref<string | null>(null)
+const resetEmailInviata = ref(false)
 const togglando = ref(false)
 const confermaCollegamento = ref<{
   email: string
@@ -885,7 +887,7 @@ async function creaAccessoPortale(force = false) {
       })
       confermaCollegamento.value = null
     } else {
-      credenziali.value = { email: res.email, tempPassword: res.tempPassword }
+      credenziali.value = { email: res.email, tempPassword: res.tempPassword, emailInviata: res.emailInviata === true }
       toast.add({ title: 'Account portale creato', color: 'success' })
     }
     mostraModalCreaAccesso.value = false
@@ -909,6 +911,7 @@ async function reimpostaPassword() {
       body: { action: 'reset-password', userId: acc.portalUser.id },
     }) as any
     resetPassword.value = res.tempPassword
+    resetEmailInviata.value = res.emailInviata === true
   } catch (e: any) {
     toast.add({
       title: 'Errore',

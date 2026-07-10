@@ -19,4 +19,14 @@ export default defineEventHandler(async (event) => {
   if (!allowed.includes(user.role as any)) {
     throw createError({ statusCode: 403, statusMessage: 'Accesso non consentito per il tuo ruolo' })
   }
+
+  // Password temporanea: tutto bloccato tranne gli endpoint auth (cambio password, logout)
+  if (user.mustChangePassword && !path.startsWith('/api/auth/')) {
+    throw createError({ statusCode: 403, statusMessage: 'Cambio password obbligatorio' })
+  }
+
+  // Genitore che non ha ancora accettato termini & privacy: API del portale bloccate
+  if (user.role === 'GENITORE' && user.termsAccepted === false && path.startsWith('/api/portal')) {
+    throw createError({ statusCode: 403, statusMessage: 'Accettazione termini e privacy richiesta' })
+  }
 })

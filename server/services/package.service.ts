@@ -397,6 +397,10 @@ export async function updatePackage(id: string, data: UpdatePackageInput) {
     const diff = data.oreAcquistate - oldOre
     const newResiduo = Math.max(0, parseFloat(existing.oreResiduo) + diff)
     changes.oreResiduo = String(newResiduo)
+    changes.avvisoOreInviatoAt = null // ore cambiate: l'avviso email torna eleggibile
+  }
+  if (data.dataScadenza !== undefined) {
+    changes.avvisoScadenzaInviatoAt = null // scadenza cambiata: l'avviso email torna eleggibile
   }
 
   // Ricalcola giorniResiduo se cambia giorniAcquistati
@@ -524,6 +528,9 @@ export async function rechargePackage(id: string, data: RechargePackageInput) {
       importoPagato:  String(nuovoImportoPagato),
       importoResiduo: String(nuovoImportoResiduo),
       stati:          nuoviStati,
+      // Ricarica: gli avvisi email tornano eleggibili
+      avvisoOreInviatoAt:      null,
+      avvisoScadenzaInviatoAt: null,
       updatedAt:      new Date(),
     }).where(eq(packages.id, pkg!.id)).returning()
 

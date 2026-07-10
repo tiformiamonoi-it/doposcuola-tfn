@@ -42,9 +42,14 @@ export default defineEventHandler(async (event) => {
     if (!valid) throw createError({ statusCode: 401, statusMessage: 'Password attuale non corretta' })
 
     updates.password = await bcrypt.hash(data.newPassword, 10)
+    updates.mustChangePassword = false // cambio volontario: il gate non serve più
   }
 
   const [updated] = await db.update(users).set(updates).where(eq(users.id, user.id)).returning()
   if (!updated) throw createError({ statusCode: 404, statusMessage: 'Account non trovato' })
+
+  if (data.newPassword) {
+    await setUserSession(event, { user: { ...user, mustChangePassword: false } })
+  }
   return { ok: true, firstName: updated.firstName, lastName: updated.lastName }
 })

@@ -43,15 +43,17 @@
 
     <template v-else-if="dash">
 
-      <!-- ─── PERIODO SELEZIONATO ─── -->
+      <!-- ─── PERIODO SELEZIONATO: 4 KPI sempre visibili ─── -->
       <div>
         <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Periodo selezionato</p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
           <UCard class="bg-green-50 border-green-100">
             <div class="flex items-start justify-between">
               <div>
-                <p class="text-xs text-green-600 font-medium uppercase tracking-wide">Entrate</p>
+                <p class="text-xs text-green-600 font-medium uppercase tracking-wide flex items-center gap-1">Entrate
+                  <StatHelp text="Tutti i soldi incassati nel periodo scelto (pagamenti pacchetti e altre entrate). Gli storni sono già sottratti." />
+                </p>
                 <p class="text-2xl font-bold text-green-700 mt-1">
                   € {{ fmt(dash.periodo.entrate) }}
                 </p>
@@ -63,7 +65,9 @@
           <UCard class="bg-red-50 border-red-100">
             <div class="flex items-start justify-between">
               <div>
-                <p class="text-xs text-red-600 font-medium uppercase tracking-wide">Uscite</p>
+                <p class="text-xs text-red-600 font-medium uppercase tracking-wide flex items-center gap-1">Uscite
+                  <StatHelp text="Tutti i soldi usciti nel periodo scelto: compensi tutor pagati, spese, rimborsi." />
+                </p>
                 <p class="text-2xl font-bold text-red-700 mt-1">
                   € {{ fmt(dash.periodo.uscite) }}
                 </p>
@@ -75,8 +79,9 @@
           <UCard :class="dash.periodo.margine >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100'">
             <div class="flex items-start justify-between">
               <div>
-                <p class="text-xs font-medium uppercase tracking-wide" :class="dash.periodo.margine >= 0 ? 'text-blue-600' : 'text-orange-600'">
+                <p class="text-xs font-medium uppercase tracking-wide flex items-center gap-1" :class="dash.periodo.margine >= 0 ? 'text-blue-600' : 'text-orange-600'">
                   Margine netto
+                  <StatHelp text="Entrate meno uscite del periodo: quello che resta prima di costi fissi e tasse." />
                 </p>
                 <p class="text-2xl font-bold mt-1" :class="dash.periodo.margine >= 0 ? 'text-blue-700' : 'text-orange-700'">
                   € {{ fmt(dash.periodo.margine) }}
@@ -90,8 +95,9 @@
           <UCard :class="dash.breakEven >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'">
             <div class="flex items-start justify-between">
               <div>
-                <p class="text-xs font-medium uppercase tracking-wide" :class="dash.breakEven >= 0 ? 'text-emerald-600' : 'text-rose-600'">
+                <p class="text-xs font-medium uppercase tracking-wide flex items-center gap-1" :class="dash.breakEven >= 0 ? 'text-emerald-600' : 'text-rose-600'">
                   Break-even
+                  <StatHelp text="Margine meno i costi fissi del periodo (affitto, utenze…). Se è positivo, l'attività si sta ripagando da sola." />
                 </p>
                 <p class="text-2xl font-bold mt-1" :class="dash.breakEven >= 0 ? 'text-emerald-700' : 'text-rose-700'">
                   € {{ fmt(dash.breakEven) }}
@@ -104,63 +110,86 @@
             </div>
           </UCard>
 
-          <!-- Costi fissi mensili -->
-          <UCard class="bg-slate-50 border-slate-200">
-            <div class="flex items-start justify-between">
-              <div>
-                <p class="text-xs text-slate-500 font-medium uppercase tracking-wide">Costi fissi mensili</p>
-                <p class="text-2xl font-bold text-slate-700 mt-1">
-                  € {{ fmt(dash.costiFissi.mensili) }}
-                </p>
-                <p class="text-[11px] text-slate-400 mt-1">
-                  € {{ fmt(dash.costiFissi.periodo) }} in {{ dash.costiFissi.mesi }} mesi
-                </p>
-              </div>
-              <UIcon name="i-heroicons-building-office" class="w-6 h-6 text-slate-400" />
-            </div>
-          </UCard>
-
-          <!-- E4 — Tasse stimate (25% entrate) -->
-          <UCard class="bg-violet-50 border-violet-100">
-            <div class="flex items-start justify-between">
-              <div>
-                <p class="text-xs text-violet-600 font-medium uppercase tracking-wide">Tasse stimate</p>
-                <p class="text-2xl font-bold text-violet-700 mt-1">
-                  € {{ fmt(dash.periodo.entrate * 0.25) }}
-                </p>
-                <p class="text-[11px] text-violet-400 mt-1">~25% delle entrate</p>
-              </div>
-              <UIcon name="i-heroicons-calculator" class="w-6 h-6 text-violet-400" />
-            </div>
-          </UCard>
-
-          <UCard :class="dash.fattureInAttesa.count > 0 ? 'bg-yellow-50 border-yellow-100' : 'bg-slate-50'">
-            <div class="flex items-start justify-between">
-              <div>
-                <p class="text-xs font-medium uppercase tracking-wide" :class="dash.fattureInAttesa.count > 0 ? 'text-yellow-600' : 'text-slate-400'">
-                  Fatture da emettere
-                </p>
-                <p class="text-2xl font-bold mt-1" :class="dash.fattureInAttesa.count > 0 ? 'text-yellow-700' : 'text-slate-600'">
-                  {{ dash.fattureInAttesa.count }}
-                </p>
-              </div>
-              <UIcon name="i-heroicons-document-text" class="w-6 h-6" :class="dash.fattureInAttesa.count > 0 ? 'text-yellow-400' : 'text-slate-300'" />
-            </div>
-          </UCard>
-
         </div>
       </div>
 
-      <!-- ─── BREAKDOWN DOPOSCUOLA vs MARKETING ─── -->
-      <div v-if="dash.breakdown" class="mt-2">
-        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Suddivisione area (nel periodo)</p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <!-- ─── ALTRI INDICATORI DEL PERIODO (richiudibile) ─── -->
+      <UCollapsible v-model:open="sezioniAperte.altri">
+        <button type="button" class="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-600 transition-colors">
+          <UIcon name="i-heroicons-chevron-right" class="w-3.5 h-3.5 transition-transform" :class="sezioniAperte.altri ? 'rotate-90' : ''" />
+          Altri indicatori del periodo
+        </button>
+        <template #content>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
+
+            <!-- Costi fissi mensili -->
+            <UCard class="bg-slate-50 border-slate-200">
+              <div class="flex items-start justify-between">
+                <div>
+                  <p class="text-xs text-slate-500 font-medium uppercase tracking-wide flex items-center gap-1">Costi fissi mensili
+                    <StatHelp text="Le spese fisse impostate in Impostazioni (affitto, utenze…). Qui vedi il valore mensile e il totale sul periodo scelto." />
+                  </p>
+                  <p class="text-2xl font-bold text-slate-700 mt-1">
+                    € {{ fmt(dash.costiFissi.mensili) }}
+                  </p>
+                  <p class="text-[11px] text-slate-400 mt-1">
+                    € {{ fmt(dash.costiFissi.periodo) }} in {{ dash.costiFissi.mesi }} mesi
+                  </p>
+                </div>
+                <UIcon name="i-heroicons-building-office" class="w-6 h-6 text-slate-400" />
+              </div>
+            </UCard>
+
+            <!-- E4 — Tasse stimate (25% entrate) -->
+            <UCard class="bg-violet-50 border-violet-100">
+              <div class="flex items-start justify-between">
+                <div>
+                  <p class="text-xs text-violet-600 font-medium uppercase tracking-wide flex items-center gap-1">Tasse stimate
+                    <StatHelp text="Stima prudenziale: il 25% delle entrate del periodo. Non è un calcolo fiscale ufficiale — serve solo a non farsi sorprendere." />
+                  </p>
+                  <p class="text-2xl font-bold text-violet-700 mt-1">
+                    € {{ fmt(dash.periodo.entrate * 0.25) }}
+                  </p>
+                  <p class="text-[11px] text-violet-400 mt-1">~25% delle entrate</p>
+                </div>
+                <UIcon name="i-heroicons-calculator" class="w-6 h-6 text-violet-400" />
+              </div>
+            </UCard>
+
+            <UCard :class="dash.fattureInAttesa.count > 0 ? 'bg-yellow-50 border-yellow-100' : 'bg-slate-50'">
+              <div class="flex items-start justify-between">
+                <div>
+                  <p class="text-xs font-medium uppercase tracking-wide flex items-center gap-1" :class="dash.fattureInAttesa.count > 0 ? 'text-yellow-600' : 'text-slate-400'">
+                    Fatture da emettere
+                    <StatHelp text="Pagamenti per cui il cliente ha chiesto fattura e che non risultano ancora emesse. La lista completa è in fondo alla pagina." />
+                  </p>
+                  <p class="text-2xl font-bold mt-1" :class="dash.fattureInAttesa.count > 0 ? 'text-yellow-700' : 'text-slate-600'">
+                    {{ dash.fattureInAttesa.count }}
+                  </p>
+                </div>
+                <UIcon name="i-heroicons-document-text" class="w-6 h-6" :class="dash.fattureInAttesa.count > 0 ? 'text-yellow-400' : 'text-slate-300'" />
+              </div>
+            </UCard>
+
+          </div>
+        </template>
+      </UCollapsible>
+
+      <!-- ─── BREAKDOWN DOPOSCUOLA vs MARKETING (richiudibile) ─── -->
+      <UCollapsible v-if="dash.breakdown" v-model:open="sezioniAperte.aree" class="mt-2">
+        <button type="button" class="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-600 transition-colors">
+          <UIcon name="i-heroicons-chevron-right" class="w-3.5 h-3.5 transition-transform" :class="sezioniAperte.aree ? 'rotate-90' : ''" />
+          Suddivisione area (nel periodo)
+        </button>
+        <template #content>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
 
           <UCard class="bg-teal-50 border-teal-100">
             <div class="flex items-center gap-2 mb-3">
               <UIcon name="i-heroicons-academic-cap" class="w-5 h-5 text-teal-500" />
               <p class="text-sm font-semibold text-teal-700">Doposcuola</p>
               <span class="text-[11px] text-teal-400">(tutte le voci eccetto marketing)</span>
+              <StatHelp text="Entrate, uscite e margine del periodo per l'attività principale: tutte le categorie tranne marketing." />
             </div>
             <div class="grid grid-cols-3 gap-2 text-center">
               <div>
@@ -183,6 +212,7 @@
               <UIcon name="i-heroicons-megaphone" class="w-5 h-5 text-purple-500" />
               <p class="text-sm font-semibold text-purple-700">Marketing</p>
               <span class="text-[11px] text-purple-400">(categoria = marketing)</span>
+              <StatHelp text="Solo i movimenti con categoria marketing: quanto spendi (e incassi) per promuovere l'attività." />
             </div>
             <div class="grid grid-cols-3 gap-2 text-center">
               <div>
@@ -201,19 +231,26 @@
           </UCard>
 
         </div>
-      </div>
+        </template>
+      </UCollapsible>
 
-      <!-- ─── MOVIMENTI PER METODO (NEL PERIODO) ─── -->
-      <div>
-        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Movimenti per metodo (nel periodo)</p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <!-- ─── MOVIMENTI PER METODO (richiudibile) ─── -->
+      <UCollapsible v-model:open="sezioniAperte.metodi">
+        <button type="button" class="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-600 transition-colors">
+          <UIcon name="i-heroicons-chevron-right" class="w-3.5 h-3.5 transition-transform" :class="sezioniAperte.metodi ? 'rotate-90' : ''" />
+          Movimenti per metodo (nel periodo)
+        </button>
+        <template #content>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-3">
 
           <UCard v-for="m in cardsMetodo" :key="m.key">
             <div class="flex items-center gap-3 mb-3">
               <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0" :class="m.iconBg">
                 <UIcon :name="m.icon" class="w-4 h-4" :class="m.iconText" />
               </div>
-              <p class="text-sm font-semibold text-slate-700">{{ m.label }}</p>
+              <p class="text-sm font-semibold text-slate-700 flex items-center gap-1">{{ m.label }}
+                <StatHelp :text="`Entrate e uscite del periodo pagate con ${m.label.toLowerCase()}.`" />
+              </p>
             </div>
             <div class="space-y-1">
               <div class="flex items-center justify-between">
@@ -233,7 +270,9 @@
               <div class="w-8 h-8 rounded-full bg-tfn-100 flex items-center justify-center shrink-0">
                 <UIcon name="i-heroicons-circle-stack" class="w-4 h-4 text-tfn-600" />
               </div>
-              <p class="text-sm font-semibold text-tfn-700">Totale</p>
+              <p class="text-sm font-semibold text-tfn-700 flex items-center gap-1">Totale
+                <StatHelp text="Somma di tutti i metodi di pagamento nel periodo scelto." />
+              </p>
             </div>
             <div class="space-y-1">
               <div class="flex items-center justify-between">
@@ -248,18 +287,24 @@
           </UCard>
 
         </div>
-      </div>
+        </template>
+      </UCollapsible>
 
-      <!-- ─── RIMANENZE (SALDO REALE ATTUALE) ─── -->
-      <div>
-        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Rimanenze di cassa (saldo attuale, dall'inizio attività)</p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <!-- ─── RIMANENZE (richiudibile) ─── -->
+      <UCollapsible v-model:open="sezioniAperte.cassa">
+        <button type="button" class="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-600 transition-colors">
+          <UIcon name="i-heroicons-chevron-right" class="w-3.5 h-3.5 transition-transform" :class="sezioniAperte.cassa ? 'rotate-90' : ''" />
+          Rimanenze di cassa (saldo attuale, dall'inizio attività)
+        </button>
+        <template #content>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
 
           <UCard :class="dash.saldiCassa.contanti >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'">
             <div class="flex items-start justify-between">
               <div>
-                <p class="text-xs font-medium uppercase tracking-wide" :class="dash.saldiCassa.contanti >= 0 ? 'text-emerald-600' : 'text-red-600'">
+                <p class="text-xs font-medium uppercase tracking-wide flex items-center gap-1" :class="dash.saldiCassa.contanti >= 0 ? 'text-emerald-600' : 'text-red-600'">
                   Cassa contanti
+                  <StatHelp text="Saldo TOTALE dei contanti dall'inizio dell'attività: non dipende dal periodo selezionato in alto." />
                 </p>
                 <p class="text-2xl font-bold mt-1" :class="dash.saldiCassa.contanti >= 0 ? 'text-emerald-700' : 'text-red-700'">
                   € {{ fmt(dash.saldiCassa.contanti) }}
@@ -273,8 +318,9 @@
           <UCard :class="dash.saldiCassa.banca >= 0 ? 'bg-sky-50 border-sky-100' : 'bg-red-50 border-red-100'">
             <div class="flex items-start justify-between">
               <div>
-                <p class="text-xs font-medium uppercase tracking-wide" :class="dash.saldiCassa.banca >= 0 ? 'text-sky-600' : 'text-red-600'">
+                <p class="text-xs font-medium uppercase tracking-wide flex items-center gap-1" :class="dash.saldiCassa.banca >= 0 ? 'text-sky-600' : 'text-red-600'">
                   Cassa banca
+                  <StatHelp text="Saldo TOTALE sul conto (POS + bonifici + assegni) dall'inizio dell'attività: non dipende dal periodo selezionato." />
                 </p>
                 <p class="text-2xl font-bold mt-1" :class="dash.saldiCassa.banca >= 0 ? 'text-sky-700' : 'text-red-700'">
                   € {{ fmt(dash.saldiCassa.banca) }}
@@ -286,18 +332,25 @@
           </UCard>
 
         </div>
-      </div>
+        </template>
+      </UCollapsible>
 
-      <!-- ─── PREVISIONI + E5 DEBITI TUTOR ─── -->
-      <div class="mt-8">
-        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Previsionale e debiti</p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- ─── PREVISIONI + E5 DEBITI TUTOR (richiudibile) ─── -->
+      <UCollapsible v-model:open="sezioniAperte.previsionale" class="mt-8">
+        <button type="button" class="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-600 transition-colors">
+          <UIcon name="i-heroicons-chevron-right" class="w-3.5 h-3.5 transition-transform" :class="sezioniAperte.previsionale ? 'rotate-90' : ''" />
+          Previsionale e debiti
+        </button>
+        <template #content>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-3">
 
           <!-- E6: cliccabili → apre modal lista voci -->
           <UCard class="bg-indigo-50 border-indigo-100 cursor-pointer hover:shadow-md transition-shadow" @click="apriPrevisionale('CREDITO')">
             <div class="flex items-start justify-between">
               <div>
-                <p class="text-xs text-indigo-600 font-medium uppercase tracking-wide">Da Incassare (Crediti)</p>
+                <p class="text-xs text-indigo-600 font-medium uppercase tracking-wide flex items-center gap-1">Da Incassare (Crediti)
+                  <StatHelp text="Soldi che devi ancora incassare, registrati come crediti. Clicca la card per il dettaglio delle voci." />
+                </p>
                 <p class="text-2xl font-bold text-indigo-700 mt-1">
                   € {{ fmt(dash.previsioni.crediti) }}
                 </p>
@@ -310,7 +363,9 @@
           <UCard class="bg-pink-50 border-pink-100 cursor-pointer hover:shadow-md transition-shadow" @click="apriPrevisionale('DEBITO')">
             <div class="flex items-start justify-between">
               <div>
-                <p class="text-xs text-pink-600 font-medium uppercase tracking-wide">Da Pagare (Debiti)</p>
+                <p class="text-xs text-pink-600 font-medium uppercase tracking-wide flex items-center gap-1">Da Pagare (Debiti)
+                  <StatHelp text="Soldi che devi ancora pagare, registrati come debiti. Clicca la card per il dettaglio delle voci." />
+                </p>
                 <p class="text-2xl font-bold text-pink-700 mt-1">
                   € {{ fmt(dash.previsioni.debiti) }}
                 </p>
@@ -324,8 +379,9 @@
           <UCard :class="tutorDebitiTotale > 0 ? 'bg-amber-50 border-amber-100' : 'bg-slate-50'">
             <div class="flex items-start justify-between">
               <div>
-                <p class="text-xs font-medium uppercase tracking-wide" :class="tutorDebitiTotale > 0 ? 'text-amber-600' : 'text-slate-400'">
+                <p class="text-xs font-medium uppercase tracking-wide flex items-center gap-1" :class="tutorDebitiTotale > 0 ? 'text-amber-600' : 'text-slate-400'">
                   Compensi Tutor Dovuti
+                  <StatHelp text="Compensi maturati dai tutor per le lezioni svolte e non ancora liquidati." />
                 </p>
                 <p class="text-2xl font-bold mt-1" :class="tutorDebitiTotale > 0 ? 'text-amber-700' : 'text-slate-600'">
                   € {{ fmt(tutorDebitiTotale) }}
@@ -339,7 +395,8 @@
           </UCard>
 
         </div>
-      </div>
+        </template>
+      </UCollapsible>
 
       <!-- ─── LISTA MOVIMENTI ─── -->
       <UCard class="mt-8">
@@ -347,6 +404,11 @@
           <div class="flex items-center gap-2">
             <UIcon name="i-heroicons-list-bullet" class="w-5 h-5 text-slate-500" />
             <span class="font-medium text-slate-800">Tutti i Movimenti</span>
+            <UTooltip text="Scarica i movimenti filtrati in un file apribile con Excel (da girare al commercialista)">
+              <UButton icon="i-heroicons-arrow-down-tray" variant="outline" color="neutral" size="xs" class="ml-auto" :loading="scaricandoCsv" @click="scaricaCsv">
+                Scarica CSV
+              </UButton>
+            </UTooltip>
           </div>
         </template>
 
@@ -695,6 +757,55 @@ function caricaEntries() {
   refreshEntries()
 }
 
+// ─── Export CSV (movimenti filtrati, tutte le pagine) ───
+const scaricandoCsv = ref(false)
+
+async function scaricaCsv() {
+  scaricandoCsv.value = true
+  try {
+    const res = await $fetch<{ data: any[] }>('/api/accounting/entries', {
+      query: {
+        dataInizio: periodo.dataInizio || undefined,
+        dataFine: periodo.dataFine || undefined,
+        tipo: (filtroEntries.tipo && filtroEntries.tipo !== 'TUTTI') ? filtroEntries.tipo : undefined,
+        categoria: (filtroEntries.categoria && filtroEntries.categoria !== 'TUTTE') ? filtroEntries.categoria : undefined,
+        page: 1,
+        limit: 10000, // ponytail: una sola pagina gigante — sopra i 10k movimenti servirà uno streaming
+      },
+    })
+    const righe = res.data ?? []
+
+    // Separatore ';' e BOM UTF-8: è quello che Excel italiano si aspetta
+    const escapeCsv = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const intestazione = ['Data', 'Tipo', 'Categoria', 'Descrizione', 'Metodo', 'Importo', 'Fattura richiesta', 'Fattura emessa']
+    const corpo = righe.map((r) => [
+      formatData(r.data),
+      labelTipo(r.tipo),
+      labelCategoria(r.categoria),
+      r.descrizione ?? '',
+      labelMetodo(r.metodoPagamento),
+      // Virgola decimale per Excel italiano
+      String(parseFloat(r.importo ?? '0').toFixed(2)).replace('.', ','),
+      r.richiedeFattura ? 'Sì' : 'No',
+      r.fatturaEmessa ? 'Sì' : 'No',
+    ].map(escapeCsv).join(';'))
+
+    // ﻿ = BOM: senza, Excel mostra le lettere accentate sbagliate
+    const csv = '﻿' + [intestazione.map(escapeCsv).join(';'), ...corpo].join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `movimenti_${periodo.dataInizio}_${periodo.dataFine}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch {
+    toast.add({ title: 'Errore durante l\'esportazione', color: 'error' })
+  } finally {
+    scaricandoCsv.value = false
+  }
+}
+
 // USelect (Reka UI) non emette un evento `change` affidabile → osserviamo i filtri.
 watch(() => [filtroEntries.tipo, filtroEntries.categoria], caricaEntries)
 
@@ -735,6 +846,11 @@ const cardsMetodo = computed(() => {
     { key: 'pos',      label: 'POS',      icon: 'i-heroicons-credit-card',      iconBg: 'bg-purple-100', iconText: 'text-purple-600', dati: pm.pos },
     { key: 'assegno',  label: 'Assegni',  icon: 'i-heroicons-document',         iconBg: 'bg-yellow-100', iconText: 'text-yellow-600', dati: pm.assegno },
   ]
+})
+
+// ─── Sezioni richiudibili (stato ricordato per browser via cookie, mai localStorage) ───
+const sezioniAperte = useCookie<Record<string, boolean>>('contabilita-sezioni', {
+  default: () => ({ altri: true, aree: true, metodi: true, cassa: true, previsionale: true }),
 })
 
 // ─── Formato numeri ───

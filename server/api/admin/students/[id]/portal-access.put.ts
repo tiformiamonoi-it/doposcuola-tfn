@@ -25,8 +25,8 @@ export default defineEventHandler(async (event) => {
 
   try {
     if (result.data.action === 'reset-password') {
-      const { tempPassword } = await resetPortalPassword(result.data.userId)
-      return { ok: true, tempPassword }
+      const { tempPassword, emailInviata } = await resetPortalPassword(result.data.userId)
+      return { ok: true, tempPassword, emailInviata }
     }
 
     if (result.data.action === 'toggle-prenotazione') {

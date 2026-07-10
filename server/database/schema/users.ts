@@ -10,6 +10,11 @@ export const users = pgTable('users', {
   role:      userRoleEnum('role').notNull().default('TUTOR'),
   phone:     varchar('phone', { length: 20 }),
   active:    boolean('active').notNull().default(true),
+  // Forza il cambio password al primo accesso (password temporanea/impostata dall'admin)
+  mustChangePassword: boolean('must_change_password').notNull().default(false),
+  // Accettazione termini & privacy (solo GENITORE): timestamp + versione accettata
+  termsAcceptedAt:      timestamp('terms_accepted_at', { withTimezone: true }),
+  termsAcceptedVersion: varchar('terms_accepted_version', { length: 20 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/_cron/package-alerts",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}

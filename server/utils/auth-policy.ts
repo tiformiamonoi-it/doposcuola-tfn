@@ -12,6 +12,7 @@ const GENITORE_ONLY: Role[] = ['GENITORE']
 // Path pubblici: nessun login richiesto
 export const PUBLIC_API_PREFIXES = [
   '/api/auth/login',
+  '/api/auth/forgot-password', // recupero password self-service (rate-limited)
   '/api/_auth/session', // gestito da nuxt-auth-utils
   '/api/contact',       // endpoint pubblico del form
 ]
@@ -20,6 +21,9 @@ export const PUBLIC_API_PREFIXES = [
 // `mutationRoles` (opzionale): ruoli ammessi per i metodi di scrittura (POST/PUT/PATCH/DELETE);
 // se assente, `roles` vale per tutti i metodi.
 export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: Role[] }> = [
+  // Endpoint auth accessibili anche ai genitori (il default STAFF li escluderebbe)
+  { prefix: '/api/auth/change-password',    roles: [...STAFF, ...GENITORE_ONLY] },
+  { prefix: '/api/auth/accept-terms',       roles: GENITORE_ONLY },
   { prefix: '/api/accounting',              roles: ADMIN_ONLY },
   // Portale: GENITORE + ADMIN/SUPER in preview (gli handler restituiscono [] ai non-genitori)
   { prefix: '/api/portal',                  roles: ['GENITORE', 'ADMIN', 'SUPER_TUTOR'] },

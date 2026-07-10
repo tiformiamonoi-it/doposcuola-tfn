@@ -50,12 +50,50 @@
           </UButton>
 
         </UForm>
+
+        <button type="button" class="block w-full text-center text-xs text-tfn-600 hover:text-tfn-700 hover:underline mt-4" @click="recuperoAperto = true">
+          Password dimenticata?
+        </button>
       </div>
 
       <p class="text-center text-xs text-slate-400 mt-6">
         Problemi di accesso? Contatta l'amministratore.
       </p>
     </div>
+
+    <!-- Recupero password -->
+    <UModal v-model:open="recuperoAperto" title="Recupera password">
+      <template #body>
+        <div class="space-y-4">
+          <p class="text-sm text-slate-600">
+            Inserisci l'email del tuo account: se è registrata ti invieremo una password temporanea.
+          </p>
+          <UFormField label="Email">
+            <UInput v-model="recuperoEmail" type="email" placeholder="nome@esempio.com" icon="i-heroicons-envelope" class="w-full" />
+          </UFormField>
+          <UAlert
+            v-if="recuperoMessaggio"
+            color="success"
+            variant="subtle"
+            icon="i-heroicons-check-circle"
+            :description="recuperoMessaggio"
+          />
+          <UAlert
+            v-if="recuperoErrore"
+            color="error"
+            variant="subtle"
+            icon="i-heroicons-exclamation-triangle"
+            :description="recuperoErrore"
+          />
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <UButton variant="ghost" @click="recuperoAperto = false">Chiudi</UButton>
+          <UButton :loading="recuperoLoading" :disabled="!recuperoEmail" @click="inviaRecupero">Invia</UButton>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
 
@@ -92,6 +130,30 @@ const state = reactive<Partial<Schema>>({
 
 const loading  = ref(false)
 const errorMsg = ref('')
+
+// ─── Recupero password ───
+const recuperoAperto = ref(false)
+const recuperoEmail = ref('')
+const recuperoLoading = ref(false)
+const recuperoMessaggio = ref('')
+const recuperoErrore = ref('')
+
+async function inviaRecupero() {
+  recuperoLoading.value = true
+  recuperoMessaggio.value = ''
+  recuperoErrore.value = ''
+  try {
+    const res = await $fetch<{ message: string }>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: { email: recuperoEmail.value },
+    })
+    recuperoMessaggio.value = res.message
+  } catch (e: any) {
+    recuperoErrore.value = e?.data?.statusMessage ?? 'Errore, riprova più tardi'
+  } finally {
+    recuperoLoading.value = false
+  }
+}
 
 async function onSubmit() {
   loading.value  = true
