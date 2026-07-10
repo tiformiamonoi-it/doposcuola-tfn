@@ -7,13 +7,13 @@ export default defineNuxtRouteMiddleware((to) => {
   const { loggedIn, user } = useUserSession()
   if (!loggedIn.value || !user.value) return
 
-  const whitelist = ['/login', '/cambio-password', '/portale/accetta-termini', '/termini', '/privacy', '/prenota']
+  const whitelist = ['/login', '/cambio-password', '/portale/accetta-termini', '/termini', '/privacy', '/privacy-studente', '/prenota']
   if (whitelist.includes(to.path)) return
 
   if (user.value.mustChangePassword) {
     return navigateTo('/cambio-password')
   }
-  if (user.value.role === 'GENITORE' && user.value.termsAccepted === false) {
+  if (['GENITORE', 'STUDENTE'].includes(user.value.role) && user.value.termsAccepted === false) {
     return navigateTo('/portale/accetta-termini')
   }
 })

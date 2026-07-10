@@ -64,6 +64,9 @@
       </NuxtLink>
     </nav>
 
+    <!-- Tutorial di benvenuto (solo primo accesso genitore/studente) -->
+    <TutorialPrimoAccesso />
+
   </div>
 </template>
 
@@ -85,8 +88,14 @@ const allNavItems = [
   { icon: 'i-heroicons-user',          label: 'Profilo', route: '/portale/profilo',  always: true },
 ]
 
+// STUDENTE: account solo-prenotazioni → niente Note; Prenota sempre visibile
+// (il permesso dello studente è l'account stesso, non il flag della famiglia)
+const isStudente = computed(() => user.value?.role === 'STUDENTE')
+
 const visibleNavItems = computed(() =>
-  allNavItems.filter(item => item.always || prenotazioneAbilitata.value)
+  allNavItems
+    .filter(item => !(isStudente.value && item.route === '/portale/note'))
+    .filter(item => item.always || prenotazioneAbilitata.value || isStudente.value)
 )
 
 function isActive(path: string) {

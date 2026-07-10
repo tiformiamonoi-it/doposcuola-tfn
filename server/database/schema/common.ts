@@ -3,7 +3,7 @@ import { createId } from '@paralleldrive/cuid2'
 
 export const cuid = () => createId()
 
-export const userRoleEnum = pgEnum('user_role', ['ADMIN', 'SUPER_TUTOR', 'TUTOR', 'GENITORE'])
+export const userRoleEnum = pgEnum('user_role', ['ADMIN', 'SUPER_TUTOR', 'TUTOR', 'GENITORE', 'STUDENTE'])
 export const tutorPaymentModeEnum = pgEnum('tutor_payment_mode', ['ORE', 'FORFAIT'])
 export const noteVisibilitaEnum = pgEnum('note_visibilita', ['INTERNA', 'FAMIGLIA'])
 export const packageTypeEnum = pgEnum('package_type', ['ORE', 'MENSILE', 'A_CONSUMO'])

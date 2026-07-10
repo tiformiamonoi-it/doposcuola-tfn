@@ -1,16 +1,16 @@
 import { CreateBookingSchema } from '#shared/schemas/booking.schema'
 import { createBooking } from '../../services/booking.service'
-import { getLinkedStudentIds } from '../../utils/portal'
+import { getPortalStudentIds } from '../../utils/portal'
 import { db } from '../../database/client'
 import { students, packages } from '../../database/schema'
 import { eq, and } from 'drizzle-orm'
 
-// POST /api/portal/bookings
+// POST /api/portal/bookings — genitori e studenti (account studente = solo prenotazioni)
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
 
-  if (user.role !== 'GENITORE') {
-    throw createError({ statusCode: 403, statusMessage: 'Accesso riservato ai genitori' })
+  if (!['GENITORE', 'STUDENTE'].includes(user.role)) {
+    throw createError({ statusCode: 403, statusMessage: 'Accesso riservato a genitori e studenti' })
   }
 
   const body = await readBody(event)
@@ -50,19 +50,22 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Non puoi prenotare una data nel passato' })
   }
 
-  // Verifica che lo studentId appartenga a questo genitore
-  const linkedIds = await getLinkedStudentIds(user.id)
+  // Verifica che lo studentId appartenga a questo utente (figlio del genitore o sé stesso)
+  const linkedIds = await getPortalStudentIds(user)
   if (!linkedIds.includes(result.data.studentId)) {
     throw createError({ statusCode: 403, statusMessage: 'Non puoi prenotare per questo studente' })
   }
 
-  // Verifica abilitatoPrenotazioneOnline
-  const [student] = await db.select({ 
-    abilitatoPrenotazioneOnline: students.abilitatoPrenotazioneOnline 
-  }).from(students).where(eq(students.id, result.data.studentId))
+  // Verifica abilitatoPrenotazioneOnline (solo per il genitore: per lo STUDENTE
+  // l'autorizzazione è l'account stesso, attivo di default e disattivabile dall'admin)
+  if (user.role === 'GENITORE') {
+    const [student] = await db.select({
+      abilitatoPrenotazioneOnline: students.abilitatoPrenotazioneOnline
+    }).from(students).where(eq(students.id, result.data.studentId))
 
-  if (!student?.abilitatoPrenotazioneOnline) {
-    throw createError({ statusCode: 403, statusMessage: 'Questo studente non è abilitato alla prenotazione online' })
+    if (!student?.abilitatoPrenotazioneOnline) {
+      throw createError({ statusCode: 403, statusMessage: 'Questo studente non è abilitato alla prenotazione online' })
+    }
   }
 
   // Verifica pacchetto attivo

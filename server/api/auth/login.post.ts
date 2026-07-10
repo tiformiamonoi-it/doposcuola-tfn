@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { db } from '../../database/client'
 import { users, students } from '../../database/schema'
-import { TERMS_VERSION } from '#shared/legal'
+import { TERMS_VERSION, PRIVACY_STUDENTE_VERSION } from '#shared/legal'
 
 const loginSchema = z.object({
   email:    z.string().email('Email non valida'),
@@ -27,18 +27,22 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, message: 'Credenziali non valide' })
   }
 
-  // Per GENITORE: carica gli ID degli studenti collegati (supporto fratelli)
+  // GENITORE: figli collegati (supporto fratelli). STUDENTE: sé stesso.
   let linkedStudentIds: string[] | undefined
-  if (user.role === 'GENITORE') {
+  if (user.role === 'GENITORE' || user.role === 'STUDENTE') {
     const linked = await db.query.students.findMany({
-      where: eq(students.portalUserId, user.id),
+      where: eq(user.role === 'GENITORE' ? students.portalUserId : students.studentUserId, user.id),
       columns: { id: true },
     })
     linkedStudentIds = linked.map((s) => s.id)
   }
 
-  // GENITORE: deve aver accettato la versione corrente di termini & privacy
-  const termsAccepted = user.role !== 'GENITORE' || user.termsAcceptedVersion === TERMS_VERSION
+  // GENITORE: termini + privacy; STUDENTE: privacy studente
+  const termsAccepted = user.role === 'GENITORE'
+    ? user.termsAcceptedVersion === TERMS_VERSION
+    : user.role === 'STUDENTE'
+      ? user.termsAcceptedVersion === PRIVACY_STUDENTE_VERSION
+      : true
 
   await setUserSession(event, {
     user: {
@@ -50,10 +54,11 @@ export default defineEventHandler(async (event) => {
       linkedStudentIds,
       mustChangePassword: user.mustChangePassword,
       termsAccepted,
+      tutorialVisto: user.tutorialVisto,
     },
   })
 
-  let redirectTo = user.role === 'GENITORE' ? '/portale' : (user.role === 'TUTOR' ? '/area-tutor' : '/')
+  let redirectTo = ['GENITORE', 'STUDENTE'].includes(user.role) ? '/portale' : (user.role === 'TUTOR' ? '/area-tutor' : '/')
   if (user.mustChangePassword) redirectTo = '/cambio-password'
   else if (!termsAccepted) redirectTo = '/portale/accetta-termini'
 

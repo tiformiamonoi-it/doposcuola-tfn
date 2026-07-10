@@ -27,6 +27,9 @@ export const students = pgTable('students', {
   bisogniSpeciali: text('bisogni_speciali'),
 
   portalUserId:                text('portal_user_id').references(() => users.id, { onDelete: 'set null' }),
+  // Account personale dello STUDENTE (solo prenotazioni). Attivo di default alla
+  // creazione; per disattivarlo si usa users.active del relativo utente.
+  studentUserId:               text('student_user_id').references(() => users.id, { onDelete: 'set null' }),
   abilitatoPrenotazioneOnline: boolean('abilitato_prenotazione_online').notNull().default(false),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

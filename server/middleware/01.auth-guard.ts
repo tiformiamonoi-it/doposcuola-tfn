@@ -25,8 +25,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Cambio password obbligatorio' })
   }
 
-  // Genitore che non ha ancora accettato termini & privacy: API del portale bloccate
-  if (user.role === 'GENITORE' && user.termsAccepted === false && path.startsWith('/api/portal')) {
-    throw createError({ statusCode: 403, statusMessage: 'Accettazione termini e privacy richiesta' })
+  // Genitore/studente che non ha ancora accettato i documenti legali: API del portale bloccate
+  if (['GENITORE', 'STUDENTE'].includes(user.role) && user.termsAccepted === false && path.startsWith('/api/portal')) {
+    throw createError({ statusCode: 403, statusMessage: 'Accettazione dei documenti richiesta' })
   }
 })

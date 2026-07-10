@@ -105,14 +105,19 @@ useHead({ title: 'Accedi — Ti Formiamo Noi' })
 
 // Redirect se già loggato (solo client-side per evitare SSR loop)
 const { loggedIn, user } = useUserSession()
+function homePerRuolo() {
+  const role = user.value?.role ?? ''
+  if (['GENITORE', 'STUDENTE'].includes(role)) return '/portale'
+  return role === 'TUTOR' ? '/area-tutor' : '/'
+}
 onMounted(async () => {
   if (loggedIn.value) {
-    await navigateTo(user.value?.role === 'GENITORE' ? '/portale' : (user.value?.role === 'TUTOR' ? '/area-tutor' : '/'), { replace: true })
+    await navigateTo(homePerRuolo(), { replace: true })
   }
 })
 watch(loggedIn, async (isLoggedIn) => {
   if (isLoggedIn) {
-    await navigateTo(user.value?.role === 'GENITORE' ? '/portale' : (user.value?.role === 'TUTOR' ? '/area-tutor' : '/'), { replace: true })
+    await navigateTo(homePerRuolo(), { replace: true })
   }
 })
 

@@ -72,6 +72,12 @@ definePageMeta({
 })
 useHead({ title: 'Note — Portale Famiglie' })
 
+// Le note didattiche sono riservate alla famiglia: l'account studente non le vede
+const { user: sessionUser } = useUserSession()
+if (sessionUser.value?.role === 'STUDENTE') {
+  await navigateTo('/portale', { replace: true })
+}
+
 const { data, pending } = useLazyFetch('/api/portal/notes')
 const notes = computed(() => (data.value as any[]) ?? [])
 

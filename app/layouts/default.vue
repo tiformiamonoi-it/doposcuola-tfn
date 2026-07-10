@@ -211,6 +211,9 @@
       </div>
     </div>
 
+    <!-- Tutorial di benvenuto (solo primo accesso TUTOR; admin esclusi dal componente) -->
+    <TutorialPrimoAccesso />
+
   </div>
 </template>
 

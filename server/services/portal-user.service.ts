@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { randomInt } from 'node:crypto'
 import { db } from '../database/client'
@@ -80,7 +80,7 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
       lastName:  input.lastName,
       role:      'GENITORE',
       active:    true,
-      mustChangePassword: true, // password temporanea: obbligo cambio al primo accesso
+      // Niente obbligo di cambio password per le famiglie (scelta del titolare, 10/07/2026)
     }).returning()
 
     if (!user) throw new Error('Inserimento utente portale fallito')
@@ -102,6 +102,58 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
   return { ...created, emailInviata: sent }
 }
 
+// Crea l'account personale dello STUDENTE (solo prenotazioni).
+// Attivo di default; il consenso del genitore è registrato con timestamp.
+export async function createStudentAccount(input: { studentId: string; email: string; firstName: string; lastName: string }) {
+  const existing = await db.query.users.findFirst({
+    where: eq(users.email, input.email.toLowerCase()),
+  })
+  if (existing) {
+    throw new Error('Questa email è già usata da un altro account. Usa un\'email personale dello studente.')
+  }
+
+  const tempPassword = generateTempPassword()
+  const hashedPassword = await bcrypt.hash(tempPassword, 10)
+
+  const created = await db.transaction(async (tx) => {
+    const [user] = await tx.insert(users).values({
+      email:     input.email.toLowerCase(),
+      password:  hashedPassword,
+      firstName: input.firstName,
+      lastName:  input.lastName,
+      role:      'STUDENTE',
+      active:    true,
+      consensoGenitoreAt: new Date(), // il genitore ha autorizzato (spunta obbligatoria in UI)
+    }).returning()
+
+    if (!user) throw new Error('Creazione account studente fallita')
+
+    await tx.update(students)
+      .set({ studentUserId: user.id, updatedAt: new Date() })
+      .where(eq(students.id, input.studentId))
+
+    const { password: _pw, ...safeUser } = user
+    return { ok: true as const, user: safeUser, tempPassword }
+  })
+
+  const { sent } = await sendEmail({
+    to: created.user.email,
+    ...emailBenvenutoCredenziali({ nome: created.user.firstName, email: created.user.email, tempPassword }),
+  })
+
+  return { ...created, emailInviata: sent }
+}
+
+// Attiva/disattiva l'account studente (users.active): disattivo = niente login né prenotazioni
+export async function setStudentAccountActive(userId: string, active: boolean) {
+  const [updated] = await db.update(users)
+    .set({ active, updatedAt: new Date() })
+    .where(and(eq(users.id, userId), eq(users.role, 'STUDENTE')))
+    .returning()
+  if (!updated) throw new Error('Account studente non trovato')
+  return { ok: true, active: updated.active }
+}
+
 // Genera e imposta una nuova password temporanea
 export async function resetPortalPassword(userId: string) {
   const user = await db.query.users.findFirst({
@@ -116,7 +168,7 @@ export async function resetPortalPassword(userId: string) {
   const hashedPassword = await bcrypt.hash(tempPassword, 10)
 
   await db.update(users)
-    .set({ password: hashedPassword, mustChangePassword: true, updatedAt: new Date() })
+    .set({ password: hashedPassword, updatedAt: new Date() })
     .where(eq(users.id, userId))
 
   const { sent } = await sendEmail({

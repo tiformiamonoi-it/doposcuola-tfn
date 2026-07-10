@@ -1,13 +1,14 @@
 import { getPortalStudents } from '../../services/portal.service'
-import { getLinkedStudentIds } from '../../utils/portal'
+import { getPortalStudentIds } from '../../utils/portal'
 
 // GET /api/portal/students
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
 
-  // ADMIN/SUPER_TUTOR possono accedere in preview: nessuno studente collegato
-  if (user.role !== 'GENITORE') return []
+  // GENITORE: figli collegati. STUDENTE: sé stesso.
+  // ADMIN/SUPER_TUTOR in preview: nessuno studente collegato.
+  if (!['GENITORE', 'STUDENTE'].includes(user.role)) return []
 
-  const ids = await getLinkedStudentIds(user.id)
+  const ids = await getPortalStudentIds(user)
   return await getPortalStudents(ids)
 })

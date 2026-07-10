@@ -12,9 +12,13 @@ export const users = pgTable('users', {
   active:    boolean('active').notNull().default(true),
   // Forza il cambio password al primo accesso (password temporanea/impostata dall'admin)
   mustChangePassword: boolean('must_change_password').notNull().default(false),
-  // Accettazione termini & privacy (solo GENITORE): timestamp + versione accettata
+  // Accettazione documenti legali (GENITORE: termini+privacy; STUDENTE: privacy studente)
   termsAcceptedAt:      timestamp('terms_accepted_at', { withTimezone: true }),
-  termsAcceptedVersion: varchar('terms_accepted_version', { length: 20 }),
+  termsAcceptedVersion: varchar('terms_accepted_version', { length: 40 }),
+  // STUDENTE minorenne: quando il genitore ha autorizzato la creazione dell'account
+  consensoGenitoreAt:   timestamp('consenso_genitore_at', { withTimezone: true }),
+  // Tutorial di benvenuto al primo accesso (tutor/famiglia/studente)
+  tutorialVisto: boolean('tutorial_visto').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

@@ -1,10 +1,13 @@
-import { listBookingsForPortal } from '../../services/booking.service'
+import { listBookingsForPortalByStudents } from '../../services/booking.service'
+import { getPortalStudentIds } from '../../utils/portal'
 
-// GET /api/portal/bookings
+// GET /api/portal/bookings — prenotazioni degli studenti collegati
+// (fatte dal genitore O dallo studente: entrambi vedono le stesse)
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
 
-  if (user.role !== 'GENITORE') return []
+  if (!['GENITORE', 'STUDENTE'].includes(user.role)) return []
 
-  return await listBookingsForPortal(user.id)
+  const ids = await getPortalStudentIds(user)
+  return await listBookingsForPortalByStudents(ids, user.id)
 })

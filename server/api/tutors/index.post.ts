@@ -17,9 +17,9 @@ export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
   const targetRole = parsed.data.role ?? 'TUTOR'
 
-  // Solo SUPER_TUTOR può creare SUPER_TUTOR. ADMIN può creare solo TUTOR/ADMIN.
-  if (targetRole === 'SUPER_TUTOR' && user.role !== 'SUPER_TUTOR') {
-    throw createError({ statusCode: 403, statusMessage: 'Solo il Super Admin può creare un Super Admin' })
+  // Solo l'ADMIN può creare account con ruoli elevati
+  if (targetRole !== 'TUTOR' && user.role !== 'ADMIN') {
+    throw createError({ statusCode: 403, statusMessage: 'Solo l\'Admin può creare account Super Tutor o Admin' })
   }
 
   try {

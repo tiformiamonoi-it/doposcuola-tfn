@@ -1,13 +1,14 @@
 import { db } from '../../../database/client'
 import { bookings, bookingSubjects } from '../../../database/schema'
-import { eq, and } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
+import { getPortalStudentIds } from '../../../utils/portal'
 
-// DELETE /api/portal/bookings/[id]
+// DELETE /api/portal/bookings/[id] — genitore o studente collegato
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
 
-  if (user.role !== 'GENITORE') {
-    throw createError({ statusCode: 403, statusMessage: 'Accesso riservato ai genitori' })
+  if (!['GENITORE', 'STUDENTE'].includes(user.role)) {
+    throw createError({ statusCode: 403, statusMessage: 'Accesso riservato a genitori e studenti' })
   }
 
   const id = getRouterParam(event, 'id')
@@ -15,15 +16,12 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'ID prenotazione mancante' })
   }
 
-  // Cerca la prenotazione verificando la proprietà
-  const booking = await db.query.bookings.findFirst({
-    where: and(
-      eq(bookings.id, id),
-      eq(bookings.userId, user.id)
-    )
-  })
+  // Proprietà: creata da questo utente OPPURE relativa a uno studente collegato
+  const booking = await db.query.bookings.findFirst({ where: eq(bookings.id, id) })
+  const portalIds = await getPortalStudentIds(user)
+  const isOwner = booking && (booking.userId === user.id || (booking.studentId && portalIds.includes(booking.studentId)))
 
-  if (!booking) {
+  if (!booking || !isOwner) {
     throw createError({ statusCode: 404, statusMessage: 'Prenotazione non trovata' })
   }
 

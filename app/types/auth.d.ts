@@ -1,7 +1,7 @@
 // Augmenta i tipi di nuxt-auth-utils con il modello utente di Ti Formiamo Noi.
 // Questi tipi sono usati da useUserSession() nel frontend e getUserSession() nel server.
 
-export type UserRole = 'ADMIN' | 'SUPER_TUTOR' | 'TUTOR' | 'GENITORE'
+export type UserRole = 'ADMIN' | 'SUPER_TUTOR' | 'TUTOR' | 'GENITORE' | 'STUDENTE'
 
 declare module '#auth-utils' {
   interface User {
@@ -14,8 +14,10 @@ declare module '#auth-utils' {
     linkedStudentIds?: string[]
     // Password temporanea: obbligo di cambio al primo accesso
     mustChangePassword?: boolean
-    // Solo per GENITORE: false finché non accetta la versione corrente di termini & privacy
+    // GENITORE/STUDENTE: false finché non accetta la versione corrente dei documenti legali
     termsAccepted?: boolean
+    // Tutorial di benvenuto al primo accesso (tutor/famiglia/studente)
+    tutorialVisto?: boolean
   }
 
   interface UserSession {

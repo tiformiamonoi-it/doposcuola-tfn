@@ -2,12 +2,13 @@
 // Per ogni prefisso path, i ruoli ammessi. La prima corrispondenza vince.
 // Le route NON elencate ricadono nel default: solo staff interno.
 
-type Role = 'ADMIN' | 'SUPER_TUTOR' | 'TUTOR' | 'GENITORE'
+type Role = 'ADMIN' | 'SUPER_TUTOR' | 'TUTOR' | 'GENITORE' | 'STUDENTE'
 
 const STAFF: Role[] = ['ADMIN', 'SUPER_TUTOR', 'TUTOR']
 const ADMIN_SUPER: Role[] = ['ADMIN', 'SUPER_TUTOR']
 const ADMIN_ONLY: Role[] = ['ADMIN']
 const GENITORE_ONLY: Role[] = ['GENITORE']
+const FAMIGLIA: Role[] = ['GENITORE', 'STUDENTE']
 
 // Path pubblici: nessun login richiesto
 export const PUBLIC_API_PREFIXES = [
@@ -21,12 +22,13 @@ export const PUBLIC_API_PREFIXES = [
 // `mutationRoles` (opzionale): ruoli ammessi per i metodi di scrittura (POST/PUT/PATCH/DELETE);
 // se assente, `roles` vale per tutti i metodi.
 export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: Role[] }> = [
-  // Endpoint auth accessibili anche ai genitori (il default STAFF li escluderebbe)
-  { prefix: '/api/auth/change-password',    roles: [...STAFF, ...GENITORE_ONLY] },
-  { prefix: '/api/auth/accept-terms',       roles: GENITORE_ONLY },
+  // Endpoint auth accessibili anche a genitori/studenti (il default STAFF li escluderebbe)
+  { prefix: '/api/auth/change-password',    roles: [...STAFF, ...FAMIGLIA] },
+  { prefix: '/api/auth/accept-terms',       roles: FAMIGLIA },
+  { prefix: '/api/auth/tutorial-visto',     roles: [...STAFF, ...FAMIGLIA] },
   { prefix: '/api/accounting',              roles: ADMIN_ONLY },
-  // Portale: GENITORE + ADMIN/SUPER in preview (gli handler restituiscono [] ai non-genitori)
-  { prefix: '/api/portal',                  roles: ['GENITORE', 'ADMIN', 'SUPER_TUTOR'] },
+  // Portale: GENITORE/STUDENTE + ADMIN/SUPER in preview (gli handler restituiscono [] agli altri)
+  { prefix: '/api/portal',                  roles: [...FAMIGLIA, 'ADMIN', 'SUPER_TUTOR'] },
   { prefix: '/api/admin',                   roles: ADMIN_SUPER },
   { prefix: '/api/tutors/availabilities',   roles: STAFF },
   { prefix: '/api/tutors/today-pool',       roles: STAFF },

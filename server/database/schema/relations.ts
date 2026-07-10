@@ -16,6 +16,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   bookingSubjects: many(bookingSubjects),
   bookings:        many(bookings),
   linkedStudents:  many(students, { relationName: 'portalUser' }),
+  ownStudent:      many(students, { relationName: 'studentUser' }),
   authoredNotes:   many(studentNotes),
 }))
 
@@ -27,8 +28,9 @@ export const studentsRelations = relations(students, ({ one, many }) => ({
   packages:   many(packages),
   referredBy: many(studentReferrals, { relationName: 'referred' }),
   referrals:  many(studentReferrals, { relationName: 'referrer' }),
-  portalUser: one(users, { fields: [students.portalUserId], references: [users.id], relationName: 'portalUser' }),
-  notes:      many(studentNotes),
+  portalUser:  one(users, { fields: [students.portalUserId], references: [users.id], relationName: 'portalUser' }),
+  studentUser: one(users, { fields: [students.studentUserId], references: [users.id], relationName: 'studentUser' }),
+  notes:       many(studentNotes),
 }))
 
 export const packagesRelations = relations(packages, ({ one, many }) => ({

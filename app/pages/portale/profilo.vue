@@ -21,7 +21,7 @@
       </dl>
     </UCard>
 
-    <UCard>
+    <UCard v-if="!isStudente">
       <template #header>
         <div class="flex items-center gap-2">
           <UIcon name="i-heroicons-academic-cap" class="w-4 h-4 text-tfn-500" />
@@ -77,11 +77,11 @@
         </div>
       </template>
       <div class="space-y-2 text-sm">
-        <NuxtLink to="/privacy" class="flex items-center justify-between py-2 border-b border-slate-100 text-slate-600 hover:text-indigo-600 transition-colors">
+        <NuxtLink :to="isStudente ? '/privacy-studente' : '/privacy'" class="flex items-center justify-between py-2 border-b border-slate-100 text-slate-600 hover:text-indigo-600 transition-colors">
           <span>Privacy Policy</span>
           <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
         </NuxtLink>
-        <NuxtLink to="/termini" class="flex items-center justify-between py-2 text-slate-600 hover:text-indigo-600 transition-colors">
+        <NuxtLink v-if="!isStudente" to="/termini" class="flex items-center justify-between py-2 text-slate-600 hover:text-indigo-600 transition-colors">
           <span>Termini e Condizioni</span>
           <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
         </NuxtLink>
@@ -110,6 +110,7 @@ useHead({ title: 'Profilo — Portale Famiglie' })
 
 const toast = useToast()
 const { user } = useUserSession()
+const isStudente = computed(() => user.value?.role === 'STUDENTE')
 
 const { data: studentsData, pending: pendingStudents } = useLazyFetch('/api/portal/students')
 const students = computed(() => (studentsData.value as any[]) ?? [])
@@ -131,10 +132,18 @@ async function cambiaPassword() {
   }
   savingPw.value = true
   try {
-    await $fetch('/api/portal/profile', {
-      method: 'PUT',
-      body: { currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword },
-    })
+    // Lo STUDENTE usa l'endpoint condiviso (profile.put è riservato ai genitori)
+    if (isStudente.value) {
+      await $fetch('/api/auth/change-password', {
+        method: 'POST',
+        body: { currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword },
+      })
+    } else {
+      await $fetch('/api/portal/profile', {
+        method: 'PUT',
+        body: { currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword },
+      })
+    }
     toast.add({ title: 'Password aggiornata', color: 'success' })
     pwForm.currentPassword = ''
     pwForm.newPassword = ''

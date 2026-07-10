@@ -5,7 +5,7 @@ import {
   tutorPayments, tutorReimbursements, accountingEntries,
   systemConfigs,
 } from '../database/schema'
-import { and, asc, desc, eq, gte, ilike, lte, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { sendEmail, emailBenvenutoCredenziali } from '../utils/email'
 import type {
@@ -231,7 +231,7 @@ export async function createTutor(data: CreateTutorInput) {
   // Dopo la transazione: benvenuto con credenziali (non blocca mai la creazione)
   const { sent } = await sendEmail({
     to: created.user.email,
-    ...emailBenvenutoCredenziali({ nome: created.user.firstName, email: created.user.email, tempPassword: data.password }),
+    ...emailBenvenutoCredenziali({ nome: created.user.firstName, email: created.user.email, tempPassword: data.password, cambioObbligatorio: true }),
   })
 
   return { ...created, emailInviata: sent }
@@ -263,7 +263,8 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
   const updated = await db.transaction(async (tx) => {
     const [user] = await tx.update(users)
       .set(userChanges as any)
-      .where(and(eq(users.id, id), eq(users.role, 'TUTOR')))
+      // Tutto lo staff è modificabile (serve per cambiare ruolo in entrambe le direzioni)
+      .where(and(eq(users.id, id), inArray(users.role, ['TUTOR', 'SUPER_TUTOR', 'ADMIN'])))
       .returning()
 
     if (!user) return null
@@ -280,7 +281,7 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
   if (updated && data.password) {
     const { sent } = await sendEmail({
       to: updated.user.email,
-      ...emailBenvenutoCredenziali({ nome: updated.user.firstName, email: updated.user.email, tempPassword: data.password }),
+      ...emailBenvenutoCredenziali({ nome: updated.user.firstName, email: updated.user.email, tempPassword: data.password, cambioObbligatorio: true }),
     })
     return { ...updated, emailInviata: sent }
   }
@@ -294,7 +295,7 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
 export async function deactivateTutor(id: string) {
   const [updated] = await db.update(users)
     .set({ active: false, updatedAt: new Date() })
-    .where(and(eq(users.id, id), eq(users.role, 'TUTOR')))
+    .where(and(eq(users.id, id), inArray(users.role, ['TUTOR', 'SUPER_TUTOR', 'ADMIN'])))
     .returning()
 
   return updated ?? null

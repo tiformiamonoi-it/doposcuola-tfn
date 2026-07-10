@@ -342,6 +342,66 @@
                     </div>
                   </template>
                 </UCard>
+
+                <!-- Account Studente (solo prenotazioni) -->
+                <UCard v-if="isAdmin">
+                  <template #header>
+                    <div class="flex items-center gap-2">
+                      <UIcon name="i-heroicons-user-circle" class="w-5 h-5 text-tfn-500" />
+                      <span class="font-medium text-slate-800">Account Studente (solo prenotazioni)</span>
+                      <StatHelp text="Account personale dello studente: può solo prenotare le lezioni, non vede note né pagamenti. Le sue prenotazioni restano visibili anche alla famiglia. Attivo di default; puoi disattivarlo in ogni momento." />
+                    </div>
+                  </template>
+
+                  <template v-if="!(studentAccount as any)?.studentUser">
+                    <div class="space-y-3">
+                      <p class="text-sm text-slate-500">
+                        Crea un accesso personale per lo studente: potrà solo prenotare le lezioni. Serve un'email personale dello studente (diversa da quella del genitore).
+                      </p>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <UFormField label="Email studente">
+                          <UInput v-model="datiAccountStudente.email" type="email" class="w-full" placeholder="studente@email.it" />
+                        </UFormField>
+                        <div class="grid grid-cols-2 gap-3">
+                          <UFormField label="Nome">
+                            <UInput v-model="datiAccountStudente.firstName" class="w-full" />
+                          </UFormField>
+                          <UFormField label="Cognome">
+                            <UInput v-model="datiAccountStudente.lastName" class="w-full" />
+                          </UFormField>
+                        </div>
+                      </div>
+                      <UCheckbox v-model="datiAccountStudente.consensoGenitore" label="Il genitore autorizza la creazione dell'account dello studente (obbligatorio per i minori di 14 anni)" />
+                      <UButton icon="i-heroicons-plus" :loading="creandoAccountStudente" :disabled="!datiAccountStudente.email || !datiAccountStudente.consensoGenitore" @click="creaAccountStudente">
+                        Crea account studente
+                      </UButton>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div class="bg-slate-50 border border-slate-100 rounded-lg p-4">
+                      <dl class="space-y-3 text-sm">
+                        <div class="flex justify-between items-center border-b border-slate-200 pb-2">
+                          <span class="text-slate-500">Email di accesso</span>
+                          <span class="font-medium text-slate-800">{{ (studentAccount as any).studentUser?.email }}</span>
+                        </div>
+                        <div class="flex justify-between items-center border-b border-slate-200 pb-2">
+                          <span class="text-slate-500">Consenso genitore registrato</span>
+                          <span class="font-medium text-slate-800">{{ (studentAccount as any).studentUser?.consensoGenitoreAt ? formatData((studentAccount as any).studentUser.consensoGenitoreAt) : '—' }}</span>
+                        </div>
+                        <div class="flex items-center justify-between pt-1">
+                          <span class="text-slate-500">Account attivo (può prenotare)</span>
+                          <USwitch :model-value="(studentAccount as any).studentUser?.active" :loading="togglandoStudente" @update:model-value="toggleAccountStudente" />
+                        </div>
+                      </dl>
+                    </div>
+
+                    <UAlert v-if="credenzialiStudente" color="info" icon="i-heroicons-key" title="Credenziali account studente (mostrate una sola volta)" :description="`Email: ${credenzialiStudente.email} | Password: ${credenzialiStudente.tempPassword}${credenzialiStudente.emailInviata ? ' — inviate anche via email allo studente' : ' — email non configurata: comunicale a mano'}`" class="mt-4" :close-button="{ icon: 'i-heroicons-x-mark' }" @close="credenzialiStudente = null" />
+
+                    <div class="mt-4 flex gap-2">
+                      <UButton variant="outline" size="sm" icon="i-heroicons-key" @click="resetPasswordStudente">Genera nuova password</UButton>
+                    </div>
+                  </template>
+                </UCard>
               </div>
             </template>
 
@@ -856,6 +916,73 @@ const credenziali = ref<{ email: string; tempPassword: string; emailInviata?: bo
 const creandoAccesso = ref(false)
 const resetPassword = ref<string | null>(null)
 const resetEmailInviata = ref(false)
+
+// ─── Account Studente (solo prenotazioni) ───
+const { data: studentAccount, refresh: refreshStudentAccount } = useLazyFetch(
+  `/api/admin/students/${id}/student-account`,
+  { lazy: true }
+)
+const datiAccountStudente = reactive({ email: '', firstName: '', lastName: '', consensoGenitore: false })
+const creandoAccountStudente = ref(false)
+const togglandoStudente = ref(false)
+const credenzialiStudente = ref<{ email: string; tempPassword: string; emailInviata?: boolean } | null>(null)
+
+// Precompila dai dati dello studente appena disponibili
+watch(studentAccount, (acc: any) => {
+  if (!acc || acc.studentUser) return
+  if (!datiAccountStudente.email) datiAccountStudente.email = acc.studentEmail ?? ''
+  if (!datiAccountStudente.firstName) datiAccountStudente.firstName = acc.firstName ?? ''
+  if (!datiAccountStudente.lastName) datiAccountStudente.lastName = acc.lastName ?? ''
+}, { immediate: true })
+
+async function creaAccountStudente() {
+  creandoAccountStudente.value = true
+  try {
+    const res = await $fetch(`/api/admin/students/${id}/student-account`, {
+      method: 'POST',
+      body: { ...datiAccountStudente },
+    }) as any
+    credenzialiStudente.value = { email: res.email, tempPassword: res.tempPassword, emailInviata: res.emailInviata === true }
+    toast.add({ title: 'Account studente creato', color: 'success' })
+    await refreshStudentAccount()
+  } catch (e: any) {
+    toast.add({ title: 'Errore', description: e?.data?.statusMessage ?? 'Impossibile creare l\'account studente', color: 'error' })
+  } finally {
+    creandoAccountStudente.value = false
+  }
+}
+
+async function toggleAccountStudente(value: boolean) {
+  const acc = studentAccount.value as any
+  if (!acc?.studentUser?.id) return
+  togglandoStudente.value = true
+  try {
+    await $fetch(`/api/admin/students/${id}/student-account`, {
+      method: 'PUT',
+      body: { action: 'toggle-active', userId: acc.studentUser.id, active: value },
+    })
+    await refreshStudentAccount()
+    toast.add({ title: value ? 'Account studente attivato' : 'Account studente disattivato', color: 'success' })
+  } catch (e: any) {
+    toast.add({ title: 'Errore', description: e?.data?.statusMessage ?? 'Operazione non riuscita', color: 'error' })
+  } finally {
+    togglandoStudente.value = false
+  }
+}
+
+async function resetPasswordStudente() {
+  const acc = studentAccount.value as any
+  if (!acc?.studentUser?.id) return
+  try {
+    const res = await $fetch(`/api/admin/students/${id}/student-account`, {
+      method: 'PUT',
+      body: { action: 'reset-password', userId: acc.studentUser.id },
+    }) as any
+    credenzialiStudente.value = { email: acc.studentUser.email, tempPassword: res.tempPassword, emailInviata: res.emailInviata === true }
+  } catch (e: any) {
+    toast.add({ title: 'Errore', description: e?.data?.statusMessage ?? 'Impossibile reimpostare la password', color: 'error' })
+  }
+}
 const togglando = ref(false)
 const confermaCollegamento = ref<{
   email: string

@@ -17,9 +17,10 @@ export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
   const targetRole = parsed.data.role
 
-  // Protezione escalation ruolo: solo SUPER_TUTOR può assegnare SUPER_TUTOR
-  if (targetRole === 'SUPER_TUTOR' && user.role !== 'SUPER_TUTOR') {
-    throw createError({ statusCode: 403, statusMessage: 'Solo il Super Admin può assegnare il ruolo Super Admin' })
+  // Protezione escalation ruolo: solo l'ADMIN può assegnare ruoli elevati
+  // (SUPER_TUTOR può gestire i tutor ma non promuovere nessuno)
+  if (targetRole && targetRole !== 'TUTOR' && user.role !== 'ADMIN') {
+    throw createError({ statusCode: 403, statusMessage: 'Solo l\'Admin può assegnare i ruoli Super Tutor e Admin' })
   }
 
   const result = await updateTutor(id, parsed.data)

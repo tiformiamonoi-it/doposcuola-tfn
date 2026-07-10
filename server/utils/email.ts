@@ -51,11 +51,14 @@ function layout(titolo: string, corpo: string): string {
   </div>`
 }
 
-export function emailBenvenutoCredenziali(p: { nome: string; email: string; tempPassword: string }): { subject: string; html: string } {
+export function emailBenvenutoCredenziali(p: { nome: string; email: string; tempPassword: string; cambioObbligatorio?: boolean }): { subject: string; html: string } {
   const config = useRuntimeConfig()
   const loginLink = config.appUrl
     ? `<p><a href="${config.appUrl}/login" style="display:inline-block;background:#0063A6;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">Accedi ora</a></p>`
     : ''
+  const notaPassword = p.cambioObbligatorio
+    ? 'Al primo accesso ti verrà chiesto di <strong>scegliere una nuova password</strong>.'
+    : 'Ti consigliamo di <strong>cambiare la password</strong> dopo il primo accesso (dal tuo profilo).'
   return {
     subject: 'Le tue credenziali di accesso — Ti Formiamo Noi',
     html: layout(`Ciao ${p.nome}, il tuo account è pronto!`, `
@@ -64,7 +67,7 @@ export function emailBenvenutoCredenziali(p: { nome: string; email: string; temp
         <tr><td style="padding: 4px 12px 4px 0; color: #64748b;">Email</td><td><strong>${p.email}</strong></td></tr>
         <tr><td style="padding: 4px 12px 4px 0; color: #64748b;">Password temporanea</td><td><strong style="font-family: monospace;">${p.tempPassword}</strong></td></tr>
       </table>
-      <p style="font-size: 14px;">Al primo accesso ti verrà chiesto di <strong>scegliere una nuova password</strong>.</p>
+      <p style="font-size: 14px;">${notaPassword}</p>
       ${loginLink}
     `),
   }

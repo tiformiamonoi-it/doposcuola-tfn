@@ -46,7 +46,8 @@ export default defineEventHandler(async (event) => {
   await db.update(users)
     .set({
       password: await bcrypt.hash(tempPassword, 10),
-      mustChangePassword: true,
+      // Cambio obbligatorio solo per lo staff; per famiglie e studenti è facoltativo
+      mustChangePassword: !['GENITORE', 'STUDENTE'].includes(user.role),
       updatedAt: new Date(),
     })
     .where(eq(users.id, user.id))
