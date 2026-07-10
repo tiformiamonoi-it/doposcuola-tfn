@@ -90,20 +90,25 @@
 
         <div v-if="dati.pacchetto.crea" class="space-y-4 border border-slate-100 rounded-lg p-4 bg-slate-50/50">
           <template v-if="templateOptions.length > 0">
-            <UFormField label="Scegli template (opzionale)">
+            <UFormField label="Pacchetto standard (da Impostazioni)" required>
               <div class="flex gap-2 w-full items-center">
                 <USelectMenu v-model="templatePkgSelezionato" :items="templateOptions" searchable
                   value-attribute="value" placeholder="Seleziona un pacchetto standard..." class="flex-1"
                   @update:model-value="applicaTemplatePkg" />
                 <UButton v-if="dati.pacchetto.standardPackageId" variant="ghost" color="neutral"
-                  icon="i-heroicons-x-mark" title="Scollega template e personalizza"
+                  icon="i-heroicons-x-mark" title="Scollega template e personalizza i dettagli (il nome resta quello del pacchetto standard)"
                   @click="applicaTemplatePkg(null); templatePkgSelezionato = ''" />
               </div>
             </UFormField>
-            <USeparator label="oppure compila manualmente" />
+            <USeparator label="dettagli (personalizzabili)" />
           </template>
           <UFormField label="Nome pacchetto" required>
-            <UInput v-model="dati.pacchetto.nome" placeholder="Es: 10 ore Matematica" class="w-full" />
+            <UInput v-model="dati.pacchetto.nome" :disabled="templateOptions.length > 0" placeholder="Deriva dal pacchetto standard scelto" class="w-full" />
+            <template #description>
+              <span v-if="templateOptions.length > 0" class="text-xs text-slate-400">
+                Il nome deriva sempre dal pacchetto standard (modificabile solo in Impostazioni)
+              </span>
+            </template>
           </UFormField>
           <UFormField label="Tipo" required>
             <USelect v-model="dati.pacchetto.tipo" :items="[
@@ -248,6 +253,18 @@
         </div>
         <div v-if="risultato.portaleEsistente" class="text-sm text-amber-600">
           ⚠️ Esiste già un account con email {{ risultato.portaleEmail }}. Lo studente è stato collegato all'account esistente.
+        </div>
+        <div v-if="risultato.collegaEsistente" class="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+          <p class="text-sm font-medium text-slate-800">Genitore già registrato</p>
+          <p class="text-sm text-slate-600">
+            L'email <strong>{{ risultato.collegaEsistente.email }}</strong> appartiene già all'account di
+            <strong>{{ risultato.collegaEsistente.nome || 'un genitore esistente' }}</strong> (probabilmente un altro figlio è già iscritto).
+            Collegare anche questo studente allo stesso account? La password non cambierà.
+          </p>
+          <div class="flex gap-2 justify-end">
+            <UButton size="xs" variant="ghost" @click="risultato.collegaEsistente = null">Non collegare</UButton>
+            <UButton size="xs" color="primary" :loading="collegando" @click="confermaCollegamentoEsistente">Collega allo stesso account</UButton>
+          </div>
         </div>
       </div>
     </template>
@@ -405,7 +422,31 @@ const risultato = reactive({
   portaleEmail: '',
   tempPassword: '',
   emailInviata: false,
+  // Email già di un genitore registrato: collegamento in attesa di conferma
+  collegaEsistente: null as null | { studentId: string; email: string; nome: string },
 })
+
+const collegando = ref(false)
+
+async function confermaCollegamentoEsistente() {
+  if (!risultato.collegaEsistente) return
+  collegando.value = true
+  try {
+    const res = await $fetch('/api/admin/students/' + risultato.collegaEsistente.studentId + '/portal-access', {
+      method: 'POST',
+      body: { email: risultato.collegaEsistente.email, force: true },
+    }) as any
+    risultato.portaleEsistente = true
+    risultato.portaleEmail = res.user?.email ?? risultato.collegaEsistente.email
+    risultato.collegaEsistente = null
+    toast.add({ title: 'Studente collegato all\'account esistente', color: 'success' })
+    emit('refresh')
+  } catch (e: any) {
+    toast.add({ title: 'Errore', description: e?.data?.statusMessage ?? 'Collegamento non riuscito', color: 'error' })
+  } finally {
+    collegando.value = false
+  }
+}
 
 function copiaPassword() {
   navigator.clipboard.writeText(risultato.tempPassword)
@@ -413,6 +454,17 @@ function copiaPassword() {
 }
 
 async function salvaTutto() {
+  // Il nome pacchetto deriva sempre dal pacchetto standard scelto
+  if (dati.pacchetto.crea && !dati.pacchetto.nome) {
+    toast.add({
+      title: 'Scegli un pacchetto standard',
+      description: 'Il nome del pacchetto deriva sempre da quello standard (Impostazioni).',
+      color: 'error',
+    })
+    step.value = 3
+    return
+  }
+
   // L'account portale richiede un'email (campo portale o email genitore)
   if (dati.portale.crea && !dati.portale.email && !dati.genitore.parentEmail) {
     toast.add({
@@ -498,13 +550,13 @@ async function salvaTutto() {
         risultato.tempPassword = portalRes.tempPassword
         risultato.emailInviata = portalRes.emailInviata === true
       } else if (portalRes.requiresConfirmation) {
-        // Esiste già, forziamo il collegamento
-        const forceRes = await $fetch('/api/admin/students/' + studenteId + '/portal-access', {
-          method: 'POST',
-          body: { ...portalBody, force: true },
-        }) as any
-        risultato.portaleEsistente = true
-        risultato.portaleEmail = forceRes.user?.email || portalBody.email
+        // Email già registrata come genitore (probabile altro figlio):
+        // NON colleghiamo in automatico — chiediamo conferma nel riepilogo finale
+        risultato.collegaEsistente = {
+          studentId: studenteId,
+          email: portalRes.existingUser?.email ?? portalBody.email,
+          nome: `${portalRes.existingUser?.firstName ?? ''} ${portalRes.existingUser?.lastName ?? ''}`.trim(),
+        }
       }
 
       // Abilita prenotazione se richiesto
@@ -526,20 +578,19 @@ async function salvaTutto() {
   }
 }
 
-// Watch per pre-compilare dati portale
-watch(() => dati.genitore.parentEmail, (email) => {
-  if (email && !dati.portale.email) {
-    dati.portale.email = email
+// Pre-compila i dati portale ENTRANDO nello step 4 (i vecchi watch per-tasto
+// copiavano solo il primo carattere digitato e poi smettevano di aggiornare)
+watch(step, (s) => {
+  if (s !== 4) return
+  if (!dati.portale.email && dati.genitore.parentEmail) {
+    dati.portale.email = dati.genitore.parentEmail
   }
-})
-watch(() => dati.genitore.parentName, (name) => {
-  if (name && !dati.portale.firstName) {
-    dati.portale.firstName = name.split(' ')[0] || name
+  if (!dati.portale.firstName && dati.genitore.parentName) {
+    dati.portale.firstName = dati.genitore.parentName.trim().split(/\s+/)[0] ?? ''
   }
-})
-watch(() => dati.studente.lastName, (ln) => {
-  if (ln && !dati.portale.lastName) {
-    dati.portale.lastName = ln
+  if (!dati.portale.lastName) {
+    const cognomeGenitore = dati.genitore.parentName?.trim().split(/\s+/).slice(1).join(' ')
+    dati.portale.lastName = cognomeGenitore || dati.studente.lastName || ''
   }
 })
 </script>

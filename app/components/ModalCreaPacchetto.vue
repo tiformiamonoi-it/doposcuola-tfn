@@ -4,7 +4,7 @@
       <div class="space-y-4">
         <!-- Scegli template (se ci sono pacchetti standard) -->
         <template v-if="templateOptions.length > 0">
-          <UFormField label="Scegli template (opzionale)">
+          <UFormField label="Pacchetto standard (da Impostazioni)" required>
             <div class="flex gap-2 w-full items-center">
               <USelectMenu
                 v-model="templateSelezionato"
@@ -21,11 +21,11 @@
                 color="neutral"
                 icon="i-heroicons-x-mark"
                 @click="applicaTemplate(null); templateSelezionato = ''"
-                title="Scollega template e personalizza"
+                title="Scollega template e personalizza i dettagli (il nome resta quello del pacchetto standard)"
               />
             </div>
           </UFormField>
-          <USeparator label="oppure compila manualmente" />
+          <USeparator label="dettagli (personalizzabili)" />
         </template>
 
         <!-- Studente -->
@@ -58,7 +58,12 @@
         </UAlert>
 
         <UFormField label="Nome pacchetto" required>
-          <UInput v-model="nuovo.nome" :disabled="!!nuovo.standardPackageId" placeholder="Es: 10 ore Matematica" class="w-full" />
+          <UInput v-model="nuovo.nome" :disabled="templateOptions.length > 0" placeholder="Deriva dal pacchetto standard scelto" class="w-full" />
+          <template #description>
+            <span v-if="templateOptions.length > 0" class="text-xs text-slate-400">
+              Il nome deriva sempre dal pacchetto standard (modificabile solo in Impostazioni)
+            </span>
+          </template>
         </UFormField>
 
         <!-- Tipo pacchetto -->
@@ -436,6 +441,11 @@ function eseguiConferma() {
 async function creaPacchetto() {
   if (!nuovo.studentId) {
     toast.add({ title: 'Seleziona uno studente', color: 'warning', icon: 'i-heroicons-exclamation-circle' })
+    return
+  }
+
+  if (!nuovo.nome) {
+    toast.add({ title: 'Scegli un pacchetto standard', description: 'Il nome del pacchetto deriva sempre da quello standard (Impostazioni).', color: 'warning', icon: 'i-heroicons-exclamation-circle' })
     return
   }
 

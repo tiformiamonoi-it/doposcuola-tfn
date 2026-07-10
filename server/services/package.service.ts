@@ -379,7 +379,7 @@ export async function updatePackage(id: string, data: UpdatePackageInput) {
 
   const changes: Record<string, unknown> = { updatedAt: new Date() }
 
-  if (data.nome              !== undefined) changes.nome              = data.nome
+  // Il nome NON è mai modificabile: deriva sempre dal pacchetto standard (Impostazioni)
   if (data.tipo              !== undefined) changes.tipo              = data.tipo
   if (data.oreAcquistate     !== undefined) changes.oreAcquistate     = String(data.oreAcquistate)
   if (data.prezzoTotale      !== undefined) changes.prezzoTotale      = String(data.prezzoTotale)

@@ -235,12 +235,19 @@
                   </table>
                 </UCard>
 
-                <!-- Storico Prenotazioni -->
+              </div>
+            </template>
+
+            <template #prenotazioni>
+              <div class="mt-4">
                 <UCard :ui="{ body: 'p-0' }">
                   <template #header>
-                    <h3 class="font-semibold text-slate-800 flex items-center gap-2"><UIcon name="i-heroicons-calendar-days" /> Storico Prenotazioni</h3>
+                    <div class="flex items-center justify-between">
+                      <h3 class="font-semibold text-slate-800 flex items-center gap-2"><UIcon name="i-heroicons-calendar-days" /> Storico Prenotazioni</h3>
+                      <UButton v-if="allBookings.length > 0" size="xs" variant="soft" icon="i-heroicons-arrow-down-tray" @click="esportaCsvPrenotazioni">Esporta CSV</UButton>
+                    </div>
                   </template>
-                  
+
                   <div v-if="pendingBookings" class="p-8 flex justify-center"><UIcon name="i-heroicons-arrow-path" class="animate-spin w-6 h-6 text-slate-300" /></div>
                   <div v-else-if="allBookings.length === 0" class="p-8 text-center text-slate-400 text-sm">Nessuna prenotazione trovata.</div>
                   <div v-else class="divide-y divide-slate-100">
@@ -258,7 +265,7 @@
                             {{ hasLessonOnDate(b.requestedDate) ? 'Presente' : 'Assente / Da svolgere' }}
                           </UBadge>
                         </template>
-                        
+
                         <div class="flex gap-1" v-if="b.status === 'PENDING'">
                           <UButton size="xs" color="success" variant="ghost" icon="i-heroicons-check" @click="confermaBooking(b.id)" />
                           <UButton size="xs" color="error" variant="ghost" icon="i-heroicons-x-mark" @click="cancellaBooking(b.id)" />
@@ -565,6 +572,7 @@ const tabItems = [
   { label: 'Panoramica', slot: 'panoramica' },
   { label: 'Pacchetti', slot: 'pacchetti' },
   { label: 'Lezioni', slot: 'lezioni' },
+  { label: 'Prenotazioni', slot: 'prenotazioni' },
   { label: 'Famiglia', slot: 'famiglia' }
 ]
 
@@ -824,11 +832,40 @@ const { data: portalAccess, refresh: refreshPortal } = useLazyFetch(
   { lazy: true }
 )
 
-const { data: pendingBookings, refresh: refreshBookings } = useLazyFetch(
+// ⚠️ pendingBookings è lo stato di caricamento, NON i dati: prima erano invertiti
+// e lo spinner girava all'infinito appena arrivava la risposta.
+const { data: bookingsData, pending: pendingBookings, refresh: refreshBookings } = useLazyFetch(
   `/api/admin/bookings?studentId=${id}`,
   { lazy: true }
 )
-const allBookings = computed(() => pendingBookings.value as any[] ?? [])
+const allBookings = computed(() => (bookingsData.value as any[]) ?? [])
+
+function statoBookingLabel(b: any): string {
+  if (b.status === 'PENDING') return 'In attesa'
+  if (b.status === 'CANCELLED') return 'Annullata'
+  if (b.status === 'CONFIRMED') return hasLessonOnDate(b.requestedDate) ? 'Confermata — presente' : 'Confermata — da svolgere/assente'
+  return b.status ?? ''
+}
+
+function esportaCsvPrenotazioni() {
+  const righe = [
+    ['Data richiesta', 'Materie', 'Stato', 'Note'],
+    ...allBookings.value.map((b: any) => [
+      formatDateBooking(b.requestedDate),
+      (b.subjects ?? []).map((s: any) => s.name).join(', '),
+      statoBookingLabel(b),
+      b.notes ?? '',
+    ]),
+  ]
+  const csv = righe.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\r\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `prenotazioni-${(studente.value as any)?.lastName ?? id}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 const mostraModalCreaAccesso = ref(false)
 const datiCreaAccesso = reactive({ email: '', firstName: '', lastName: '' })

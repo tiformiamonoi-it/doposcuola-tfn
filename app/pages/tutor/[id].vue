@@ -104,6 +104,32 @@
               </UCard>
             </div>
 
+            <!-- Credenziali di accesso -->
+            <UCard>
+              <div class="text-xs text-slate-400 mb-3 font-medium uppercase tracking-wide flex items-center gap-1">
+                Credenziali di accesso
+                <StatHelp text="Imposta l'email vera del tutor e genera una password temporanea: gli arriverà via email (se configurata) e al primo accesso dovrà cambiarla. Utile per i tutor creati con email segnaposto." />
+              </div>
+              <div class="flex flex-wrap items-end gap-3">
+                <UFormField label="Email di accesso" class="flex-1 min-w-56">
+                  <UInput v-model="credEmail" type="email" placeholder="email@vera.it" class="w-full" />
+                </UFormField>
+                <UButton icon="i-heroicons-key" :loading="generandoCredenziali" @click="generaCredenziali">
+                  Genera password e invia
+                </UButton>
+              </div>
+              <UAlert
+                v-if="credenzialiGenerate"
+                class="mt-3"
+                color="warning"
+                icon="i-heroicons-key"
+                title="Nuova password temporanea (mostrata una sola volta)"
+                :description="`Email: ${credenzialiGenerate.email} | Password: ${credenzialiGenerate.password}${credenzialiGenerate.emailInviata ? ' — credenziali inviate via email al tutor' : ' — email NON inviata: comunicala a mano'}`"
+                :close-button="{ icon: 'i-heroicons-x-mark' }"
+                @close="credenzialiGenerate = null"
+              />
+            </UCard>
+
             <!-- Materie -->
             <UCard>
               <div class="flex items-center justify-between mb-3">
@@ -575,6 +601,35 @@ const { data: tutorPayments, refresh: refreshTutorPayments } = useLazyFetch(`/ap
   default: () => [] as any[],
 })
 const eliminandoCompenso = ref<string | null>(null)
+
+// ─── Credenziali di accesso (email vera + password temporanea) ───
+const credEmail = ref('')
+const generandoCredenziali = ref(false)
+const credenzialiGenerate = ref<{ email: string; password: string; emailInviata: boolean } | null>(null)
+
+watch(tutor, (t: any) => { if (t?.email && !credEmail.value) credEmail.value = t.email }, { immediate: true })
+
+async function generaCredenziali() {
+  if (!credEmail.value || !credEmail.value.includes('@')) {
+    toast.add({ title: 'Inserisci un\'email valida', color: 'warning' })
+    return
+  }
+  generandoCredenziali.value = true
+  try {
+    const password = generaPasswordCasuale()
+    const res = await $fetch(`/api/tutors/${id}`, {
+      method: 'PUT',
+      body: { email: credEmail.value, password },
+    }) as any
+    credenzialiGenerate.value = { email: credEmail.value, password, emailInviata: res?.emailInviata === true }
+    toast.add({ title: 'Credenziali generate', color: 'success' })
+    refreshTutor()
+  } catch (e: any) {
+    toast.add({ title: 'Errore', description: e?.data?.statusMessage ?? 'Impossibile aggiornare le credenziali', color: 'error' })
+  } finally {
+    generandoCredenziali.value = false
+  }
+}
 
 const confirmOpen = ref(false)
 const confirmTitle = ref('')

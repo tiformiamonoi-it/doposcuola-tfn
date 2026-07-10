@@ -34,7 +34,7 @@
         <div v-else-if="kpi" class="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <UCard>
             <p class="text-xs text-slate-500 flex items-center gap-1">Entrate
-              <StatHelp text="Soldi incassati nel mese corrente (pagamenti pacchetti e altre entrate registrate in contabilità). Gli storni sono già sottratti." />
+              <StatHelp text="CALCOLO: somma di tutti i movimenti di tipo ENTRATA del mese corrente (pagamenti pacchetti, ricariche, altre entrate), esclusi giroconti e categorie neutre. Gli storni sono già sottratti. Conta quanto è stato INCASSATO, non i crediti futuri." />
             </p>
             <p class="text-2xl font-bold text-emerald-600 mt-1">€ {{ fmt(kpi.corrente.entrate) }}</p>
             <p class="text-[11px] mt-1" :class="deltaClass(kpi.corrente.entrate, kpi.precedente.entrate)">
@@ -43,7 +43,7 @@
           </UCard>
           <UCard>
             <p class="text-xs text-slate-500 flex items-center gap-1">Uscite
-              <StatHelp text="Soldi usciti nel mese corrente (compensi tutor pagati, spese, rimborsi)." />
+              <StatHelp text="CALCOLO: somma di tutti i movimenti di tipo USCITA del mese corrente (compensi tutor liquidati, spese, rimborsi), esclusi giroconti e categorie neutre. NON include i costi fissi se non sono registrati come movimenti." />
             </p>
             <p class="text-2xl font-bold text-rose-600 mt-1">€ {{ fmt(kpi.corrente.uscite) }}</p>
             <p class="text-[11px] mt-1 text-slate-400">
@@ -52,7 +52,7 @@
           </UCard>
           <UCard>
             <p class="text-xs text-slate-500 flex items-center gap-1">Margine
-              <StatHelp text="Entrate meno uscite del mese corrente: quello che resta prima di costi fissi e tasse." />
+              <StatHelp text="CALCOLO: Entrate − Uscite del mese corrente. ⚠️ NON è al netto dei costi fissi (affitto, utenze…) né delle tasse: il valore già depurato dei costi fissi è il Break-even, che trovi in Contabilità." />
             </p>
             <p class="text-2xl font-bold mt-1" :class="kpi.corrente.margine >= 0 ? 'text-blue-600' : 'text-orange-600'">
               € {{ fmt(kpi.corrente.margine) }}
@@ -63,7 +63,7 @@
           </UCard>
           <UCard>
             <p class="text-xs text-slate-500 flex items-center gap-1">Lezioni svolte
-              <StatHelp text="Numero di lezioni registrate nel mese corrente (tutte, comprese quelle non ancora confermate)." />
+              <StatHelp text="CALCOLO: numero di lezioni registrate nel mese corrente, tutte comprese (anche quelle non ancora confermate dall'admin). Una lezione MAXI con più studenti conta 1." />
             </p>
             <p class="text-2xl font-bold text-slate-800 mt-1">{{ kpi.corrente.lezioni }}</p>
             <p class="text-[11px] mt-1" :class="deltaClass(kpi.corrente.lezioni, kpi.precedente.lezioni)">
@@ -86,7 +86,7 @@
               size="xs"
               :variant="preset === p.key ? 'solid' : 'outline'"
               color="primary"
-              @click="preset = p.key"
+              @click="preset = p.key;"
             >
               {{ p.label }}
             </UButton>
@@ -109,7 +109,9 @@
         <template v-else-if="guadagno">
           <div class="grid grid-cols-2 gap-4">
             <UCard>
-              <p class="text-xs text-slate-500">Totale periodo ({{ periodoLabel }})</p>
+              <p class="text-xs text-slate-500 flex items-center gap-1">Totale periodo ({{ periodoLabel }})
+                <StatHelp text="CALCOLO: per ogni lezione del periodo, somma per ciascuno studente di (prezzo pacchetto ÷ ore acquistate × ore scalate), meno il compenso del tutor. ⚠️ Non include costi fissi né altre spese: è il guadagno delle sole lezioni." />
+              </p>
               <p class="text-2xl font-bold mt-1" :class="guadagno.totale >= 0 ? 'text-emerald-600' : 'text-orange-600'">
                 € {{ fmt(guadagno.totale) }}
               </p>
@@ -117,7 +119,7 @@
             </UCard>
             <UCard>
               <p class="text-xs text-slate-500 flex items-center gap-1">Media giornaliera
-                <StatHelp text="Guadagno totale diviso per i giorni in cui si sono svolte lezioni. I giorni chiusi non abbassano la media." />
+                <StatHelp text="CALCOLO: Totale periodo ÷ numero di giorni CON lezioni. I giorni chiusi o senza lezioni non abbassano la media. Esempio: € 500 in 5 giorni di lezione = € 100 al giorno." />
               </p>
               <p class="text-2xl font-bold text-slate-800 mt-1">€ {{ fmt(guadagno.mediaGiornaliera) }}</p>
               <p class="text-[11px] text-slate-400 mt-1">per giorno di lezione</p>
@@ -159,17 +161,23 @@
         <template v-else-if="effettivo">
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <UCard>
-              <p class="text-xs text-slate-500">Guadagno standard</p>
+              <p class="text-xs text-slate-500 flex items-center gap-1">Guadagno standard
+                <StatHelp text="CALCOLO: ore del mese × (prezzo pacchetto ÷ ore ACQUISTATE), meno i compensi tutor del mese. È il valore 'sulla carta', come se ogni ora comprata venisse usata." />
+              </p>
               <p class="text-2xl font-bold text-slate-700 mt-1">€ {{ fmt(effettivo.atteso) }}</p>
               <p class="text-[11px] text-slate-400 mt-1">valore ore ai prezzi pieni dei pacchetti</p>
             </UCard>
             <UCard>
-              <p class="text-xs text-slate-500">Guadagno effettivo</p>
+              <p class="text-xs text-slate-500 flex items-center gap-1">Guadagno effettivo
+                <StatHelp text="CALCOLO: per i pacchetti a prezzo fisso FINITI, ore del mese × (prezzo ÷ ore DAVVERO USATE): se di 60 ore ne sono state fatte 40, ogni ora vale prezzo÷40. Pacchetti a consumo: sempre la loro tariffa. Pacchetti ancora in corso: valore standard provvisorio. Meno i compensi tutor del mese." />
+              </p>
               <p class="text-2xl font-bold text-violet-600 mt-1">€ {{ fmt(effettivo.effettivo) }}</p>
               <p class="text-[11px] text-slate-400 mt-1">ricalcolato sulle ore davvero usate</p>
             </UCard>
             <UCard>
-              <p class="text-xs text-slate-500">Differenza</p>
+              <p class="text-xs text-slate-500 flex items-center gap-1">Differenza
+                <StatHelp text="CALCOLO: Guadagno effettivo − Guadagno standard. Se positiva, le ore non usate dagli studenti hanno reso ogni ora svolta più redditizia del previsto." />
+              </p>
               <p class="text-2xl font-bold mt-1" :class="effettivo.differenza >= 0 ? 'text-emerald-600' : 'text-orange-600'">
                 {{ effettivo.differenza >= 0 ? '+' : '' }}€ {{ fmt(effettivo.differenza) }}
               </p>
