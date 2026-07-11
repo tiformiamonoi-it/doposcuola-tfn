@@ -16,6 +16,10 @@ node_modules
 # Log
 *.log
 
+# Dump di database (contengono dati personali: MAI su GitHub)
+*.sql
+!server/database/migrations/*.sql
+
 # OS
 .DS_Store
 Thumbs.db
