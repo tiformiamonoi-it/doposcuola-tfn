@@ -1,4 +1,5 @@
 import { getPortalAccess } from '../../../../services/portal-user.service'
+import { toHttpError } from '../../../../utils/http-error'
 
 // GET /api/admin/students/:id/portal-access
 export default defineEventHandler(async (event) => {
@@ -15,6 +16,6 @@ export default defineEventHandler(async (event) => {
     return await getPortalAccess(studentId)
   } catch (err: any) {
     if (err.statusCode) throw err
-    throw createError({ statusCode: err.message?.includes('non trovato') ? 404 : 400, statusMessage: err.message })
+    throw toHttpError(err, err.message?.includes('non trovato') ? 404 : 400)
   }
 })

@@ -1,4 +1,5 @@
 import { deleteAccountingEntry } from '../../../services/accounting.service'
+import { toHttpError } from '../../../utils/http-error'
 
 // DELETE /api/accounting/entries/:id?mode=delete|storno
 // mode=storno → crea un movimento opposto (mantiene lo storico)
@@ -16,6 +17,6 @@ export default defineEventHandler(async (event) => {
     return await deleteAccountingEntry(id, mode)
   } catch (err: any) {
     const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('automatico') ? 403 : 400
-    throw createError({ statusCode: code, statusMessage: err.message })
+    throw toHttpError(err, code)
   }
 })

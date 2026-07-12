@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { updateAccountingEntry } from '../../../services/accounting.service'
+import { toHttpError } from '../../../utils/http-error'
 
 const bodySchema = z.object({
   tipo:            z.enum(['ENTRATA', 'USCITA', 'NOTA', 'CREDITO', 'DEBITO']).optional(),
@@ -30,6 +31,6 @@ export default defineEventHandler(async (event) => {
     return await updateAccountingEntry(id, parsed.data)
   } catch (err: any) {
     const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('automatico') ? 403 : 400
-    throw createError({ statusCode: code, statusMessage: err.message })
+    throw toHttpError(err, code)
   }
 })

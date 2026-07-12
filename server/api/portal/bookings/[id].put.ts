@@ -4,6 +4,7 @@ import { UpdateBookingSchema } from '#shared/schemas/booking.schema'
 import { eq, sql } from 'drizzle-orm'
 import { getPortalStudentIds } from '../../../utils/portal'
 import { valutaMaterieSpeciali } from '../../../services/booking.service'
+import { toHttpError } from '../../../utils/http-error'
 
 // PUT /api/portal/bookings/[id] — genitore o studente collegato
 export default defineEventHandler(async (event) => {
@@ -89,7 +90,7 @@ export default defineEventHandler(async (event) => {
   try {
     nuovoSupplemento = await valutaMaterieSpeciali(result.data.materie, newStr!)
   } catch (err: any) {
-    throw createError({ statusCode: 400, statusMessage: err.message })
+    throw toHttpError(err)
   }
 
   // Esegue l'aggiornamento in transazione per garantire integrità

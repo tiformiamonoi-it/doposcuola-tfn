@@ -1,5 +1,6 @@
 import { UpdatePackageSchema } from '../../../shared/schemas/package.schema'
 import { getPackageById, updatePackage } from '../../services/package.service'
+import { toHttpError } from '../../utils/http-error'
 
 // PUT /api/packages/:id
 // Aggiorna un pacchetto e ricalcola automaticamente gli stati (macchina a stati).
@@ -43,7 +44,6 @@ export default defineEventHandler(async (event) => {
     const updated = await updatePackage(id, parsed.data)
     return { data: updated }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Errore durante l\'aggiornamento'
-    throw createError({ statusCode: 400, statusMessage: message })
+    throw toHttpError(err)
   }
 })

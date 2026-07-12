@@ -1,5 +1,6 @@
 import { UpdateBookingStatusSchema } from '#shared/schemas/booking.schema'
 import { updateBookingStatus } from '../../../../services/booking.service'
+import { toHttpError } from '../../../../utils/http-error'
 
 // PUT /api/admin/bookings/:id/status
 export default defineEventHandler(async (event) => {
@@ -23,6 +24,6 @@ export default defineEventHandler(async (event) => {
   } catch (err: any) {
     if (err.statusCode) throw err
     const code = err.message?.includes('non trovato') ? 404 : 400
-    throw createError({ statusCode: code, statusMessage: err.message })
+    throw toHttpError(err, code)
   }
 })

@@ -1,4 +1,5 @@
 import { deletePayment } from '../../services/payment.service'
+import { toHttpError } from '../../utils/http-error'
 
 // DELETE /api/payments/:id
 // Elimina un pagamento studente: ripristina il saldo del pacchetto e
@@ -14,6 +15,6 @@ export default defineEventHandler(async (event) => {
     return await deletePayment(id)
   } catch (err: any) {
     const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('fattura') ? 403 : 400
-    throw createError({ statusCode: code, statusMessage: err.message })
+    throw toHttpError(err, code)
   }
 })

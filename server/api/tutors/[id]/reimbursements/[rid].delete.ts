@@ -1,4 +1,5 @@
 import { deleteReimbursement } from '../../../../services/tutor.service'
+import { toHttpError } from '../../../../utils/http-error'
 
 // DELETE /api/tutors/:id/reimbursements/:rid
 // Elimina un rimborso intero; tutte le scritture contabili collegate spariscono via cascade.
@@ -12,6 +13,6 @@ export default defineEventHandler(async (event) => {
   try {
     return await deleteReimbursement(rid)
   } catch (err: any) {
-    throw createError({ statusCode: err.message?.includes('non trovato') ? 404 : 400, statusMessage: err.message })
+    throw toHttpError(err, err.message?.includes('non trovato') ? 404 : 400)
   }
 })

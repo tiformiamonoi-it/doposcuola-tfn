@@ -1,5 +1,6 @@
 import { UpdateNoteSchema } from '#shared/schemas/note.schema'
 import { updateNote } from '../../services/note.service'
+import { toHttpError } from '../../utils/http-error'
 
 export default defineEventHandler(async (event) => {
   const { user: sessionUser } = await requireUserSession(event)
@@ -23,6 +24,6 @@ export default defineEventHandler(async (event) => {
   } catch (err: any) {
     if (err.statusCode) throw err
     const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('permessi') ? 403 : 400
-    throw createError({ statusCode: code, statusMessage: err.message })
+    throw toHttpError(err, code)
   }
 })

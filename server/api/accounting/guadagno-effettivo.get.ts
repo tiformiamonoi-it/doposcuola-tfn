@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { getGuadagnoEffettivoMese } from '../../services/analytics.service'
+import { toHttpError } from '../../utils/http-error'
 
 const QuerySchema = z.object({
   anno: z.coerce.number().int().min(2020).max(2100),
@@ -17,7 +18,7 @@ export default defineEventHandler(async (event) => {
     return await getGuadagnoEffettivoMese(result.data.anno, result.data.mese)
   } catch (err: any) {
     if (err.message?.includes('non è ancora concluso')) {
-      throw createError({ statusCode: 400, statusMessage: err.message })
+      throw toHttpError(err)
     }
     throw err
   }

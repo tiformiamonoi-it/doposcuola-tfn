@@ -4,11 +4,8 @@
 
       <!-- Logo -->
       <div class="text-center mb-8">
-        <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-tfn-500 mb-4">
-          <UIcon name="i-heroicons-book-open" class="w-6 h-6 text-white" />
-        </div>
-        <h1 class="font-heading text-xl font-bold text-slate-900">Ti Formiamo Noi</h1>
-        <p class="text-sm text-slate-500 mt-1">Accedi al tuo account</p>
+        <img src="/logo.svg" alt="tiformiamonoi.it" class="w-56 mx-auto" />
+        <p class="text-sm text-slate-500 mt-2">Accedi al tuo account</p>
       </div>
 
       <!-- Card form -->

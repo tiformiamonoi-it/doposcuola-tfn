@@ -46,6 +46,7 @@
     <!-- ═══ CONTENUTO ═══ -->
     <main class="pt-16 pb-16 md:pt-28 md:pb-0 min-h-screen">
       <div class="max-w-[680px] mx-auto px-4 md:px-6 py-6">
+        <InstallBanner />
         <slot />
       </div>
     </main>

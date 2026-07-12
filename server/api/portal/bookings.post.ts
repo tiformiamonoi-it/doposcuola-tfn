@@ -4,6 +4,7 @@ import { getPortalStudentIds } from '../../utils/portal'
 import { db } from '../../database/client'
 import { students, packages } from '../../database/schema'
 import { eq, and } from 'drizzle-orm'
+import { toHttpError } from '../../utils/http-error'
 
 // POST /api/portal/bookings — genitori e studenti (account studente = solo prenotazioni)
 export default defineEventHandler(async (event) => {
@@ -117,6 +118,6 @@ export default defineEventHandler(async (event) => {
   } catch (err: any) {
     if (err.statusCode) throw err
     const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('Domenica') || err.message?.includes('chiuso') ? 400 : 400
-    throw createError({ statusCode: code, statusMessage: err.message })
+    throw toHttpError(err, code)
   }
 })

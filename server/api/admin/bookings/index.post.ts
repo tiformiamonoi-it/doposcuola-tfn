@@ -2,6 +2,7 @@ import { db } from '../../../database/client'
 import * as tables from '../../../database/schema'
 import { AdminCreateBookingSchema } from '../../../../shared/schemas/booking.schema'
 import { valutaMaterieSpeciali } from '../../../services/booking.service'
+import { toHttpError } from '../../../utils/http-error'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -26,7 +27,7 @@ export default defineEventHandler(async (event) => {
     const dateStr = new Date(data.requestedDate).toISOString().split('T')[0]
     supplemento = await valutaMaterieSpeciali(data.subjects ?? [], dateStr!)
   } catch (err: any) {
-    throw createError({ statusCode: 400, statusMessage: err.message })
+    throw toHttpError(err)
   }
 
   const [newBooking] = await db.insert(tables.bookings).values({

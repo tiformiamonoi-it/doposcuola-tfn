@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 import { db } from '../../database/client'
 import { users, students } from '../../database/schema'
 import { TERMS_VERSION, PRIVACY_STUDENTE_VERSION } from '#shared/legal'
+import { rateLimitExceeded } from '../../utils/rate-limit'
 
 const loginSchema = z.object({
   email:    z.string().email('Email non valida'),
@@ -11,6 +12,12 @@ const loginSchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
+  // Anti brute-force: max 10 tentativi ogni 10 minuti per IP
+  const ip = getRequestIP(event, { xForwardedFor: true }) ?? 'sconosciuto'
+  if (rateLimitExceeded(`login:${ip}`, 10)) {
+    throw createError({ statusCode: 429, message: 'Troppi tentativi: riprova tra qualche minuto' })
+  }
+
   const body = await readValidatedBody(event, loginSchema.parse)
 
   const user = await db.query.users.findFirst({

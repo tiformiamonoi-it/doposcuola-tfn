@@ -17,6 +17,19 @@ export default defineNuxtConfig({
   app: {
     head: {
       viewport: 'width=device-width, initial-scale=1',
+      // Webapp installabile sul telefono (PWA): manifest + icone in public/
+      link: [
+        { rel: 'manifest', href: '/manifest.webmanifest' },
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+        { rel: 'icon', type: 'image/png', sizes: '192x192', href: '/icon-192.png' }, // Safari non legge le favicon SVG
+        { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
+      ],
+      meta: [
+        { name: 'theme-color', content: '#0063a6' },
+        // iOS più vecchi che ignorano il manifest
+        { name: 'apple-mobile-web-app-capable', content: 'yes' },
+        { name: 'apple-mobile-web-app-title', content: 'tiformiamonoi.it' },
+      ],
     }
   },
 

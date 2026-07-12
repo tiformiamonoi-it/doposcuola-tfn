@@ -1,5 +1,6 @@
 import { CreatePaymentSchema } from '../../../shared/schemas/payment.schema'
 import { createPayment } from '../../services/payment.service'
+import { toHttpError } from '../../utils/http-error'
 
 // POST /api/payments
 // Registra un pagamento su un pacchetto esistente.
@@ -22,7 +23,6 @@ export default defineEventHandler(async (event) => {
     setResponseStatus(event, 201)
     return { data: result }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Errore durante la registrazione del pagamento'
-    throw createError({ statusCode: 400, statusMessage: message })
+    throw toHttpError(err)
   }
 })

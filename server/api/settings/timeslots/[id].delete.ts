@@ -1,4 +1,5 @@
 import { deleteTimeSlot } from '../../../services/timeslot.service'
+import { toHttpError } from '../../../utils/http-error'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -8,6 +9,6 @@ export default defineEventHandler(async (event) => {
     if (!deleted) throw createError({ statusCode: 404, statusMessage: 'Slot non trovato' })
     return deleted
   } catch (err: any) {
-    throw createError({ statusCode: 400, statusMessage: err.message })
+    throw toHttpError(err)
   }
 })

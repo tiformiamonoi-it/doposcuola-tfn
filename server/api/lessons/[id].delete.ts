@@ -1,5 +1,6 @@
 import { deleteLesson, getLessonById } from '../../services/lesson.service'
 import { tutorPuoModificareOggi } from '../../utils/tutor-time-window'
+import { toHttpError } from '../../utils/http-error'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -24,9 +25,6 @@ export default defineEventHandler(async (event) => {
     await deleteLesson(id)
     return { success: true }
   } catch (err: any) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: err.message || 'Errore durante l\'eliminazione della lezione'
-    })
+    throw toHttpError(err)
   }
 })

@@ -1,5 +1,6 @@
 import { RechargePackageSchema } from '../../../../shared/schemas/package.schema'
 import { rechargePackage } from '../../../services/package.service'
+import { toHttpError } from '../../../utils/http-error'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -16,6 +17,6 @@ export default defineEventHandler(async (event) => {
     const pkg = await rechargePackage(id, body)
     return { data: pkg }
   } catch (err: any) {
-    throw createError({ statusCode: 400, statusMessage: err.message })
+    throw toHttpError(err)
   }
 })

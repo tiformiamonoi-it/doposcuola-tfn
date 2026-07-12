@@ -1,5 +1,6 @@
 import { PayTutorSchema } from '../../../../shared/schemas/tutor.schema'
 import { payTutor } from '../../../services/tutor.service'
+import { toHttpError } from '../../../utils/http-error'
 
 export default defineEventHandler(async (event) => {
   const id     = getRouterParam(event, 'id')!
@@ -18,6 +19,6 @@ export default defineEventHandler(async (event) => {
     return payTutor(id, parsed.data)
   } catch (err: any) {
     const code = err.message?.includes('identico') ? 409 : err.message?.includes('zero') ? 400 : 400
-    throw createError({ statusCode: code, statusMessage: err.message })
+    throw toHttpError(err, code)
   }
 })

@@ -1,5 +1,6 @@
 import { CreatePackageSchema } from '../../../shared/schemas/package.schema'
 import { createPackage } from '../../services/package.service'
+import { toHttpError } from '../../utils/http-error'
 
 // POST /api/packages
 // Crea un nuovo pacchetto per uno studente.
@@ -30,6 +31,6 @@ export default defineEventHandler(async (event) => {
   } catch (err: any) {
     if (err.statusCode) throw err
     const code = err.message?.includes('non trovato') ? 404 : 400
-    throw createError({ statusCode: code, statusMessage: err.message })
+    throw toHttpError(err, code)
   }
 })

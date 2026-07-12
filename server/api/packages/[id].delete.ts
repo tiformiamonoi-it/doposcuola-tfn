@@ -1,4 +1,5 @@
 import { deletePackage } from '../../services/package.service'
+import { toHttpError } from '../../utils/http-error'
 
 // DELETE /api/packages/:id
 // Consentito solo se il pacchetto non ha pagamenti né lezioni collegate.
@@ -15,6 +16,6 @@ export default defineEventHandler(async (event) => {
     return await deletePackage(id)
   } catch (err: any) {
     const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('collegate') ? 409 : 400
-    throw createError({ statusCode: code, statusMessage: err.message })
+    throw toHttpError(err, code)
   }
 })

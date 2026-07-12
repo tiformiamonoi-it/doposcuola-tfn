@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { CreatePortalAccessSchema } from '#shared/schemas/portal-user.schema'
 import { createPortalAccount } from '../../../../services/portal-user.service'
+import { toHttpError } from '../../../../utils/http-error'
 
 // POST /api/admin/students/:id/portal-access
 // Con force=true: collega lo studente a un account GENITORE esistente (senza reset password)
@@ -57,6 +58,6 @@ export default defineEventHandler(async (event) => {
   } catch (err: any) {
     if (err.statusCode) throw err
     const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('staff') ? 409 : 400
-    throw createError({ statusCode: code, statusMessage: err.message })
+    throw toHttpError(err, code)
   }
 })

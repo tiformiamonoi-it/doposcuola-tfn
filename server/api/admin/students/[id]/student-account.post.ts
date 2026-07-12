@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { createStudentAccount } from '../../../../services/portal-user.service'
+import { toHttpError } from '../../../../utils/http-error'
 
 const CreateSchema = z.object({
   email:     z.string().email('Email non valida'),
@@ -37,6 +38,6 @@ export default defineEventHandler(async (event) => {
     }
   } catch (err: any) {
     if (err.statusCode) throw err
-    throw createError({ statusCode: err.message?.includes('già usata') ? 409 : 400, statusMessage: err.message })
+    throw toHttpError(err, err.message?.includes('già usata') ? 409 : 400)
   }
 })

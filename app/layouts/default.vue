@@ -10,7 +10,7 @@
 
       <!-- Logo + Toggle -->
       <div class="h-14 flex items-center border-b border-slate-200 px-3 flex-shrink-0 gap-2">
-        <UIcon name="i-heroicons-book-open" class="w-5 h-5 text-tfn-500 flex-shrink-0" />
+        <img src="/favicon.svg" alt="" class="w-5 h-5 flex-shrink-0" />
         <span
           v-if="!collapsed"
           class="font-heading font-semibold text-slate-900 text-sm truncate flex-1"

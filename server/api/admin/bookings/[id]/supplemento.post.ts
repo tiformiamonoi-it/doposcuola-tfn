@@ -1,4 +1,5 @@
 import { applicaSupplementoAlPacchetto } from '../../../../services/booking.service'
+import { toHttpError } from '../../../../utils/http-error'
 
 // POST /api/admin/bookings/:id/supplemento — solo ADMIN/SUPER_TUTOR (policy /api/admin).
 // Applica il supplemento della lezione speciale fuori data (+€10) al pacchetto dello
@@ -15,6 +16,6 @@ export default defineEventHandler(async (event) => {
   try {
     return await applicaSupplementoAlPacchetto(id)
   } catch (err: any) {
-    throw createError({ statusCode: 400, statusMessage: err.message ?? 'Impossibile applicare il supplemento' })
+    throw toHttpError(err)
   }
 })

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { resetPortalPassword, setStudentAccountActive } from '../../../../services/portal-user.service'
+import { toHttpError } from '../../../../utils/http-error'
 
 const PutSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('reset-password'), userId: z.string().min(1) }),
@@ -27,6 +28,6 @@ export default defineEventHandler(async (event) => {
     return await setStudentAccountActive(result.data.userId, result.data.active)
   } catch (err: any) {
     if (err.statusCode) throw err
-    throw createError({ statusCode: err.message?.includes('non trovato') ? 404 : 400, statusMessage: err.message })
+    throw toHttpError(err, err.message?.includes('non trovato') ? 404 : 400)
   }
 })

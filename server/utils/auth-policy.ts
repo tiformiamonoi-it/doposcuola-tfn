@@ -26,6 +26,7 @@ export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: 
   { prefix: '/api/auth/change-password',    roles: [...STAFF, ...FAMIGLIA] },
   { prefix: '/api/auth/accept-terms',       roles: FAMIGLIA },
   { prefix: '/api/auth/tutorial-visto',     roles: [...STAFF, ...FAMIGLIA] },
+  { prefix: '/api/auth/logout',             roles: [...STAFF, ...FAMIGLIA] },
   { prefix: '/api/accounting',              roles: ADMIN_ONLY },
   // Portale: GENITORE/STUDENTE + ADMIN/SUPER in preview (gli handler restituiscono [] agli altri)
   { prefix: '/api/portal',                  roles: [...FAMIGLIA, 'ADMIN', 'SUPER_TUTOR'] },
@@ -51,10 +52,15 @@ export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: 
 
 const DEFAULT_ROLES: Role[] = STAFF
 
+// Endpoint interni consentiti senza login, per prefisso ESPLICITO (non tutto /api/_:
+// una futura route /api/_qualcosa non deve nascere pubblica per convenzione di nome).
+// - /api/_auth/     → sessione nuxt-auth-utils
+// - /api/_nuxt_icon → icone @nuxt/icon (servono anche sulla pagina /login)
+// - /api/_cron/     → job schedulati, self-protetti con CRON_SECRET
+const INTERNAL_PUBLIC_PREFIXES = ['/api/_auth/', '/api/_nuxt_icon', '/api/_cron/']
+
 export function isPublicApi(path: string): boolean {
-  // Endpoint interni di Nuxt/Nitro (icone UI, sessione, ecc.) iniziano con /api/_
-  // Devono restare accessibili anche senza login (es. icone nella pagina /login).
-  if (path.startsWith('/api/_')) return true
+  if (INTERNAL_PUBLIC_PREFIXES.some((p) => path.startsWith(p))) return true
   return PUBLIC_API_PREFIXES.some((p) => path.startsWith(p))
 }
 

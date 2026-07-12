@@ -1,6 +1,7 @@
 import { UpdateLessonSchema } from '../../../shared/schemas/lesson.schema'
 import { updateLesson, getLessonById, verificaPoolOggiPerTutor } from '../../services/lesson.service'
 import { tutorPuoModificareOggi } from '../../utils/tutor-time-window'
+import { toHttpError } from '../../utils/http-error'
 
 // PUT /api/lessons/:id
 // Aggiorna gli studenti/note/forzaGruppo/mezzaLezione di una lezione esistente.
@@ -46,7 +47,6 @@ export default defineEventHandler(async (event) => {
     const lesson = await updateLesson(id, parsed.data)
     return { data: lesson }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Errore durante l\'aggiornamento della lezione'
-    throw createError({ statusCode: 400, statusMessage: message })
+    throw toHttpError(err)
   }
 })

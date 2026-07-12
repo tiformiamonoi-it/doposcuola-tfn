@@ -1,5 +1,6 @@
 import { UpdatePaymentSchema } from '../../../shared/schemas/payment.schema'
 import { updatePayment } from '../../services/payment.service'
+import { toHttpError } from '../../utils/http-error'
 
 // PUT /api/payments/:id
 // Modifica un pagamento esistente; il movimento contabile collegato viene aggiornato di conseguenza.
@@ -26,7 +27,6 @@ export default defineEventHandler(async (event) => {
     const payment = await updatePayment(id, parsed.data)
     return { data: payment }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Errore durante la modifica del pagamento'
-    throw createError({ statusCode: 400, statusMessage: message })
+    throw toHttpError(err)
   }
 })

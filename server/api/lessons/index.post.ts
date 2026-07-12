@@ -1,6 +1,7 @@
 import { CreateLessonSchema } from '../../../shared/schemas/lesson.schema'
 import { createLesson, verificaPoolOggiPerTutor } from '../../services/lesson.service'
 import { tutorPuoModificareOggi } from '../../utils/tutor-time-window'
+import { toHttpError } from '../../utils/http-error'
 
 // POST /api/lessons
 // Crea una nuova lezione con scalamento atomico delle ore dai pacchetti.
@@ -45,7 +46,6 @@ export default defineEventHandler(async (event) => {
     setResponseStatus(event, 201)
     return { data: lesson }
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Errore durante la creazione della lezione'
-    throw createError({ statusCode: 400, statusMessage: message })
+    throw toHttpError(err)
   }
 })
