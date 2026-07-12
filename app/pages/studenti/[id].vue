@@ -245,7 +245,7 @@
                       <tr class="bg-white text-xs text-slate-500 uppercase border-b border-slate-100">
                         <th class="py-2.5 px-4 font-semibold">Data</th>
                         <th class="py-2.5 px-4 font-semibold">Tutor</th>
-                        <th class="py-2.5 px-4 font-semibold">Materia</th>
+                        <th class="py-2.5 px-4 font-semibold">Tipo</th>
                         <th class="py-2.5 px-4 font-semibold text-right">Ore</th>
                       </tr>
                     </thead>
@@ -253,7 +253,7 @@
                       <tr v-for="l in lezioniFiltrate" :key="l.lessonId" class="border-b border-slate-50 text-sm hover:bg-slate-50">
                         <td class="py-2.5 px-4 font-medium">{{ formatData(l.data) }}</td>
                         <td class="py-2.5 px-4">{{ l.tutorFirstName }} {{ l.tutorLastName }}</td>
-                        <td class="py-2.5 px-4 text-slate-500">{{ l.materia }} <UBadge size="xs" variant="subtle" color="neutral" class="ml-1">{{ l.tipo }}</UBadge></td>
+                        <td class="py-2.5 px-4 text-slate-500"><UBadge size="xs" variant="subtle" color="neutral">{{ l.tipo }}</UBadge></td>
                         <td class="py-2.5 px-4 text-right font-medium">{{ parseFloat(l.oreScalate) }}</td>
                       </tr>
                     </tbody>
@@ -494,7 +494,7 @@
             color="primary"
             :loading="creandoAccesso"
             :disabled="!datiCreaAccesso.email || !datiCreaAccesso.firstName || !datiCreaAccesso.lastName"
-            @click="creaAccessoPortale"
+            @click="creaAccessoPortale()"
           >
             Crea account
           </UButton>
@@ -657,7 +657,16 @@ const tabItems = computed(() => [
 
 const filtroLezioni = reactive({ dataInizio: '', dataFine: '' })
 const { data: dataLezioni, pending: pendingLezioni } = useLazyFetch('/api/lessons', { query: { studentId: id, limit: 1000 } })
-const lezioni = computed(() => dataLezioni.value?.data ?? [])
+// L'API restituisce tutor e ore scalate in forma annidata (l.tutor, l.lessonStudents):
+// qui li appiattiamo nei campi che la pagina usa (tutorFirstName, oreScalate, ...)
+const lezioni = computed(() => ((dataLezioni.value?.data ?? []) as any[]).map((l: any) => ({
+  lessonId:       l.id,
+  data:           l.data,
+  tipo:           l.tipo,
+  tutorFirstName: l.tutor?.firstName ?? '',
+  tutorLastName:  l.tutor?.lastName ?? '',
+  oreScalate:     l.lessonStudents?.find((ls: any) => ls.studentId === id)?.oreScalate ?? '0',
+})))
 const lezioniFiltrate = computed(() => {
   let list = lezioni.value as any[]
   if (filtroLezioni.dataInizio) list = list.filter(l => new Date(l.data) >= new Date(filtroLezioni.dataInizio))
@@ -682,8 +691,8 @@ const lezioniSvolteMeseCorrente = computed(() => {
 
 function esportaCsvLezioni() {
   const righe = [
-    ['Data', 'Tutor', 'Materia', 'Tipo', 'Ore scalate'],
-    ...lezioniFiltrate.value.map((l: any) => [formatData(l.data), `${l.tutorLastName} ${l.tutorFirstName}`, l.materia || '', l.tipo || '', parseFloat(l.oreScalate)]),
+    ['Data', 'Tutor', 'Tipo', 'Ore scalate'],
+    ...lezioniFiltrate.value.map((l: any) => [formatData(l.data), `${l.tutorLastName} ${l.tutorFirstName}`, l.tipo || '', parseFloat(l.oreScalate)]),
   ]
   const csv = righe.map(r => r.join(';')).join('\n')
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })

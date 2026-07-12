@@ -19,26 +19,24 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const force = body.force === true
 
+  let input: { studentId: string; email: string; firstName: string; lastName: string }
   if (force) {
     // Solo email necessaria per trovare l'account esistente
     const emailParse = z.object({ email: z.string().email() }).safeParse(body)
     if (!emailParse.success) {
       throw createError({ statusCode: 422, statusMessage: 'Email non valida' })
     }
-    const outcome = await createPortalAccount(
-      { studentId, email: emailParse.data.email, firstName: '', lastName: '' },
-      true,
-    )
-    return outcome
-  }
-
-  const result = CreatePortalAccessSchema.safeParse({ ...body, studentId })
-  if (!result.success) {
-    throw createError({ statusCode: 422, statusMessage: 'Dati non validi', data: result.error.format() })
+    input = { studentId, email: emailParse.data.email, firstName: '', lastName: '' }
+  } else {
+    const result = CreatePortalAccessSchema.safeParse({ ...body, studentId })
+    if (!result.success) {
+      throw createError({ statusCode: 422, statusMessage: 'Dati non validi', data: result.error.format() })
+    }
+    input = result.data
   }
 
   try {
-    const outcome = await createPortalAccount(result.data, false)
+    const outcome = await createPortalAccount(input, force)
 
     // Caso: email già registrata come GENITORE → richiede conferma dal frontend
     if ('requiresConfirmation' in outcome && outcome.requiresConfirmation) {
