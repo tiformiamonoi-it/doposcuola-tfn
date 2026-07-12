@@ -21,7 +21,7 @@
         <UButton to="/studenti" variant="ghost" icon="i-heroicons-arrow-left" size="sm">Torna alla lista</UButton>
         <div class="flex items-center gap-2">
           <UButton :to="`/stampe/studente-${id}`" icon="i-heroicons-printer" variant="ghost" size="sm">Stampa lezioni</UButton>
-          <UButton icon="i-heroicons-pencil-square" variant="ghost" size="sm" @click="apriModalModifica">Modifica</UButton>
+          <UButton v-if="isAdmin" icon="i-heroicons-pencil-square" variant="ghost" size="sm" @click="apriModalModifica">Modifica</UButton>
           <UButton v-if="studente.active" icon="i-heroicons-user-minus" variant="ghost" color="error" size="sm" :loading="disattivando" @click="disattivaStudente">Disattiva</UButton>
         </div>
       </div>
@@ -620,13 +620,15 @@ const route = useRoute()
 const toast = useToast()
 const id = route.params.id as string
 
-const tabItems = [
+const tabItems = computed(() => [
   { label: 'Panoramica', slot: 'panoramica' },
   { label: 'Pacchetti', slot: 'pacchetti' },
   { label: 'Lezioni', slot: 'lezioni' },
   { label: 'Prenotazioni', slot: 'prenotazioni' },
-  { label: 'Famiglia', slot: 'famiglia' }
-]
+  // Dati e credenziali della famiglia: riservati alla segreteria
+  // (il server non manda comunque i recapiti dei genitori ai TUTOR)
+  ...(isAdmin.value ? [{ label: 'Famiglia', slot: 'famiglia' }] : []),
+])
 
 const filtroLezioni = reactive({ dataInizio: '', dataFine: '' })
 const { data: dataLezioni, pending: pendingLezioni } = useLazyFetch('/api/lessons', { query: { studentId: id, limit: 1000 } })

@@ -8,6 +8,7 @@
         <p class="text-sm text-slate-500 mt-0.5">{{ meta?.total ?? 0 }} studenti totali</p>
       </div>
       <UButton
+        v-if="isAdmin"
         icon="i-heroicons-plus"
         @click="wizardAperto = true"
       >
@@ -322,4 +323,8 @@ function onSearch() {
 
 // ─── Wizard crea ───
 const wizardAperto = ref(false)
+
+// Creazione studenti riservata alla segreteria (il server blocca comunque i TUTOR)
+const { user: sessionUser } = useUserSession()
+const isAdmin = computed(() => ['ADMIN', 'SUPER_TUTOR'].includes(sessionUser.value?.role ?? ''))
 </script>
