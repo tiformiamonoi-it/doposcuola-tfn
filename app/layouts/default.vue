@@ -129,6 +129,12 @@
       <!-- "Boxatura" su desktop: tetto di larghezza, con respiro a destra -->
       <div class="max-w-[1500px]">
         <slot />
+
+        <p class="text-center text-[11px] text-slate-300 mt-10">
+          <NuxtLink to="/privacy" class="hover:underline">Privacy</NuxtLink> ·
+          <NuxtLink to="/termini" class="hover:underline">Termini</NuxtLink> ·
+          <NuxtLink to="/cookie" class="hover:underline">Cookie</NuxtLink>
+        </p>
       </div>
     </main>
 

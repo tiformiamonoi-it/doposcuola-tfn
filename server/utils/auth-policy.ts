@@ -35,7 +35,9 @@ export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: 
   { prefix: '/api/tutors/today-pool',       roles: STAFF },
   { prefix: '/api/tutor-payments',          roles: ADMIN_SUPER },
   { prefix: '/api/notes',                   roles: STAFF },
-  { prefix: '/api/students',                roles: STAFF },
+  // Lettura studenti aperta allo STAFF (i dati dei genitori vengono rimossi per i TUTOR
+  // nei handler GET); scritture (crea/modifica/disattiva/anonimizza) solo ADMIN/SUPER.
+  { prefix: '/api/students',                roles: STAFF, mutationRoles: ADMIN_SUPER },
   // Lettura pacchetti aperta allo STAFF (serve al tutor per scalare le ore in una lezione),
   // ma i campi economici vengono rimossi per i TUTOR nei handler GET; scritture solo ADMIN/SUPER.
   { prefix: '/api/packages',                roles: STAFF, mutationRoles: ADMIN_SUPER },

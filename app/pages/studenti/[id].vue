@@ -21,10 +21,35 @@
         <UButton to="/studenti" variant="ghost" icon="i-heroicons-arrow-left" size="sm">Torna alla lista</UButton>
         <div class="flex items-center gap-2">
           <UButton :to="`/stampe/studente-${id}`" icon="i-heroicons-printer" variant="ghost" size="sm">Stampa lezioni</UButton>
+          <UButton v-if="isAdmin" :to="`/api/students/${id}/export`" external target="_blank" icon="i-heroicons-arrow-down-tray" variant="ghost" size="sm">Esporta dati</UButton>
           <UButton v-if="isAdmin" icon="i-heroicons-pencil-square" variant="ghost" size="sm" @click="apriModalModifica">Modifica</UButton>
           <UButton v-if="studente.active" icon="i-heroicons-user-minus" variant="ghost" color="error" size="sm" :loading="disattivando" @click="disattivaStudente">Disattiva</UButton>
+          <UButton v-if="isSoloAdmin" icon="i-heroicons-shield-exclamation" variant="ghost" color="error" size="sm" @click="anonimizzaAperto = true">Anonimizza</UButton>
         </div>
       </div>
+
+      <!-- Anonimizzazione GDPR (art. 17): conferma esplicita, operazione irreversibile -->
+      <UModal v-model:open="anonimizzaAperto" title="Anonimizza studente (GDPR)">
+        <template #body>
+          <div class="space-y-3 text-sm text-slate-600">
+            <p>Da usare per le richieste di <strong>cancellazione dati</strong> (art. 17 GDPR). L'operazione è <strong>irreversibile</strong>:</p>
+            <ul class="list-disc pl-5 space-y-1">
+              <li>nome, contatti, scuola e tutti i dati del genitore vengono cancellati per sempre;</li>
+              <li>le note didattiche vengono eliminate;</li>
+              <li>le prenotazioni perdono nome, telefono e note;</li>
+              <li>gli account portale collegati vengono disattivati (quello del genitore solo se non ha altri figli);</li>
+              <li>pacchetti, pagamenti e contabilità restano per obbligo fiscale, ma senza dati identificativi.</li>
+            </ul>
+            <UCheckbox v-model="anonimizzaConferma" label="Ho capito: l'operazione non si può annullare" />
+          </div>
+        </template>
+        <template #footer>
+          <div class="flex justify-end gap-3">
+            <UButton variant="ghost" @click="anonimizzaAperto = false">Annulla</UButton>
+            <UButton color="error" :disabled="!anonimizzaConferma" :loading="anonimizzando" @click="anonimizzaStudente">Anonimizza definitivamente</UButton>
+          </div>
+        </template>
+      </UModal>
 
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <!-- SIDEBAR -->
@@ -732,6 +757,27 @@ async function disattivaStudente() {
       }
     }
   )
+}
+
+// ─── Anonimizzazione GDPR (art. 17) — solo ADMIN ───
+const isSoloAdmin = computed(() => sessionUser.value?.role === 'ADMIN')
+const anonimizzaAperto = ref(false)
+const anonimizzaConferma = ref(false)
+const anonimizzando = ref(false)
+
+async function anonimizzaStudente() {
+  anonimizzando.value = true
+  try {
+    await $fetch(`/api/students/${id}/anonymize`, { method: 'POST' })
+    toast.add({ title: 'Studente anonimizzato', description: 'Dati personali rimossi; contabilità conservata.', color: 'success', icon: 'i-heroicons-check-circle' })
+    anonimizzaAperto.value = false
+    anonimizzaConferma.value = false
+    refresh()
+  } catch (err: any) {
+    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile anonimizzare', color: 'error' })
+  } finally {
+    anonimizzando.value = false
+  }
 }
 
 // ─── Modal modifica ───

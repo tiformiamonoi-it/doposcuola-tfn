@@ -56,6 +56,12 @@
       <p class="text-center text-xs text-slate-400 mt-6">
         Problemi di accesso? Contatta l'amministratore.
       </p>
+
+      <p class="text-center text-xs text-slate-300 mt-2">
+        <NuxtLink to="/privacy" class="hover:underline">Privacy</NuxtLink> ·
+        <NuxtLink to="/termini" class="hover:underline">Termini</NuxtLink> ·
+        <NuxtLink to="/cookie" class="hover:underline">Cookie</NuxtLink>
+      </p>
     </div>
 
     <!-- Recupero password -->

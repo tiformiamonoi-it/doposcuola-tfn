@@ -32,7 +32,9 @@ export default defineEventHandler(async (event) => {
 
   const { nomeStudente, classeScuola, materie, contatto, note } = parsed.data
 
-  const messageStr = `Classe/Scuola: ${classeScuola || 'N/D'}\nMaterie: ${materie}\nNote: ${note || 'N/D'}`
+  // La presa visione dell'informativa è obbligatoria (validata dallo schema);
+  // la annotiamo nel messaggio come traccia del consenso.
+  const messageStr = `Classe/Scuola: ${classeScuola || 'N/D'}\nMaterie: ${materie}\nNote: ${note || 'N/D'}\nInformativa privacy: presa visione confermata il ${new Date().toISOString()}`
 
   // Salva a DB
   const [newRequest] = await db.insert(contactRequests).values({

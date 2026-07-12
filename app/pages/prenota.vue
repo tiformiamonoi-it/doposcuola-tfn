@@ -65,6 +65,19 @@
             />
           </UFormField>
 
+          <!-- Presa visione informativa privacy (obbligatoria: il form raccoglie dati di minori) -->
+          <div>
+            <UCheckbox v-model="form.privacyAccettata">
+              <template #label>
+                <span class="text-xs text-slate-600">
+                  Ho letto l'<NuxtLink to="/privacy" target="_blank" class="text-tfn-600 hover:underline">informativa privacy</NuxtLink>
+                  e acconsento al trattamento dei dati per essere ricontattato
+                </span>
+              </template>
+            </UCheckbox>
+            <p v-if="errors.privacyAccettata" class="text-xs text-red-500 mt-1">{{ errors.privacyAccettata }}</p>
+          </div>
+
           <!-- Honeypot anti-bot: invisibile agli umani, i bot lo compilano -->
           <input
             v-model="form.sitoWeb"
@@ -93,6 +106,12 @@
         Hai già un account?
         <NuxtLink to="/login" class="text-tfn-600 hover:underline">Accedi al portale</NuxtLink>
       </p>
+
+      <p class="text-center text-xs text-slate-300">
+        <NuxtLink to="/privacy" class="hover:underline">Privacy</NuxtLink> ·
+        <NuxtLink to="/termini" class="hover:underline">Termini</NuxtLink> ·
+        <NuxtLink to="/cookie" class="hover:underline">Cookie</NuxtLink>
+      </p>
     </div>
   </div>
 </template>
@@ -109,6 +128,7 @@ const form = reactive({
   materie: '',
   contatto: '',
   note: '',
+  privacyAccettata: false,
   sitoWeb: '', // honeypot: deve restare vuoto
 })
 

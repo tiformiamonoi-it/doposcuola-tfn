@@ -6,15 +6,15 @@
 // Quando un testo cambia in modo sostanziale, aggiornare la relativa VERSION:
 // gli utenti interessati dovranno ri-accettare al login successivo.
 
-export const TERMS_VERSION = '2026-07-v2'
-export const PRIVACY_STUDENTE_VERSION = 'studente-2026-07-v1'
+export const TERMS_VERSION = '2026-07-v3'
+export const PRIVACY_STUDENTE_VERSION = 'studente-2026-07-v2'
 
 export const TERMINI_TESTO = `TERMINI E CONDIZIONI DEL SERVIZIO
 Ti Formiamo Noi — Doposcuola e ripetizioni
 Ultimo aggiornamento: luglio 2026
 
 1. CHI SIAMO
-Il servizio è erogato da [DA COMPLETARE: denominazione, P.IVA/C.F., indirizzo della sede, email e telefono del titolare] (di seguito "il Centro").
+Il servizio è erogato da tiformiamonoi.it di Alessandro Barone, P.IVA IT02856610817, con sede in Via Anchise 10 — 91100 Trapani (TP), email info@tiformiamonoi.it [DA COMPLETARE: telefono] (di seguito "il Centro").
 
 2. OGGETTO DEL SERVIZIO
 Il Centro offre attività di doposcuola, supporto allo studio e ripetizioni per studenti di scuole elementari, medie, superiori e università. Il portale online consente alle famiglie e agli studenti autorizzati di consultare lo stato dei pacchetti acquistati, prenotare le lezioni e ricevere comunicazioni di servizio.
@@ -45,7 +45,7 @@ Il Centro osserva i giorni di chiusura comunicati tramite il portale. Le prenota
 7.3 Eventuali esigenze particolari dello studente (didattiche o di salute rilevanti per l'attività) devono essere comunicate dalla famiglia al momento dell'iscrizione.
 
 8. DIRITTO DI RECESSO
-Per i contratti conclusi a distanza o fuori dai locali commerciali, il consumatore ha diritto di recedere entro 14 giorni ai sensi degli artt. 52 e ss. del Codice del Consumo (D.Lgs 206/2005), salvo che il servizio sia già stato interamente eseguito con il suo accordo. [DA COMPLETARE: modalità di esercizio del recesso]
+Per i contratti conclusi a distanza o fuori dai locali commerciali, il consumatore ha diritto di recedere entro 14 giorni ai sensi degli artt. 52 e ss. del Codice del Consumo (D.Lgs 206/2005), salvo che il servizio sia già stato interamente eseguito con il suo accordo. Il recesso si esercita inviando una comunicazione scritta a info@tiformiamonoi.it o consegnandola in segreteria entro il termine indicato.
 
 9. COMUNICAZIONI
 Le comunicazioni di servizio (credenziali, avvisi sui pacchetti, variazioni) sono inviate all'indirizzo email del genitore indicato all'iscrizione. È onere della famiglia mantenere aggiornati i propri recapiti.
@@ -62,7 +62,7 @@ Ti Formiamo Noi — Doposcuola e ripetizioni
 Ultimo aggiornamento: luglio 2026
 
 1. TITOLARE DEL TRATTAMENTO
-[DA COMPLETARE: denominazione, indirizzo, email di contatto del titolare del trattamento]
+tiformiamonoi.it di Alessandro Barone, P.IVA IT02856610817, Via Anchise 10 — 91100 Trapani (TP). Email di contatto: info@tiformiamonoi.it.
 
 2. DATI TRATTATI
 a) Dati anagrafici e di contatto del genitore/esercente la responsabilità genitoriale (nome, cognome, email, telefono, indirizzo, codice fiscale/P.IVA per la fatturazione);
@@ -84,17 +84,20 @@ Il conferimento dei dati di cui alle lettere a)-c) è necessario: senza di essi 
 Per gli studenti di età inferiore a 14 anni, ai sensi dell'art. 2-quinquies del D.Lgs 196/2003 (come modificato dal D.Lgs 101/2018), il consenso relativo ai servizi online è prestato o autorizzato da chi esercita la responsabilità genitoriale. L'eventuale account personale dello studente è attivato solo previa autorizzazione del genitore, registrata dal Centro.
 
 5. DESTINATARI
-I dati non sono diffusi. Possono essere comunicati a: consulenti fiscali e contabili; fornitori di servizi tecnici che agiscono come responsabili del trattamento ex art. 28 GDPR (hosting del gestionale, servizio di invio email transazionali); autorità quando richiesto dalla legge.
-[DA COMPLETARE: elenco aggiornato dei responsabili del trattamento — es. fornitore hosting, provider email]
+I dati non sono diffusi. Possono essere comunicati a: consulenti fiscali e contabili; fornitori di servizi tecnici che agiscono come responsabili del trattamento ex art. 28 GDPR; autorità quando richiesto dalla legge.
+Responsabili del trattamento attualmente utilizzati:
+- Supabase, Inc. — hosting del database del gestionale;
+- Vercel, Inc. — hosting dell'applicazione web;
+- Brevo (Sendinblue SAS, Francia — UE) — invio delle email di servizio (credenziali, avvisi sui pacchetti).
 
 6. TRASFERIMENTI EXTRA-UE
 I fornitori tecnici sono selezionati preferibilmente nell'UE; eventuali trasferimenti extra-UE avvengono solo con le garanzie previste dagli artt. 44 e ss. GDPR (decisioni di adeguatezza o clausole contrattuali standard).
 
 7. CONSERVAZIONE
-I dati contrattuali e contabili sono conservati per 10 anni dalla cessazione del rapporto (art. 2220 c.c.); i dati del portale per la durata del rapporto e fino a [DA COMPLETARE] mesi dalla sua cessazione; le note didattiche per la durata del percorso dello studente.
+I dati contrattuali e contabili sono conservati per 10 anni dalla cessazione del rapporto (art. 2220 c.c.); i dati del portale per la durata del rapporto e fino a 12 mesi dalla sua cessazione; le note didattiche per la durata del percorso dello studente.
 
 8. DIRITTI DELL'INTERESSATO
-Ai sensi degli artt. 15-22 GDPR è possibile esercitare i diritti di accesso, rettifica, cancellazione, limitazione, portabilità e opposizione scrivendo a [DA COMPLETARE: email del titolare]. È inoltre possibile proporre reclamo al Garante per la Protezione dei Dati Personali (www.garanteprivacy.it).
+Ai sensi degli artt. 15-22 GDPR è possibile esercitare i diritti di accesso, rettifica, cancellazione, limitazione, portabilità e opposizione scrivendo a info@tiformiamonoi.it. È inoltre possibile proporre reclamo al Garante per la Protezione dei Dati Personali (www.garanteprivacy.it).
 
 9. PROCESSI DECISIONALI AUTOMATIZZATI
 Non sono presenti processi decisionali automatizzati né attività di profilazione.`
@@ -103,7 +106,7 @@ export const PRIVACY_STUDENTE_TESTO = `LA TUA PRIVACY — SPIEGATA IN MODO SEMPL
 Informativa per gli studenti che usano il portale (art. 13 GDPR e art. 2-quinquies D.Lgs 196/2003)
 
 CHI USA I TUOI DATI
-Il centro Ti Formiamo Noi [DA COMPLETARE: dati del titolare]. Se hai domande sulla privacy puoi chiedere in segreteria o scrivere a [DA COMPLETARE: email].
+Il centro tiformiamonoi.it di Alessandro Barone, Via Anchise 10 — Trapani. Se hai domande sulla privacy puoi chiedere in segreteria o scrivere a info@tiformiamonoi.it.
 
 QUALI DATI USIAMO
 - Il tuo nome, cognome, email e la scuola che frequenti
@@ -125,3 +128,25 @@ I TUOI DIRITTI
 Puoi sempre chiedere di vedere, correggere o cancellare i tuoi dati: basta dirlo in segreteria o farlo chiedere ai tuoi genitori. Se qualcosa non ti torna, si può segnalare al Garante Privacy (www.garanteprivacy.it).
 
 Premendo "Accetto" confermi di aver letto e capito questa informativa.`
+
+export const COOKIE_TESTO = `COOKIE POLICY
+tiformiamonoi.it — Gestionale e portale famiglie
+Ultimo aggiornamento: luglio 2026
+
+Questo sito utilizza esclusivamente cookie tecnici di prima parte, necessari al funzionamento del servizio o a ricordare le tue preferenze. Non utilizziamo cookie di profilazione, cookie pubblicitari, cookie di terze parti né strumenti di analisi del traffico: per questo non è necessario alcun banner di consenso (Linee guida Garante Privacy, 10 giugno 2021).
+
+COOKIE UTILIZZATI
+- Cookie di sessione ("nuxt-session"): mantiene l'accesso dopo il login. Il contenuto è cifrato e non è leggibile dal browser. Necessario: senza questo cookie non è possibile accedere.
+- "tfn-color-mode-v2": ricorda il tema chiaro/scuro scelto. Preferenza.
+- "sidebar-collapsed": ricorda se il menu laterale è aperto o chiuso (area staff). Preferenza.
+- "contabilita-sezioni": ricorda quali sezioni della pagina Contabilità sono aperte (area staff). Preferenza.
+
+CARATTERI TIPOGRAFICI
+I caratteri (font) delle pagine sono ospitati sul nostro stesso sito: la visita non comporta alcuna connessione a servizi esterni (es. Google Fonts).
+
+COME GESTIRE I COOKIE
+Puoi cancellare o bloccare i cookie in qualsiasi momento dalle impostazioni del tuo browser. Bloccando il cookie di sessione non sarà possibile accedere al portale.
+
+TITOLARE
+tiformiamonoi.it di Alessandro Barone — info@tiformiamonoi.it.
+Per i dettagli sul trattamento dei dati personali consulta l'Informativa privacy.`

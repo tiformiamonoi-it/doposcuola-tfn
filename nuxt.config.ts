@@ -56,6 +56,9 @@ export default defineNuxtConfig({
     },
     display: 'swap',
     preload: true,
+    // GDPR: i font vengono scaricati al build e serviti dal nostro dominio —
+    // il browser del visitatore non contatta mai i server Google.
+    download: true,
   },
 
   css: ['~/assets/css/main.css'], // ~ risolve a app/ con compatibilityVersion: 4
