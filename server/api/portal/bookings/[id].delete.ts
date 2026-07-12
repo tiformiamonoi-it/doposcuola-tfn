@@ -2,6 +2,7 @@ import { db } from '../../../database/client'
 import { bookings, bookingSubjects } from '../../../database/schema'
 import { eq } from 'drizzle-orm'
 import { getPortalStudentIds } from '../../../utils/portal'
+import { oggiRomeStr } from '../../../utils/tutor-time-window'
 
 // DELETE /api/portal/bookings/[id] — genitore o studente collegato
 export default defineEventHandler(async (event) => {
@@ -31,7 +32,8 @@ export default defineEventHandler(async (event) => {
 
   const requestedDate = new Date(booking.requestedDate)
   const now = new Date()
-  const todayStr = now.toLocaleDateString('sv').split('T')[0] // 'YYYY-MM-DD'
+  // Giorno civile italiano (il fuso del server su Vercel è UTC)
+  const todayStr = oggiRomeStr()
   const requestedStr = requestedDate.toISOString().split('T')[0]
 
   if (requestedStr === todayStr) {

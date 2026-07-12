@@ -1,4 +1,4 @@
-import { UpdateInvoiceStatusSchema } from '../../../../shared/schemas/payment.schema'
+import { UpdateInvoiceStatusSchema } from '#shared/schemas/payment.schema'
 import { toggleInvoiceStatus } from '../../../services/payment.service'
 
 // PUT /api/payments/:id/invoice

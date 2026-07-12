@@ -1,7 +1,7 @@
 import { db } from '../database/client'
 import { accountingEntries, packages, packageRecharges, payments, students, lessonStudents } from '../database/schema'
 import { and, count, desc, eq, getTableColumns } from 'drizzle-orm'
-import type { CreatePackageInput, PackageQuery, RechargePackageInput, UpdatePackageInput } from '../../shared/schemas/package.schema'
+import type { CreatePackageInput, PackageQuery, RechargePackageInput, UpdatePackageInput } from '#shared/schemas/package.schema'
 
 // ─────────────────────────────────────────────
 // MACCHINA A STATI DEI PACCHETTI

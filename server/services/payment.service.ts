@@ -2,7 +2,7 @@ import { db } from '../database/client'
 import { accountingEntries, packages, payments, students } from '../database/schema'
 import { and, count, desc, eq, sql } from 'drizzle-orm'
 import { computePackageStates } from './package.service'
-import type { CreatePaymentInput, PaymentQuery, UpdatePaymentInput } from '../../shared/schemas/payment.schema'
+import type { CreatePaymentInput, PaymentQuery, UpdatePaymentInput } from '#shared/schemas/payment.schema'
 
 // ─────────────────────────────────────────────
 // CREATE — POST /api/payments

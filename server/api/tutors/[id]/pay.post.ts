@@ -1,4 +1,4 @@
-import { PayTutorSchema } from '../../../../shared/schemas/tutor.schema'
+import { PayTutorSchema } from '#shared/schemas/tutor.schema'
 import { payTutor } from '../../../services/tutor.service'
 import { toHttpError } from '../../../utils/http-error'
 

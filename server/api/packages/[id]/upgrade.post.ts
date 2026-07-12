@@ -1,4 +1,4 @@
-import { UpgradePackageSchema } from '../../../../shared/schemas/package.schema'
+import { UpgradePackageSchema } from '#shared/schemas/package.schema'
 import { getPackageById } from '../../../services/package.service'
 import { db } from '../../../database/client'
 import { packages, payments, accountingEntries, lessonStudents, lessons } from '../../../database/schema'

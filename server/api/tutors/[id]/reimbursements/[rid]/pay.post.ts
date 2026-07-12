@@ -1,4 +1,4 @@
-import { PayReimbursementSchema } from '../../../../../../shared/schemas/tutor.schema'
+import { PayReimbursementSchema } from '#shared/schemas/tutor.schema'
 import { payReimbursement } from '../../../../../services/tutor.service'
 
 export default defineEventHandler(async (event) => {

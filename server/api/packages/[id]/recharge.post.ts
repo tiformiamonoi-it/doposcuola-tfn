@@ -1,4 +1,4 @@
-import { RechargePackageSchema } from '../../../../shared/schemas/package.schema'
+import { RechargePackageSchema } from '#shared/schemas/package.schema'
 import { rechargePackage } from '../../../services/package.service'
 import { toHttpError } from '../../../utils/http-error'
 

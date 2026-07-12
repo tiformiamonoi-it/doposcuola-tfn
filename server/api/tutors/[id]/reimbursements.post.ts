@@ -1,4 +1,4 @@
-import { CreateReimbursementSchema } from '../../../../shared/schemas/tutor.schema'
+import { CreateReimbursementSchema } from '#shared/schemas/tutor.schema'
 import { createReimbursement } from '../../../services/tutor.service'
 
 export default defineEventHandler(async (event) => {

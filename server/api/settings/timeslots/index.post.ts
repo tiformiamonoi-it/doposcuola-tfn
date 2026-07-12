@@ -1,4 +1,4 @@
-import { CreateTimeSlotSchema } from '../../../../shared/schemas/timeslot.schema'
+import { CreateTimeSlotSchema } from '#shared/schemas/timeslot.schema'
 import { createTimeSlot } from '../../../services/timeslot.service'
 
 export default defineEventHandler(async (event) => {

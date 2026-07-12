@@ -27,3 +27,8 @@ export function formatDataEstesa(d: string | Date | null | undefined): string {
     weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
   })
 }
+
+// Importo in formato italiano ('1.234,56') — il simbolo € lo mette il template
+export function formatImporto(n: number | string | null | undefined): string {
+  return (Number(n) || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}

@@ -139,7 +139,7 @@
         <template v-if="specialeFuoriData">
           ⭐ <strong>{{ specialiFuoriData.join(', ') }}</strong> in questa data
           {{ specialiFuoriData.length > 1 ? 'sono fuori' : 'è fuori' }} dalla giornata dedicata:
-          è previsto un <strong>supplemento di €10</strong> per la giornata, che la segreteria confermerà e
+          è previsto un <strong>supplemento di €{{ SUPPLEMENTO_SPECIALE }}</strong> per la giornata, che la segreteria confermerà e
           aggiungerà al pacchetto.
         </template>
         <template v-else>
@@ -191,7 +191,7 @@
           </div>
           <div v-if="specialeFuoriData" class="flex justify-between">
             <span class="text-slate-500">Supplemento materia speciale</span>
-            <span class="font-medium text-amber-600">+ €10,00</span>
+            <span class="font-medium text-amber-600">+ €{{ formatImporto(SUPPLEMENTO_SPECIALE) }}</span>
           </div>
         </div>
       </div>
@@ -228,6 +228,9 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watchEffect, onMounted } from 'vue'
+import { SUPPLEMENTO_SPECIALE } from '#shared/tariffe'
+import { MATERIE_DEFAULT } from '#shared/materie'
+import { formatImporto } from '~/utils/format'
 
 definePageMeta({
   layout: 'portal',
@@ -236,10 +239,7 @@ definePageMeta({
 useHead({ title: 'Prenota — Portale Famiglie' })
 
 const { data: portalConfigs } = useLazyFetch('/api/portal/configs')
-const MATERIE = computed(() => (portalConfigs.value as any)?.materie ?? [
-  'Matematica', 'Fisica', 'Chimica', 'Italiano', 'Inglese',
-  'Storia', 'Geografia', 'Latino', 'Greco', 'Scienze', 'Informatica',
-])
+const MATERIE = computed(() => (portalConfigs.value as any)?.materie ?? MATERIE_DEFAULT)
 
 // ─── Materie speciali: giornate dedicate + supplemento €10 fuori data ───
 // Nelle giornate prefissate si possono prenotare più materie speciali (senza supplemento);

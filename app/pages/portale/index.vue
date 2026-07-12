@@ -23,7 +23,7 @@
           <h3 class="font-semibold text-slate-800 text-sm">Giornate speciali di <span class="capitalize">{{ nomeMeseCorrente }}</span></h3>
           <p class="text-xs text-slate-500">
             In queste giornate le materie speciali si prenotano senza supplemento;
-            negli altri giorni è previsto un supplemento di €10 per giornata.
+            negli altri giorni è previsto un supplemento di €{{ SUPPLEMENTO_SPECIALE }} per giornata.
           </p>
           <ul class="mt-2 space-y-1">
             <li v-for="g in giornateSpecialiMese" :key="g.materia" class="text-sm text-slate-700">
@@ -297,6 +297,8 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
+import { SUPPLEMENTO_SPECIALE } from '#shared/tariffe'
+import { MATERIE_DEFAULT } from '#shared/materie'
 
 definePageMeta({
   layout: 'portal',
@@ -329,10 +331,7 @@ const giornateSpecialiMese = computed(() => {
     giorni: date.map((d) => new Date(d + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric' })).join(', '),
   }))
 })
-const MATERIE = computed(() => (portalConfigs.value as any)?.materie ?? [
-  'Matematica', 'Fisica', 'Chimica', 'Italiano', 'Inglese',
-  'Storia', 'Geografia', 'Latino', 'Greco', 'Scienze', 'Informatica',
-])
+const MATERIE = computed(() => (portalConfigs.value as any)?.materie ?? MATERIE_DEFAULT)
 
 // ─── CARICAMENTO DATI ───
 const { data: studentsData, pending: pendingStudents } = await useFetch('/api/portal/students')

@@ -1,7 +1,7 @@
 import { db } from '../database/client'
 import { timeSlots, lessons } from '../database/schema'
 import { eq, asc, sql } from 'drizzle-orm'
-import type { CreateTimeSlotInput, UpdateTimeSlotInput } from '../../shared/schemas/timeslot.schema'
+import type { CreateTimeSlotInput, UpdateTimeSlotInput } from '#shared/schemas/timeslot.schema'
 
 export async function listTimeSlots(activeOnly = false) {
   const query = db.select().from(timeSlots).orderBy(asc(timeSlots.oraInizio))

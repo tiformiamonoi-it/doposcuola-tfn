@@ -2,8 +2,8 @@ import { CreateBookingSchema } from '#shared/schemas/booking.schema'
 import { createBooking } from '../../services/booking.service'
 import { getPortalStudentIds } from '../../utils/portal'
 import { db } from '../../database/client'
-import { students, packages } from '../../database/schema'
-import { eq, and } from 'drizzle-orm'
+import { students, packages, bookings } from '../../database/schema'
+import { eq } from 'drizzle-orm'
 import { toHttpError } from '../../utils/http-error'
 
 // POST /api/portal/bookings — genitori e studenti (account studente = solo prenotazioni)
@@ -69,22 +69,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // Verifica pacchetto attivo
-  const activePackages = await db.select({ id: packages.id })
-    .from(packages)
-    .where(
-      and(
-        eq(packages.studentId, result.data.studentId)
-      )
-    )
-
-  const hasActivePackage = activePackages.some(pkg => {
-    // In Drizzle, le query potrebbero restituire stati non inizializzati, quindi facciamo un controllo sul DB oppure a livello applicativo
-    // Assumiamo che se non c'è almeno un pacchetto, allora non va bene, ma per l'array 'stati' dobbiamo usare sql o filter post-select
-    return true // Il controllo vero lo facciamo dopo
-  })
-  
-  // Meglio filtrare direttamente in JS dato che l'array PostgreSQL "stati" potrebbe essere ostico con le funzioni ORM base
+  // Verifica pacchetto attivo (l'array PostgreSQL "stati" si filtra in JS)
   const studentPackages = await db.select({ stati: packages.stati })
     .from(packages)
     .where(eq(packages.studentId, result.data.studentId))
@@ -95,10 +80,6 @@ export default defineEventHandler(async (event) => {
   }
 
   // Verifica se esiste già una prenotazione per questo studente in questa data
-  // Carichiamo tutte le prenotazioni future o odierne dello studente per fare il controllo
-  // Importiamo bookings da schema se non l'abbiamo fatto
-  const { bookings } = await import('../../database/schema')
-  
   const existingBookings = await db.select({ requestedDate: bookings.requestedDate, status: bookings.status })
     .from(bookings)
     .where(eq(bookings.studentId, result.data.studentId))

@@ -3,7 +3,6 @@ import { db } from '../database/client'
 import {
   users, tutorProfiles, lessons,
   tutorPayments, tutorReimbursements, accountingEntries,
-  systemConfigs,
 } from '../database/schema'
 import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
@@ -12,7 +11,7 @@ import { nomeProprio } from '../utils/nomi'
 import type {
   CreateTutorInput, UpdateTutorInput, TutorQuery,
   PayTutorInput, CreateReimbursementInput, PayReimbursementInput,
-} from '../../shared/schemas/tutor.schema'
+} from '#shared/schemas/tutor.schema'
 
 // ─────────────────────────────────────────────
 // LIST — GET /api/tutors
@@ -458,14 +457,6 @@ export async function getMonthlyPerformance(tutorId: string, months = 6) {
   const now       = new Date()
   const startDate = new Date(now.getFullYear(), now.getMonth() - months + 1, 1)
 
-  // Leggi tariffa di fallback da system_configs
-  const [configRow] = await db.select({ value: systemConfigs.value }).from(systemConfigs).where(eq(systemConfigs.key, 'tariffe_tutor')).limit(1)
-  let tariffaFallback = 25.0
-  try {
-    const parsed = JSON.parse(configRow?.value ?? '{}')
-    if (parsed.SINGOLA) tariffaFallback = parseFloat(parsed.SINGOLA)
-  } catch { /* fallback 25.0 */ }
-
   // Il compenso è PER LEZIONE: va sommato una volta sola per lezione.
   // Il vecchio JOIN diretto con lesson_students lo contava una volta per ogni alunno
   // della lezione, gonfiando i compensi (e rendendo i margini sempre negativi).
@@ -482,15 +473,14 @@ export async function getMonthlyPerformance(tutorId: string, months = 6) {
       SELECT COUNT(ls.id) AS num_studenti,
              SUM(
                CASE WHEN l.mezza_lezione THEN 0.5 ELSE 1.0 END
-               * COALESCE(
-                   p.tariffa_oraria::numeric,
-                   CASE
-                     WHEN p.ore_acquistate IS NOT NULL AND p.ore_acquistate::numeric > 0
-                          AND p.prezzo_totale IS NOT NULL
-                     THEN p.prezzo_totale::numeric / p.ore_acquistate::numeric
-                     ELSE ${tariffaFallback}
-                   END
-                 )
+               -- Stessa formula/precedenza di ricavoOrarioPacchetto() in shared/tariffe.ts
+               -- (prima preferiva tariffa_oraria con fallback 25€: numeri diversi dal calendario)
+               * CASE
+                   WHEN p.ore_acquistate IS NOT NULL AND p.ore_acquistate::numeric > 0
+                        AND p.prezzo_totale IS NOT NULL
+                   THEN p.prezzo_totale::numeric / p.ore_acquistate::numeric
+                   ELSE COALESCE(p.tariffa_oraria::numeric, 0)
+                 END
              ) AS ricavo
       FROM lesson_students ls
       LEFT JOIN packages p ON p.id = ls.package_id

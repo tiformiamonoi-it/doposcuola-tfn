@@ -247,6 +247,7 @@ import { startOfMonth, endOfMonth, addMonths, subMonths, format, isSameDay, getD
 import { it } from 'date-fns/locale'
 import { corsiaTutor } from '~/utils/coloriTutor'
 import { coloreGiorno } from '~/utils/coloreGiorno'
+import { ricavoOrarioPacchetto } from '#shared/tariffe'
 import ModalNuovaLezione from '~/components/calendario/ModalNuovaLezione.vue'
 import ModalLezioneRapida from '~/components/calendario/ModalLezioneRapida.vue'
 import ModalGestisciSlot from '~/components/calendario/ModalGestisciSlot.vue'
@@ -382,9 +383,9 @@ const giorniWithTutorRecap = computed(() => {
         studentiUniciGiorno.add(ls.studentId)
         const prezzo = parseFloat(ls.package?.prezzoTotale ?? '0')
         const ore = parseFloat(ls.package?.oreAcquistate ?? '0')
-        const costoOrario = ore > 0 ? prezzo / ore : 0
+        const tariffa = ls.package?.tariffaOraria ? parseFloat(ls.package.tariffaOraria) : null
         const oreScalate = parseFloat(ls.oreScalate ?? '1')
-        incasso += costoOrario * oreScalate
+        incasso += ricavoOrarioPacchetto(prezzo, ore, tariffa) * oreScalate
       })
       ricavoGiorno += incasso - parseFloat(l.compensoTutor ?? '0')
     })

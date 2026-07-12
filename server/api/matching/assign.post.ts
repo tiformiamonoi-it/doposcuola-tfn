@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { db } from '../../database/client'
 import * as tables from '../../database/schema'
-import { AssignTutorSlotSchema } from '../../../shared/schemas/matching.schema'
+import { AssignTutorSlotSchema } from '#shared/schemas/matching.schema'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)

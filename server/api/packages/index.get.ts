@@ -1,4 +1,4 @@
-import { PackageQuerySchema } from '../../../shared/schemas/package.schema'
+import { PackageQuerySchema } from '#shared/schemas/package.schema'
 import { listPackages } from '../../services/package.service'
 import { isTutorRole, sanitizePackageForTutor } from '../../utils/package-privacy'
 

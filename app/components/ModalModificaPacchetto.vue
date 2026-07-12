@@ -78,6 +78,7 @@
 </template>
 
 <script setup lang="ts">
+import { oggiISO } from '~/utils/format'
 import { ref, reactive, watch, computed } from 'vue'
 
 const props = defineProps<{ pacchetto: any | null }>()
@@ -95,7 +96,7 @@ const form = reactive({
   pagamentoIntegrazione: {
     importo: 0,
     metodoPagamento: 'CONTANTI',
-    dataPagamento: new Date().toISOString().slice(0, 10),
+    dataPagamento: oggiISO(),
     richiedeFattura: false
   }
 })
@@ -116,7 +117,7 @@ watch(() => [isOpen.value, props.pacchetto], ([open, pkg]) => {
     form.pagamentoIntegrazione = {
       importo: 0,
       metodoPagamento: 'CONTANTI',
-      dataPagamento: new Date().toISOString().slice(0, 10),
+      dataPagamento: oggiISO(),
       richiedeFattura: false
     }
   }

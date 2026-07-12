@@ -176,6 +176,7 @@
 </template>
 
 <script setup lang="ts">
+import { oggiISO } from '~/utils/format'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
 
 const props = defineProps<{
@@ -268,8 +269,8 @@ const nuovo = reactive({
   tipo:              'ORE' as 'ORE' | 'MENSILE' | 'A_CONSUMO',
   oreAcquistate:     10,
   prezzoTotale:      0,
-  dataInizio:        new Date().toISOString().slice(0, 10),
-  dataScadenza:      calcolaDataScadenza('ORE', new Date().toISOString().slice(0, 10)),
+  dataInizio:        oggiISO(),
+  dataScadenza:      calcolaDataScadenza('ORE', oggiISO()),
   giorniAcquistati:  12,
   orarioGiornaliero: 3,
   accontoImporto:    0,
@@ -337,7 +338,7 @@ watch(isOpen, async (aperto) => {
     templateSelezionato.value = ''
     pacchettiAttiviStudente.value = []
     
-    let initDataInizio = new Date().toISOString().slice(0, 10)
+    let initDataInizio = oggiISO()
 
     // Se è un rinnovo esplicito
     if (props.rinnovoDa) {

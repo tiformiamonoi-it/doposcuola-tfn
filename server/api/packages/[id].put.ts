@@ -1,4 +1,4 @@
-import { UpdatePackageSchema } from '../../../shared/schemas/package.schema'
+import { UpdatePackageSchema } from '#shared/schemas/package.schema'
 import { getPackageById, updatePackage } from '../../services/package.service'
 import { toHttpError } from '../../utils/http-error'
 

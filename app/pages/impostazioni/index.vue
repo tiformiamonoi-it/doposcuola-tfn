@@ -146,7 +146,7 @@
               </div>
               <p class="text-xs text-slate-400">
                 ⭐ = materia <strong>speciale</strong>: si prenota nelle giornate del calendario qui accanto;
-                fuori da quelle giornate scatta il supplemento di €10.
+                fuori da quelle giornate scatta il supplemento di €{{ SUPPLEMENTO_SPECIALE }}.
               </p>
             </div>
             <template #footer>
@@ -578,6 +578,7 @@
 
 <script setup lang="ts">
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
+import { SUPPLEMENTO_SPECIALE, TARIFFE_DEFAULT } from '#shared/tariffe'
 import { addMonths, format, getDay, getDaysInMonth, setDate, startOfMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
 
@@ -776,7 +777,7 @@ const giornateSpeciali = ref<Record<string, string[]>>({})
 
 watchEffect(() => {
   try { materie.value = JSON.parse(configs.value.materie || '[]') } catch(e){}
-  try { tariffe.value = JSON.parse(configs.value.tariffe_tutor || '{"SINGOLA":5,"GRUPPO":8,"MAXI":8.5}') } catch(e){}
+  try { tariffe.value = JSON.parse(configs.value.tariffe_tutor || 'null') ?? { ...TARIFFE_DEFAULT } } catch(e){}
   try { speseFisse.value = JSON.parse(configs.value.spese_fisse || '[]') } catch(e){}
   try { sconti.value = JSON.parse(configs.value.sconti || '[]') } catch(e){}
   try { materieSpeciali.value = JSON.parse(configs.value.materie_speciali || '[]') } catch(e){}

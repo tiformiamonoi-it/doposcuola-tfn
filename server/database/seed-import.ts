@@ -14,7 +14,7 @@ import * as schema from './schema'
 import { parseDump, type CopyBlock } from './seed/parse-copy'
 import { tx, buildMezzaLezioneMap, buildMetodoMaps, toDate, type MetodoMaps } from './seed/transforms'
 import { computePackageStates } from '../services/package.service'
-import { SALDI_OBIETTIVO, CHECKPOINT_RICONCILIAZIONE } from '../../shared/riconciliazione'
+import { SALDI_OBIETTIVO, CHECKPOINT_RICONCILIAZIONE } from '#shared/riconciliazione'
 
 const DRY_RUN = process.argv.includes('--dry-run')
 

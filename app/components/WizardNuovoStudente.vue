@@ -278,6 +278,7 @@
 </template>
 
 <script setup lang="ts">
+import { oggiISO } from '~/utils/format'
 import { z } from 'zod'
 import { normalizzaTelefono } from '~/utils/phone'
 
@@ -341,7 +342,7 @@ const dati = reactive({
     tipo: 'ORE' as 'ORE' | 'MENSILE' | 'A_CONSUMO',
     oreAcquistate: 10,
     prezzoTotale: 0,
-    dataInizio: new Date().toISOString().slice(0, 10),
+    dataInizio: oggiISO(),
     dataScadenza: '',
     giorniAcquistati: 12,
     orarioGiornaliero: 3,
@@ -408,7 +409,7 @@ function chiudi() {
   step.value = 1
   Object.assign(dati.studente, { firstName: '', lastName: '', classe: '', scuola: '' })
   Object.assign(dati.genitore, { parentName: '', parentPhone: '', parentEmail: '', parentCF: '', parentPIva: '', parentIndirizzo: '', parentCitta: '', parentCap: '', note: '' })
-  Object.assign(dati.pacchetto, { crea: false, nome: '', tipo: 'ORE', oreAcquistate: 10, prezzoTotale: 0, dataInizio: new Date().toISOString().slice(0, 10), dataScadenza: '', giorniAcquistati: 12, orarioGiornaliero: 3, tariffaOraria: 10, accontoImporto: 0, accontoMetodo: 'CONTANTI', accontoFattura: false, standardPackageId: '' })
+  Object.assign(dati.pacchetto, { crea: false, nome: '', tipo: 'ORE', oreAcquistate: 10, prezzoTotale: 0, dataInizio: oggiISO(), dataScadenza: '', giorniAcquistati: 12, orarioGiornaliero: 3, tariffaOraria: 10, accontoImporto: 0, accontoMetodo: 'CONTANTI', accontoFattura: false, standardPackageId: '' })
   templatePkgSelezionato.value = ''
   Object.assign(dati.portale, { crea: false, firstName: '', lastName: '', email: '', abilitaPrenotazione: true })
 }

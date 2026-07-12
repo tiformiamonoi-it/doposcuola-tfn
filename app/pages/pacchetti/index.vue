@@ -339,7 +339,7 @@ definePageMeta({ middleware: ['admin-or-super'] })
 import { h, resolveComponent } from 'vue'
 import { riassumiStati } from '~/utils/statiPacchetto'
 import { inizialiDa, coloreAvatar } from '~/utils/avatar'
-import { formatData } from '~/utils/format'
+import { oggiISO, formatData  } from '~/utils/format'
 
 function pacchettoStatusColor(stati: string[]) {
   if (!stati || stati.length === 0) return 'neutral'
@@ -530,7 +530,7 @@ const datiBulk = reactive({
   modalita: 'INTELLIGENTE' as 'INTELLIGENTE' | 'TEMPLATE',
   templateSelezionato: '',
   templateScelto: null as any,
-  dataInizio: new Date().toISOString().slice(0, 10),
+  dataInizio: oggiISO(),
   dataScadenza: ''
 })
 
@@ -590,7 +590,7 @@ function apriModalBulk() {
   datiBulk.modalita = 'INTELLIGENTE'
   datiBulk.templateSelezionato = ''
   datiBulk.templateScelto = null
-  datiBulk.dataInizio = new Date().toISOString().slice(0, 10)
+  datiBulk.dataInizio = oggiISO()
   datiBulk.dataScadenza = calcolaDataScadenza('ORE')
   modalBulkAperto.value = true
 }

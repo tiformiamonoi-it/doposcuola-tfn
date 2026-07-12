@@ -1,4 +1,4 @@
-import { CreatePaymentSchema } from '../../../shared/schemas/payment.schema'
+import { CreatePaymentSchema } from '#shared/schemas/payment.schema'
 import { createPayment } from '../../services/payment.service'
 import { toHttpError } from '../../utils/http-error'
 

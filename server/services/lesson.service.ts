@@ -14,13 +14,13 @@ import {
 import { and, count, desc, eq, gte, inArray, isNotNull, lte, ne, sql } from 'drizzle-orm'
 import { computePackageStates } from './package.service'
 import { confiniGiornoOggiRome } from '../utils/tutor-time-window'
-import { TARIFFE_DEFAULT, TARIFFE_MEZZA } from '../../shared/tariffe'
+import { TARIFFE_DEFAULT, TARIFFE_MEZZA } from '#shared/tariffe'
 import type {
   CreateLessonInput,
   UpdateLessonInput,
   LessonQuery,
   CalendarQuery,
-} from '../../shared/schemas/lesson.schema'
+} from '#shared/schemas/lesson.schema'
 
 // ─────────────────────────────────────────────
 // TARIFFE TUTOR — lette da system_configs (chiave: tariffe_tutor)

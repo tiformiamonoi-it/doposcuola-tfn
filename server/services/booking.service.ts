@@ -2,6 +2,7 @@ import { eq, desc, sql, or, inArray } from 'drizzle-orm'
 import { db } from '../database/client'
 import { bookings, bookingSubjects, students, closureDates, systemConfigs, packages } from '../database/schema'
 import { computePackageStates } from './package.service'
+import { SUPPLEMENTO_SPECIALE } from '#shared/tariffe'
 import type { CreateBookingInput, UpdateBookingStatusInput } from '#shared/schemas/booking.schema'
 
 // ─────────────────────────────────────────────
@@ -15,7 +16,9 @@ import type { CreateBookingInput, UpdateBookingStatusInput } from '#shared/schem
 //     che diventa un aumento del pacchetto SOLO dopo l'OK di ADMIN/SUPER_TUTOR.
 // ─────────────────────────────────────────────
 
-export const SUPPLEMENTO_SPECIALE = '10.00'
+// Valore unico in #shared/tariffe (lo usano anche le pagine per i testi);
+// qui in forma stringa per la colonna numeric del DB.
+const SUPPLEMENTO_STR = SUPPLEMENTO_SPECIALE.toFixed(2)
 
 // Normalizza il valore di un giorno in array (tollera il vecchio formato "una materia per giorno").
 function toArrayMaterie(v: unknown): string[] {
@@ -62,7 +65,7 @@ export function decidiSupplemento(
   if (fuoriData.length > 1) {
     throw new Error('Puoi prenotare una sola materia speciale fuori dalle sue giornate prefissate')
   }
-  return fuoriData.length === 1 ? SUPPLEMENTO_SPECIALE : null
+  return fuoriData.length === 1 ? SUPPLEMENTO_STR : null
 }
 
 // Ritorna il supplemento ('10.00') se c'è una materia speciale prenotata FUORI dalla sua

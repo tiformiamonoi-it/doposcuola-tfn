@@ -1,4 +1,4 @@
-import { TutorQuerySchema } from '../../../shared/schemas/tutor.schema'
+import { TutorQuerySchema } from '#shared/schemas/tutor.schema'
 import { listTutors } from '../../services/tutor.service'
 
 export default defineEventHandler(async (event) => {

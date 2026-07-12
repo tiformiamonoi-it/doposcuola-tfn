@@ -1,4 +1,4 @@
-import { CreatePackageSchema } from '../../../shared/schemas/package.schema'
+import { CreatePackageSchema } from '#shared/schemas/package.schema'
 import { createPackage } from '../../services/package.service'
 import { toHttpError } from '../../utils/http-error'
 

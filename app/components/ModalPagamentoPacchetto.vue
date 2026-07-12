@@ -98,6 +98,7 @@
 </template>
 
 <script setup lang="ts">
+import { oggiISO } from '~/utils/format'
 import { computed, reactive, ref, watch } from 'vue'
 
 const props = defineProps<{ pacchetto: any | null }>()
@@ -115,7 +116,7 @@ const metodiPagamento = METODI_PAGAMENTO_ITEMS
 
 const pagamento = reactive({
   importo: 0,
-  data:    new Date().toISOString().slice(0, 10),
+  data:    oggiISO(),
   tipo:    'SALDO' as string,
   metodo:  'CONTANTI' as string,
   fattura: false,
@@ -281,7 +282,7 @@ async function caricaStorico() {
 watch(isOpen, (val) => {
   if (val && props.pacchetto) {
     pagamento.importo = parseFloat(props.pacchetto.importoResiduo) || 0
-    pagamento.data    = new Date().toISOString().slice(0, 10)
+    pagamento.data    = oggiISO()
     pagamento.tipo    = 'SALDO'
     pagamento.metodo  = 'CONTANTI'
     pagamento.fattura = false

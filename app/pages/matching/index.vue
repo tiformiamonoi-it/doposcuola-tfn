@@ -146,7 +146,7 @@
                 :loading="applicandoSupplemento === badge.bookingId"
                 @click.stop="applicaSupplemento(badge)"
               >
-                OK → +€10 sul pacchetto
+                OK → +€{{ SUPPLEMENTO_SPECIALE }} sul pacchetto
               </UButton>
             </div>
           </div>
@@ -191,6 +191,8 @@
 import { format, addDays, subDays } from 'date-fns'
 import { it } from 'date-fns/locale'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
+import { SUPPLEMENTO_SPECIALE } from '#shared/tariffe'
+import { MATERIE_DEFAULT } from '#shared/materie'
 
 definePageMeta({ middleware: ['admin-or-super'] })
 useHead({ title: 'Matching — Ti Formiamo Noi' })
@@ -213,7 +215,6 @@ const dataFormattata = computed(() => {
 const dateParam = computed(() => format(currentDate.value, 'yyyy-MM-dd'))
 
 const unassignedBadges = computed(() => badges.value.filter(b => !b.isAssigned))
-const assignedBadges = computed(() => badges.value.filter(b => b.isAssigned))
 
 // Tutti gli studenti attivi (per l'aggiunta manuale)
 const { data: studentsRes } = useFetch('/api/students?active=true&limit=1000&light=true', { lazy: true })
@@ -234,7 +235,7 @@ const MATERIE = computed<string[]>(() => {
     const lista = JSON.parse(configsRes.value?.materie ?? '[]')
     if (Array.isArray(lista) && lista.length > 0) return lista
   } catch {}
-  return ['Matematica', 'Fisica', 'Chimica', 'Italiano', 'Inglese', 'Storia', 'Geografia', 'Latino', 'Greco', 'Scienze', 'Informatica']
+  return MATERIE_DEFAULT
 })
 
 const manualeStudentId = ref('')

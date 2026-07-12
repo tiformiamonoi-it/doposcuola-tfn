@@ -1,4 +1,4 @@
-import { CreateStudentSchema } from '../../../shared/schemas/student.schema'
+import { CreateStudentSchema } from '#shared/schemas/student.schema'
 import { createStudent } from '../../services/student.service'
 
 // POST /api/students

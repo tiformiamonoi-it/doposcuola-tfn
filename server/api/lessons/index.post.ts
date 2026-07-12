@@ -1,4 +1,4 @@
-import { CreateLessonSchema } from '../../../shared/schemas/lesson.schema'
+import { CreateLessonSchema } from '#shared/schemas/lesson.schema'
 import { createLesson, verificaPoolOggiPerTutor } from '../../services/lesson.service'
 import { tutorPuoModificareOggi } from '../../utils/tutor-time-window'
 import { toHttpError } from '../../utils/http-error'

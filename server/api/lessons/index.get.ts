@@ -1,4 +1,4 @@
-import { LessonQuerySchema } from '../../../shared/schemas/lesson.schema'
+import { LessonQuerySchema } from '#shared/schemas/lesson.schema'
 import { listLessons } from '../../services/lesson.service'
 
 // GET /api/lessons

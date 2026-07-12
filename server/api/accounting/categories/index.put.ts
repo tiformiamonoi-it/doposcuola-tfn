@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { getCategorie, getCategorieUsate, saveCategorie } from '../../../utils/categorie'
-import { CATEGORIE_DEFAULT, CATEGORIE_SISTEMA, type Categoria } from '../../../../shared/accounting-categories'
+import { CATEGORIE_DEFAULT, CATEGORIE_SISTEMA, type Categoria } from '#shared/accounting-categories'
 
 const categoriaSchema = z.object({
   chiave:    z.string().optional().default(''),

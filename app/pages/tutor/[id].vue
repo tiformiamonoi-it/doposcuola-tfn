@@ -571,6 +571,7 @@
 </template>
 
 <script setup lang="ts">
+import { oggiISO } from '~/utils/format'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
 import { METODI_PAGAMENTO_ITEMS, coloreStatoPagamento, coloreStatoRimborso } from '~/utils/contabilita'
 
@@ -906,7 +907,7 @@ const modalNuovoRimborsoAperto = ref(false)
 const datiNuovoRimborso = reactive({
   importo:       '',
   descrizione:   '',
-  dataRichiesta: new Date().toISOString().substring(0, 10),
+  dataRichiesta: oggiISO(),
   note:          '',
 })
 
@@ -923,7 +924,7 @@ async function creaNuovoRimborso() {
     })
     toast.add({ title: 'Rimborso registrato', color: 'success' })
     modalNuovoRimborsoAperto.value = false
-    Object.assign(datiNuovoRimborso, { importo: '', descrizione: '', dataRichiesta: new Date().toISOString().substring(0, 10), note: '' })
+    Object.assign(datiNuovoRimborso, { importo: '', descrizione: '', dataRichiesta: oggiISO(), note: '' })
     refreshReimb()
   } catch {
     toast.add({ title: 'Errore nel salvataggio', color: 'error' })

@@ -1,4 +1,4 @@
-import { UpdateStudentSchema } from '../../../shared/schemas/student.schema'
+import { UpdateStudentSchema } from '#shared/schemas/student.schema'
 import { getStudentById, updateStudent } from '../../services/student.service'
 
 // PUT /api/students/:id

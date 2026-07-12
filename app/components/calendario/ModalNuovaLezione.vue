@@ -230,8 +230,8 @@ const studentsOptions = computed(() => (studentsRes.value?.data || []).map((s: a
 const { data: configsRes } = useFetch('/api/settings/configs', { lazy: true })
 const tariffeConfig = computed(() => {
   try {
-    return JSON.parse(configsRes.value?.tariffe_tutor ?? '{"SINGOLA":5,"GRUPPO":8,"MAXI":8.5}')
-  } catch { return { SINGOLA: 5, GRUPPO: 8, MAXI: 8.5 } }
+    return JSON.parse(configsRes.value?.tariffe_tutor ?? 'null') ?? TARIFFE_DEFAULT
+  } catch { return TARIFFE_DEFAULT }
 })
 
 // ==========================================

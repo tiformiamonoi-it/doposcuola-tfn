@@ -2,7 +2,7 @@ import { db } from '../database/client'
 import { students, packages } from '../database/schema'
 import { and, asc, count, desc, eq, ilike, or, inArray, exists, notExists, not, arrayContains } from 'drizzle-orm'
 import { nomeProprio } from '../utils/nomi'
-import type { CreateStudentInput, StudentQuery, UpdateStudentInput } from '../../shared/schemas/student.schema'
+import type { CreateStudentInput, StudentQuery, UpdateStudentInput } from '#shared/schemas/student.schema'
 
 // Mappa i valori sortBy (dalla query) alle colonne Drizzle
 const SORT_COLUMNS = {

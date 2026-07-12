@@ -207,7 +207,7 @@
 </template>
 
 <script setup lang="ts">
-import { oggiISO } from '~/utils/format'
+import { oggiISO, formatImporto as fmt } from '~/utils/format'
 
 definePageMeta({ middleware: ['admin-or-super'] })
 useHead({ title: 'Dashboard — tiformiamonoi.it' })
@@ -316,9 +316,6 @@ const { data: effettivo, pending: pendingEffettivo, error: errEffettivo } = useL
 const erroreEffettivo = computed(() => errEffettivo.value?.data?.statusMessage ?? null)
 
 // ─── Formato ───
-function fmt(n: number) {
-  return (n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 function formatGiorno(iso: string) {
   return `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 }

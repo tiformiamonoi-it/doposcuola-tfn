@@ -1,7 +1,7 @@
 import { db } from '../../database/client'
 import { systemConfigs } from '../../database/schema'
 import { eq } from 'drizzle-orm'
-import { SaveMatchingSchema } from '../../../shared/schemas/settings.schema'
+import { SaveMatchingSchema } from '#shared/schemas/settings.schema'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)

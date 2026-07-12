@@ -7,7 +7,6 @@ type Role = 'ADMIN' | 'SUPER_TUTOR' | 'TUTOR' | 'GENITORE' | 'STUDENTE'
 const STAFF: Role[] = ['ADMIN', 'SUPER_TUTOR', 'TUTOR']
 const ADMIN_SUPER: Role[] = ['ADMIN', 'SUPER_TUTOR']
 const ADMIN_ONLY: Role[] = ['ADMIN']
-const GENITORE_ONLY: Role[] = ['GENITORE']
 const FAMIGLIA: Role[] = ['GENITORE', 'STUDENTE']
 
 // Path pubblici: nessun login richiesto

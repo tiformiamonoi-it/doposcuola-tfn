@@ -1,7 +1,7 @@
 import { db } from '../database/client'
 import { systemConfigs, accountingEntries } from '../database/schema'
 import { eq, isNotNull } from 'drizzle-orm'
-import { CATEGORIE_DEFAULT, type Categoria } from '../../shared/accounting-categories'
+import { CATEGORIE_DEFAULT, type Categoria } from '#shared/accounting-categories'
 
 const KEY = 'categorie_contabili'
 

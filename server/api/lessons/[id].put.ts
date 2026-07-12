@@ -1,4 +1,4 @@
-import { UpdateLessonSchema } from '../../../shared/schemas/lesson.schema'
+import { UpdateLessonSchema } from '#shared/schemas/lesson.schema'
 import { updateLesson, getLessonById, verificaPoolOggiPerTutor } from '../../services/lesson.service'
 import { tutorPuoModificareOggi } from '../../utils/tutor-time-window'
 import { toHttpError } from '../../utils/http-error'

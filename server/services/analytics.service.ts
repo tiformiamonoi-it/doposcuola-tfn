@@ -9,18 +9,16 @@ import { and, eq, gte, lte, sql } from 'drizzle-orm'
 import { db } from '../database/client'
 import { lessons, lessonStudents, packages } from '../database/schema'
 import { getNetMargin } from './accounting.service'
-
-// Giorno civile corrente in Italia ('YYYY-MM-DD') — mai usare toISOString (è UTC)
-function oggiRomaISO(): string {
-  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome' }).format(new Date())
-}
+import { oggiRomeStr } from '../utils/tutor-time-window'
+import { ricavoOrarioPacchetto } from '#shared/tariffe'
 
 // ─────────────────────────────────────────────
 // GUADAGNO ATTESO per giorno in un intervallo
 // ─────────────────────────────────────────────
 export async function getGuadagnoAtteso(start: string, end: string) {
   const [ricaviRows, compensiRows] = await Promise.all([
-    // Ricavo lordo stimato per giorno (valore delle ore scalate ai prezzi dei pacchetti)
+    // Ricavo lordo stimato per giorno (valore delle ore scalate ai prezzi dei pacchetti).
+    // Il CASE replica ricavoOrarioPacchetto() di #shared/tariffe: stessa precedenza ovunque.
     db.select({
       data: lessons.data,
       ricavo: sql<string>`COALESCE(SUM(
@@ -82,7 +80,7 @@ export async function getGuadagnoEffettivoMese(anno: number, mese: number) {
   const ultimoGiorno = new Date(anno, mese, 0).getDate() // giorno 0 del mese dopo = ultimo del mese
   const end = `${anno}-${String(mese).padStart(2, '0')}-${String(ultimoGiorno).padStart(2, '0')}`
 
-  if (end >= oggiRomaISO()) {
+  if (end >= oggiRomeStr()) {
     throw new Error('Il mese non è ancora concluso: il guadagno effettivo si calcola solo a mese finito')
   }
 
@@ -120,7 +118,7 @@ export async function getGuadagnoEffettivoMese(anno: number, mese: number) {
     const residue = parseFloat(row.oreResiduo)
     const ore = parseFloat(row.oreScalate)
 
-    const rateAtteso = acquistate > 0 ? prezzo / acquistate : parseFloat(row.tariffaOraria ?? '0')
+    const rateAtteso = ricavoOrarioPacchetto(prezzo, acquistate, row.tariffaOraria ? parseFloat(row.tariffaOraria) : null)
     ricavoAtteso += rateAtteso * ore
 
     if (row.tipo === 'A_CONSUMO') {
@@ -160,7 +158,7 @@ export async function getGuadagnoEffettivoMese(anno: number, mese: number) {
 // KPI MESE — corrente (parziale) vs precedente (intero)
 // ─────────────────────────────────────────────
 export async function getKpiMese() {
-  const oggi = oggiRomaISO()
+  const oggi = oggiRomeStr()
   const [annoStr, meseStr] = oggi.split('-')
   const anno = Number(annoStr)
   const mese = Number(meseStr) // 1-12

@@ -1,4 +1,4 @@
-import { UpdatePaymentSchema } from '../../../shared/schemas/payment.schema'
+import { UpdatePaymentSchema } from '#shared/schemas/payment.schema'
 import { updatePayment } from '../../services/payment.service'
 import { toHttpError } from '../../utils/http-error'
 

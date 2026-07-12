@@ -1,6 +1,6 @@
 import { db } from '../../../database/client'
 import * as tables from '../../../database/schema'
-import { AdminCreateBookingSchema } from '../../../../shared/schemas/booking.schema'
+import { AdminCreateBookingSchema } from '#shared/schemas/booking.schema'
 import { valutaMaterieSpeciali } from '../../../services/booking.service'
 import { toHttpError } from '../../../utils/http-error'
 

@@ -1,4 +1,4 @@
-import { StudentQuerySchema } from '../../../shared/schemas/student.schema'
+import { StudentQuerySchema } from '#shared/schemas/student.schema'
 import { listStudents } from '../../services/student.service'
 import { isTutorRole } from '../../utils/package-privacy'
 import { sanitizeStudentForTutor } from '../../utils/student-privacy'

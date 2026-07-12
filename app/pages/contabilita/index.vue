@@ -853,12 +853,7 @@ const sezioniAperte = useCookie<Record<string, boolean>>('contabilita-sezioni', 
   default: () => ({ altri: true, aree: true, metodi: true, cassa: true, previsionale: true }),
 })
 
-// ─── Formato numeri ───
-function fmt(n: number) {
-  return (n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-import { formatData } from '~/utils/format'
+import { oggiISO, formatData, formatImporto as fmt } from '~/utils/format'
 
 // ─── Colonne Tabelle ───
 const colonneEntries = [
@@ -947,7 +942,7 @@ const nuovoMovimento = reactive({
   descrizione: '',
   categoria: 'spese_generali',
   metodoPagamento: 'BONIFICO',
-  data: new Date().toISOString().substring(0, 10),
+  data: oggiISO(),
 })
 
 async function salvaMovimento() {
