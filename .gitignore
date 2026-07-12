@@ -22,6 +22,11 @@ node_modules
 backup-*.json
 *-backup*.json
 
+# Script usa-e-getta di debug (mai nel repo)
+*.tmp.mjs
+*.tmp.ts
+*.tmp.js
+
 # OS
 .DS_Store
 Thumbs.db
