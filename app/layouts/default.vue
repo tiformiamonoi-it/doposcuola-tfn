@@ -223,11 +223,11 @@ const toast  = useToast()
 
 const nomeUtente = computed(() => {
   if (!user.value) return 'Utente'
-  return `${user.value.firstName} ${user.value.lastName}`
+  return [user.value.firstName, user.value.lastName].filter(Boolean).join(' ') || 'Utente'
 })
 const iniziali = computed(() => {
   if (!user.value) return '?'
-  return `${user.value.firstName?.[0] ?? ''}${user.value.lastName?.[0] ?? ''}`.toUpperCase()
+  return `${user.value.firstName?.[0] ?? ''}${user.value.lastName?.[0] ?? ''}`.toUpperCase() || '?'
 })
 const ruolo = computed(() => user.value?.role ?? '')
 

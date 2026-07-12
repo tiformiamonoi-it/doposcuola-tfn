@@ -318,6 +318,24 @@ export async function getCostiFissi(): Promise<number> {
   }
 }
 
+// Mesi di calendario coperti dal periodo, frazioni comprese: un periodo che copre
+// esattamente 2 mesi pieni vale 2.0 (non 61 giorni ÷ 30.44 ≈ 2.004, che gonfiava
+// i costi fissi di qualche euro). Ogni mese pesa per i giorni civili coperti.
+export function mesiCalendario(start: Date, end: Date): number {
+  if (end < start) return 0
+  let mesi = 0
+  let cur = new Date(start.getFullYear(), start.getMonth(), 1)
+  const fine = new Date(end.getFullYear(), end.getMonth(), end.getDate())
+  while (cur <= fine) {
+    const giorniMese = new Date(cur.getFullYear(), cur.getMonth() + 1, 0).getDate()
+    const primo  = (cur.getFullYear() === start.getFullYear() && cur.getMonth() === start.getMonth()) ? start.getDate() : 1
+    const ultimo = (cur.getFullYear() === end.getFullYear()   && cur.getMonth() === end.getMonth())   ? end.getDate()   : giorniMese
+    mesi += (ultimo - primo + 1) / giorniMese
+    cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1)
+  }
+  return mesi
+}
+
 export async function getDashboard(startDate: Date, endDate: Date) {
   const [periodo, perMetodo, saldiCassa, fattureInAttesa, previsioni, marketing, costiFissiMensili] = await Promise.all([
     getNetMargin(startDate, endDate),
@@ -336,11 +354,8 @@ export async function getDashboard(startDate: Date, endDate: Date) {
     margine: r2(periodo.margine - marketing.margine),
   }
 
-  // Calcola i mesi nel periodo per proporzionare i costi fissi (media 30.44 gg/mese)
-  const msStart = startDate.getTime()
-  const msEnd = endDate.getTime()
-  const giorniNelPeriodo = (msEnd - msStart) / (1000 * 60 * 60 * 24)
-  const mesiNelPeriodo = Math.max(0.03, giorniNelPeriodo / 30.44) // min ~1 giorno
+  // Costi fissi proporzionati ai mesi di calendario realmente coperti dal periodo
+  const mesiNelPeriodo = mesiCalendario(startDate, endDate)
   const costiFissiPeriodo = r2(costiFissiMensili * mesiNelPeriodo)
   const breakEven = r2(periodo.margine - costiFissiPeriodo)
 

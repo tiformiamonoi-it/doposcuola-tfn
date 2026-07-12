@@ -81,7 +81,10 @@
                   >
                     <div class="font-medium text-slate-800">{{ badge.studentSurname }} {{ badge.studentName }}</div>
                     <div class="text-xs text-primary-600">{{ badge.subject }}</div>
-                    <button 
+                    <div v-if="badge.supplemento" class="text-[11px] mt-0.5" :class="badge.supplementoApplicato ? 'text-emerald-600' : 'text-amber-600'">
+                      ⭐ +€{{ badge.supplemento }} {{ badge.supplementoApplicato ? 'applicato' : 'da approvare' }}
+                    </div>
+                    <button
                       class="no-print absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-50 rounded p-1"
                       @click="rimuoviAssegnazione(badge)"
                     >
@@ -129,6 +132,23 @@
               <span class="text-xs text-slate-400">{{ badge.studentPhone }}</span>
             </div>
             <div v-if="badge.notes" class="text-xs text-amber-600 mt-2 bg-amber-50 p-1 rounded">{{ badge.notes }}</div>
+            <!-- Lezione speciale fuori data: supplemento €10 da approvare -->
+            <div v-if="badge.supplemento" class="mt-2 flex items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded p-1.5">
+              <span class="text-xs font-medium" :class="badge.supplementoApplicato ? 'text-emerald-700' : 'text-amber-700'">
+                ⭐ Speciale fuori data: +€{{ badge.supplemento }}
+              </span>
+              <UBadge v-if="badge.supplementoApplicato" color="success" variant="subtle" size="xs">Applicato al pacchetto</UBadge>
+              <UButton
+                v-else
+                size="xs"
+                color="warning"
+                variant="soft"
+                :loading="applicandoSupplemento === badge.bookingId"
+                @click.stop="applicaSupplemento(badge)"
+              >
+                OK → +€10 sul pacchetto
+              </UButton>
+            </div>
           </div>
         </div>
 
@@ -245,6 +265,26 @@ async function loadData() {
 
 function getAssignedBadges(tutorId: string, slotId: string) {
   return badges.value.filter(b => b.assignedTutorId === tutorId && b.assignedSlot === slotId)
+}
+
+// ─── Supplemento lezione speciale fuori data: OK admin → +€10 sul pacchetto ───
+const applicandoSupplemento = ref<string | null>(null)
+async function applicaSupplemento(badge: any) {
+  applicandoSupplemento.value = badge.bookingId
+  try {
+    const res: any = await $fetch(`/api/admin/bookings/${badge.bookingId}/supplemento`, { method: 'POST' })
+    badges.value.forEach(b => { if (b.bookingId === badge.bookingId) b.supplementoApplicato = true })
+    toast.add({
+      title: 'Supplemento applicato',
+      description: `+€${badge.supplemento} aggiunti al pacchetto "${res.packageNome}": risulterà da pagare.`,
+      color: 'success',
+      icon: 'i-heroicons-check-circle',
+    })
+  } catch (err: any) {
+    toast.add({ title: 'Impossibile applicare il supplemento', description: err?.data?.statusMessage ?? 'Errore imprevisto', color: 'error' })
+  } finally {
+    applicandoSupplemento.value = null
+  }
 }
 
 function handleDragStart(event: any, badge: any) {

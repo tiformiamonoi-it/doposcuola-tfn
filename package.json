@@ -8,7 +8,9 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed-import": "tsx server/database/seed-import.ts",
     "db:fix-lessons": "tsx server/database/fix-lessons.ts",
-    "db:fix-lessons:apply": "tsx server/database/fix-lessons.ts --apply"
+    "db:fix-lessons:apply": "tsx server/database/fix-lessons.ts --apply",
+    "db:fix-nomi": "tsx server/database/fix-nomi.ts",
+    "db:fix-nomi:apply": "tsx server/database/fix-nomi.ts --apply"
   },
   "dependencies": {
     "@iconify-json/heroicons": "^1.2.3",

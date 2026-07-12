@@ -1,6 +1,7 @@
 import { db } from '../database/client'
 import { students, packages } from '../database/schema'
 import { and, asc, count, desc, eq, ilike, or, inArray, exists, notExists, not, arrayContains } from 'drizzle-orm'
+import { nomeProprio } from '../utils/nomi'
 import type { CreateStudentInput, StudentQuery, UpdateStudentInput } from '../../shared/schemas/student.schema'
 
 // Mappa i valori sortBy (dalla query) alle colonne Drizzle
@@ -205,13 +206,13 @@ export async function getStudentById(id: string) {
 
 export async function createStudent(data: CreateStudentInput) {
   const [created] = await db.insert(students).values({
-    firstName:       data.firstName,
-    lastName:        data.lastName,
+    firstName:       nomeProprio(data.firstName),
+    lastName:        nomeProprio(data.lastName),
     classe:          data.classe          ?? null,
     scuola:          data.scuola          ?? null,
     studentPhone:    data.studentPhone    ?? null,
     studentEmail:    data.studentEmail    ?? null,
-    parentName:      data.parentName      ?? null,
+    parentName:      data.parentName ? nomeProprio(data.parentName) : null,
     parentEmail:     data.parentEmail     ?? null,
     parentPhone:     data.parentPhone     ?? null,
     parentIndirizzo: data.parentIndirizzo ?? null,
@@ -238,6 +239,11 @@ export async function updateStudent(id: string, data: UpdateStudentInput) {
   for (const [key, val] of Object.entries(data)) {
     if (val !== undefined) changes[key] = val
   }
+
+  // Nomi sempre in formato "Nome Proprio" (mai tutto maiuscolo/minuscolo)
+  if (typeof changes.firstName === 'string')  changes.firstName  = nomeProprio(changes.firstName)
+  if (typeof changes.lastName === 'string')   changes.lastName   = nomeProprio(changes.lastName)
+  if (typeof changes.parentName === 'string' && changes.parentName) changes.parentName = nomeProprio(changes.parentName)
 
   const [updated] = await db.update(students)
     .set(changes as Partial<typeof students.$inferInsert>)

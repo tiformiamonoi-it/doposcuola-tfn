@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, ne } from 'drizzle-orm'
+import { eq, and, gte, lte, ne, sql } from 'drizzle-orm'
 import { db } from '../../database/client'
 import * as tables from '../../database/schema'
 
@@ -34,6 +34,43 @@ export default defineEventHandler(async (event) => {
     notes: a.notes || '',
     subjects: a.user.tutorProfile?.materie || []
   }))
+
+  // Tutor a fisso mensile (FORFAIT): sempre disponibili dal lunedì al venerdì,
+  // anche senza aver spuntato la disponibilità (salvo chiusure del centro).
+  const giornoSettimana = new Date(`${targetDate}T00:00:00Z`).getUTCDay()
+  if (giornoSettimana >= 1 && giornoSettimana <= 5) {
+    const chiusura = await db.query.closureDates.findFirst({
+      where: sql`DATE(${tables.closureDates.date}) = ${targetDate}`,
+    })
+    if (!chiusura) {
+      const forfaitTutors = await db
+        .select({
+          id:        tables.users.id,
+          firstName: tables.users.firstName,
+          lastName:  tables.users.lastName,
+          phone:     tables.users.phone,
+          materie:   tables.tutorProfiles.materie,
+        })
+        .from(tables.users)
+        .innerJoin(tables.tutorProfiles, eq(tables.tutorProfiles.userId, tables.users.id))
+        .where(and(
+          eq(tables.users.active, true),
+          eq(tables.tutorProfiles.modalitaPagamento, 'FORFAIT'),
+        ))
+
+      for (const t of forfaitTutors) {
+        if (!tutors.some(x => x.id === t.id)) {
+          tutors.push({
+            id: t.id,
+            name: `${t.firstName} ${t.lastName}`,
+            phone: t.phone,
+            notes: '',
+            subjects: t.materie || [],
+          })
+        }
+      }
+    }
+  }
 
   // 2. Troviamo le Prenotazioni (Bookings) per questo giorno
   // Le date delle prenotazioni sono timestamp: usiamo il range del giorno in UTC
@@ -71,7 +108,10 @@ export default defineEventHandler(async (event) => {
         notes: b.notes,
         assignedTutorId: subjectRel.assignedTutorId,
         assignedSlot: subjectRel.assignedSlot,
-        isAssigned: !!subjectRel.assignedTutorId && !!subjectRel.assignedSlot
+        isAssigned: !!subjectRel.assignedTutorId && !!subjectRel.assignedSlot,
+        // Lezione speciale fuori data: supplemento €10 da approvare (o già applicato)
+        supplemento: b.supplemento ? parseFloat(b.supplemento) : 0,
+        supplementoApplicato: !!b.supplementoApplicatoAt,
       })
     })
   })

@@ -71,14 +71,21 @@
             <!-- Pallino lezione esistente -->
             <span v-if="hasExistingLesson(day) && form.dataDesiderata !== getDateString(day)" class="absolute bottom-1 w-1 h-1 rounded-full bg-amber-500"></span>
             <span v-if="isTodayString(getDateString(day)) && form.dataDesiderata !== getDateString(day)" class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+            <!-- Stella giornata materia speciale -->
+            <span
+              v-if="(GIORNATE_SPECIALI[getDateString(day)]?.length) && form.dataDesiderata !== getDateString(day)"
+              class="absolute top-0 left-0.5 text-[9px]"
+              :title="GIORNATE_SPECIALI[getDateString(day)].join(', ')"
+            >⭐</span>
           </button>
         </div>
       </div>
 
       <div class="mt-4 flex flex-col gap-2 text-xs text-slate-500 justify-center items-center">
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-4 flex-wrap justify-center">
           <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Oggi</span>
           <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Lezione prenotata</span>
+          <span v-if="Object.keys(GIORNATE_SPECIALI).length" class="flex items-center gap-1">⭐ Giornata materia speciale</span>
         </div>
         <p v-if="isEditMode" class="text-amber-600 font-medium bg-amber-50 px-3 py-1.5 rounded-md mt-2">
           Hai già una lezione per questa data. Procedendo potrai modificarla.
@@ -115,13 +122,31 @@
             : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'"
           @click="toggleMateria(materia)"
         >
-          {{ materia }}
+          <span v-if="MATERIE_SPECIALI.includes(materia)">⭐ </span>{{ materia }}
         </button>
       </div>
 
       <p v-if="form.materie.length === 0" class="text-xs text-red-500 mt-2">
         Seleziona almeno una materia
       </p>
+
+      <!-- Avviso materie speciali -->
+      <div
+        v-if="specialiScelte.length"
+        class="mt-3 text-xs rounded-lg p-3 border"
+        :class="specialeFuoriData ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'"
+      >
+        <template v-if="specialeFuoriData">
+          ⭐ <strong>{{ specialiFuoriData.join(', ') }}</strong> in questa data
+          {{ specialiFuoriData.length > 1 ? 'sono fuori' : 'è fuori' }} dalla giornata dedicata:
+          è previsto un <strong>supplemento di €10</strong> per la giornata, che la segreteria confermerà e
+          aggiungerà al pacchetto.
+        </template>
+        <template v-else>
+          ⭐ <strong>{{ specialiScelte.join(', ') }}</strong>: {{ specialiScelte.length > 1 ? 'sono in programma' : 'è in programma' }}
+          proprio in questa giornata, nessun supplemento.
+        </template>
+      </div>
 
       <template #footer>
         <div class="flex justify-between">
@@ -163,6 +188,10 @@
           <div class="flex justify-between">
             <span class="text-slate-500">Materie</span>
             <span class="font-medium text-slate-800">{{ form.materie.join(', ') }}</span>
+          </div>
+          <div v-if="specialeFuoriData" class="flex justify-between">
+            <span class="text-slate-500">Supplemento materia speciale</span>
+            <span class="font-medium text-amber-600">+ €10,00</span>
           </div>
         </div>
       </div>
@@ -211,6 +240,18 @@ const MATERIE = computed(() => (portalConfigs.value as any)?.materie ?? [
   'Matematica', 'Fisica', 'Chimica', 'Italiano', 'Inglese',
   'Storia', 'Geografia', 'Latino', 'Greco', 'Scienze', 'Informatica',
 ])
+
+// ─── Materie speciali: giornate dedicate + supplemento €10 fuori data ───
+// Nelle giornate prefissate si possono prenotare più materie speciali (senza supplemento);
+// fuori data se ne può richiedere UNA sola, con supplemento €10.
+const MATERIE_SPECIALI = computed<string[]>(() => (portalConfigs.value as any)?.materie_speciali ?? [])
+const GIORNATE_SPECIALI = computed<Record<string, string[]>>(() => (portalConfigs.value as any)?.giornate_speciali ?? {})
+
+const materieSpecialiDelGiorno = computed<string[]>(() => GIORNATE_SPECIALI.value[form.dataDesiderata] ?? [])
+const specialiScelte = computed(() => form.materie.filter((m) => MATERIE_SPECIALI.value.includes(m)))
+// Materie speciali scelte che NON sono in programma nella data selezionata → supplemento
+const specialiFuoriData = computed(() => specialiScelte.value.filter((m) => !materieSpecialiDelGiorno.value.includes(m)))
+const specialeFuoriData = computed(() => specialiFuoriData.value.length > 0)
 
 const toast = useToast()
 const step = ref(1)
@@ -390,8 +431,24 @@ const studentSelezionato = computed(() => {
 
 function toggleMateria(m: string) {
   const idx = form.materie.indexOf(m)
-  if (idx === -1) form.materie.push(m)
-  else form.materie.splice(idx, 1)
+  if (idx === -1) {
+    // Fuori dalle giornate prefissate si può richiedere UNA sola materia speciale.
+    // Nelle giornate prefissate, invece, se ne possono prenotare più di una.
+    const isSpeciale = MATERIE_SPECIALI.value.includes(m)
+    const isFuoriData = isSpeciale && !materieSpecialiDelGiorno.value.includes(m)
+    if (isFuoriData && specialiFuoriData.value.length >= 1) {
+      toast.add({
+        title: 'Una sola materia speciale fuori data',
+        description: `Fuori dalle sue giornate puoi prenotare una sola materia speciale (hai già ${specialiFuoriData.value.join(', ')}).`,
+        color: 'warning',
+        icon: 'i-heroicons-exclamation-circle',
+      })
+      return
+    }
+    form.materie.push(m)
+  } else {
+    form.materie.splice(idx, 1)
+  }
 }
 
 function formatDateLong(dateStr: string) {

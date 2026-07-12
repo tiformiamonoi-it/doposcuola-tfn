@@ -28,10 +28,10 @@ export function oggiRomeStr(): string {
   return romeParts(new Date()).dateStr
 }
 
-// La disponibilità di OGGI si può modificare solo entro le 11:30 (ora italiana)
+// La disponibilità di OGGI si può modificare solo entro le 9:30 (ora italiana)
 export function disponibilitaOggiAncoraAperta(): boolean {
   const { hour, minute } = romeParts(new Date())
-  return hour < 11 || (hour === 11 && minute < 30)
+  return hour < 9 || (hour === 9 && minute < 30)
 }
 
 export function isOggiRome(dateStr: string): boolean {

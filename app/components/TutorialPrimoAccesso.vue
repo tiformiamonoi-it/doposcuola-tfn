@@ -33,17 +33,19 @@
 </template>
 
 <script setup lang="ts">
-// Tutorial di benvenuto al SOLO primo accesso (tutor, genitori, studenti).
+// Tutorial di benvenuto al primo accesso (tutor, genitori, studenti).
 // Si mostra quando user.tutorialVisto è false; "Salta" o "Fine" lo marcano visto per sempre.
+// Si può rivedere in ogni momento dal profilo (stato condiviso 'tutorial-riapri').
 const { user, fetch: refreshSession } = useUserSession()
 
+const riapri = useState('tutorial-riapri', () => false)
 const stepCorrente = ref(0)
 const chiudendo = ref(false)
 
 const STEPS_PER_RUOLO: Record<string, { icona: string; titolo: string; testo: string }[]> = {
   TUTOR: [
     { icona: 'i-heroicons-calendar', titolo: 'Il mio Calendario', testo: 'Qui vedi le tue lezioni e registri quelle di oggi. Ricorda: puoi inserirle o modificarle solo entro le 20:00 del giorno stesso.' },
-    { icona: 'i-heroicons-check-circle', titolo: 'Le tue disponibilità', testo: 'In Area Tutor segni i giorni in cui sei disponibile. La disponibilità di oggi si può cambiare solo entro le 11:30; domeniche, festivi e giorni passati sono bloccati.' },
+    { icona: 'i-heroicons-check-circle', titolo: 'Le tue disponibilità', testo: 'In Area Tutor segni i giorni in cui sei disponibile. La disponibilità di oggi si può cambiare solo entro le 9:30; domeniche, festivi e giorni passati sono bloccati.' },
     { icona: 'i-heroicons-document-text', titolo: 'Note sugli studenti', testo: 'Dopo ogni lezione puoi scrivere una nota: scegli tu se tenerla interna o condividerla con la famiglia. Trovi lo storico in Cronologia Note.' },
     { icona: 'i-heroicons-printer', titolo: 'Stampa il programma', testo: 'Dal calendario puoi stampare (o salvare in PDF) l\'elenco delle tue lezioni della settimana.' },
     { icona: 'i-heroicons-identification', titolo: 'Il tuo profilo', testo: 'Da "Il mio profilo" puoi cambiare la password quando vuoi.' },
@@ -66,13 +68,21 @@ const steps = computed(() => STEPS_PER_RUOLO[user.value?.role ?? ''] ?? [])
 const aperto = computed({
   get: () =>
     steps.value.length > 0
-    && user.value?.tutorialVisto === false
-    && user.value?.mustChangePassword !== true
-    && user.value?.termsAccepted !== false,
+    && (riapri.value || (
+      user.value?.tutorialVisto === false
+      && user.value?.mustChangePassword !== true
+      && user.value?.termsAccepted !== false
+    )),
   set: (v) => { if (!v) chiudi() },
 })
 
 async function chiudi() {
+  stepCorrente.value = 0
+  // Riapertura manuale dal profilo (tutorial già visto): basta chiudere
+  if (user.value?.tutorialVisto) {
+    riapri.value = false
+    return
+  }
   chiudendo.value = true
   try {
     await $fetch('/api/auth/tutorial-visto', { method: 'POST' })
@@ -81,6 +91,7 @@ async function chiudi() {
     // se fallisce, il tutorial ricomparirà al prossimo accesso: non blocca nulla
   } finally {
     chiudendo.value = false
+    riapri.value = false
   }
 }
 </script>

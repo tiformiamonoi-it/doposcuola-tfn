@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { db } from '../../database/client'
 import { users } from '../../database/schema'
+import { nomeProprio } from '../../utils/nomi'
 
 const UpdateProfileSchema = z.object({
   firstName:       z.string().min(1).max(100).optional(),
@@ -28,8 +29,8 @@ export default defineEventHandler(async (event) => {
   const data = result.data
   const updates: Record<string, unknown> = { updatedAt: new Date() }
 
-  if (data.firstName) updates.firstName = data.firstName
-  if (data.lastName) updates.lastName = data.lastName
+  if (data.firstName) updates.firstName = nomeProprio(data.firstName)
+  if (data.lastName) updates.lastName = nomeProprio(data.lastName)
 
   if (data.newPassword) {
     if (!data.currentPassword) {

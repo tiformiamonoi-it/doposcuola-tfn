@@ -18,9 +18,9 @@
           <div class="flex items-center justify-between">
             <h2 class="font-semibold text-slate-800">Le tue disponibilità</h2>
             <div class="flex items-center gap-2">
-              <UButton icon="i-heroicons-chevron-left" color="white" variant="ghost" size="sm" @click="cambiaMese(-1)" />
+              <UButton icon="i-heroicons-chevron-left" color="neutral" variant="ghost" size="sm" @click="cambiaMese(-1)" />
               <span class="text-sm font-medium w-24 text-center">{{ nomeMeseCorrente }}</span>
-              <UButton icon="i-heroicons-chevron-right" color="white" variant="ghost" size="sm" @click="cambiaMese(1)" />
+              <UButton icon="i-heroicons-chevron-right" color="neutral" variant="ghost" size="sm" @click="cambiaMese(1)" />
             </div>
           </div>
         </template>
@@ -31,7 +31,10 @@
           <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-sm bg-white border border-slate-200"></div> Non disponibile</div>
           <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-sm bg-slate-100 border border-slate-200"></div> Non selezionabile (passato, chiusura, domenica)</div>
         </div>
-        <p class="text-xs text-slate-400 mb-4">La disponibilità di oggi si può modificare solo entro le 11:30.</p>
+        <p v-if="forfait" class="text-xs text-primary-600 mb-4 font-medium">
+          Con il fisso mensile sei sempre disponibile dal lunedì al venerdì: puoi aggiungere disponibilità solo il sabato.
+        </p>
+        <p class="text-xs text-slate-400 mb-4">La disponibilità di oggi si può modificare solo entro le 9:30.</p>
 
         <!-- Griglia Giorni -->
         <div class="grid grid-cols-7 gap-1 text-center">
@@ -111,12 +114,21 @@ const { data: availData, refresh: refreshAvail } = useLazyFetch<any>('/api/tutor
   watch: [meseRiferimento]
 })
 
+const forfait = computed(() => availData.value?.forfait ?? false)
+
+function isFerialeForfait(dateStr: string) {
+  const giorno = new Date(dateStr + 'T00:00:00Z').getUTCDay()
+  return forfait.value && giorno >= 1 && giorno <= 5
+}
+
 function isDisponibile(dateStr: string) {
+  // Fisso mensile: lun-ven sempre disponibile d'ufficio (salvo chiusure)
+  if (isFerialeForfait(dateStr) && !chiusure.value.has(dateStr)) return true
   const lista = availData.value?.disponibilita ?? []
   return lista.some((a: any) => format(new Date(a.date), 'yyyy-MM-dd') === dateStr)
 }
 
-// ─── Giorni bloccati: passati, oggi dopo le 11:30 (ora del SERVER), domeniche, chiusure ───
+// ─── Giorni bloccati: passati, oggi dopo le 9:30 (ora del SERVER), domeniche, chiusure ───
 const chiusure = computed(() => new Set<string>(availData.value?.chiusure ?? []))
 const oggiServer = computed(() => availData.value?.oggi ?? '')
 const oggiBloccato = computed(() => availData.value?.oggiBloccato ?? false)
@@ -124,8 +136,9 @@ const oggiBloccato = computed(() => availData.value?.oggiBloccato ?? false)
 function motivoBlocco(dateStr: string): string | null {
   if (new Date(dateStr + 'T00:00:00Z').getUTCDay() === 0) return 'La domenica il centro è chiuso'
   if (chiusure.value.has(dateStr)) return 'Giorno di chiusura'
+  if (isFerialeForfait(dateStr)) return 'Sempre disponibile (fisso mensile)'
   if (oggiServer.value && dateStr < oggiServer.value) return 'Giorno passato'
-  if (dateStr === oggiServer.value && oggiBloccato.value) return 'Modificabile solo entro le 11:30'
+  if (dateStr === oggiServer.value && oggiBloccato.value) return 'Modificabile solo entro le 9:30'
   return null
 }
 

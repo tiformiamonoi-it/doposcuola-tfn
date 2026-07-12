@@ -85,6 +85,7 @@ const allNavItems = [
   { icon: 'i-heroicons-home',          label: 'Home',    route: '/portale',          always: true },
   { icon: 'i-heroicons-calendar-days', label: 'Prenota', route: '/portale/prenota',  always: false },
   { icon: 'i-heroicons-document-text', label: 'Note',    route: '/portale/note',     always: true },
+  { icon: 'i-heroicons-tag',           label: 'Sconti',  route: '/portale/sconti',   always: true },
   { icon: 'i-heroicons-user',          label: 'Profilo', route: '/portale/profilo',  always: true },
 ]
 

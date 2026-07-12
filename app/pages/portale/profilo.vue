@@ -12,7 +12,7 @@
       <dl class="space-y-2 text-sm">
         <div class="flex justify-between py-1 border-b border-slate-100">
           <span class="text-slate-500">Nome</span>
-          <span class="font-medium text-slate-800">{{ user?.firstName }} {{ user?.lastName }}</span>
+          <span class="font-medium text-slate-800">{{ [user?.firstName, user?.lastName].filter(Boolean).join(' ') || '—' }}</span>
         </div>
         <div class="flex justify-between py-1">
           <span class="text-slate-500">Email</span>
@@ -90,6 +90,15 @@
 
     <UButton
       block
+      variant="soft"
+      icon="i-heroicons-play-circle"
+      @click="tutorialRiapri = true"
+    >
+      Rivedi il tutorial di benvenuto
+    </UButton>
+
+    <UButton
+      block
       variant="outline"
       color="error"
       icon="i-heroicons-arrow-right-on-rectangle"
@@ -111,6 +120,7 @@ useHead({ title: 'Profilo — Portale Famiglie' })
 const toast = useToast()
 const { user } = useUserSession()
 const isStudente = computed(() => user.value?.role === 'STUDENTE')
+const tutorialRiapri = useState('tutorial-riapri', () => false)
 
 const { data: studentsData, pending: pendingStudents } = useLazyFetch('/api/portal/students')
 const students = computed(() => (studentsData.value as any[]) ?? [])

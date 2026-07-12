@@ -7,13 +7,32 @@
       
       <div class="relative z-10 space-y-2">
         <h1 class="font-heading text-2xl sm:text-3xl font-extrabold tracking-tight">
-          Ciao, {{ user?.firstName }}! 👋
+          Ciao{{ user?.firstName ? `, ${user.firstName}` : '' }}! 👋
         </h1>
         <p class="text-indigo-100 text-sm sm:text-base max-w-md">
           Qui puoi monitorare le ore dei ragazzi e gestire in autonomia le lezioni prenotate.
         </p>
       </div>
     </div>
+
+    <!-- ═══ GIORNATE MATERIE SPECIALI DEL MESE ═══ -->
+    <UCard v-if="giornateSpecialiMese.length" class="border border-amber-200 bg-amber-50/60">
+      <div class="flex items-start gap-3">
+        <span class="text-xl leading-none mt-0.5">⭐</span>
+        <div class="flex-1 space-y-1">
+          <h3 class="font-semibold text-slate-800 text-sm">Giornate speciali di <span class="capitalize">{{ nomeMeseCorrente }}</span></h3>
+          <p class="text-xs text-slate-500">
+            In queste giornate le materie speciali si prenotano senza supplemento;
+            negli altri giorni è previsto un supplemento di €10 per giornata.
+          </p>
+          <ul class="mt-2 space-y-1">
+            <li v-for="g in giornateSpecialiMese" :key="g.materia" class="text-sm text-slate-700">
+              <strong>{{ g.materia }}</strong>: <span class="capitalize">{{ g.giorni }}</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </UCard>
 
     <!-- ═══ SEZIONE STUDENTI / PACCHETTI ═══ -->
     <div class="space-y-4">
@@ -289,6 +308,27 @@ const toast = useToast()
 const { user } = useUserSession()
 
 const { data: portalConfigs } = useLazyFetch('/api/portal/configs')
+
+// ─── Giornate speciali del mese corrente, raggruppate per materia ───
+const nomeMeseCorrente = new Date().toLocaleDateString('it-IT', { month: 'long' })
+const giornateSpecialiMese = computed(() => {
+  const giornate: Record<string, string[]> = (portalConfigs.value as any)?.giornate_speciali ?? {}
+  const oggi = new Date()
+  const mese = `${oggi.getFullYear()}-${String(oggi.getMonth() + 1).padStart(2, '0')}`
+  const perMateria = new Map<string, string[]>()
+  for (const [data, materie] of Object.entries(giornate).sort(([a], [b]) => a.localeCompare(b))) {
+    if (!data.startsWith(mese)) continue
+    // Un giorno può avere più materie speciali
+    for (const materia of (Array.isArray(materie) ? materie : [materie])) {
+      if (!perMateria.has(materia)) perMateria.set(materia, [])
+      perMateria.get(materia)!.push(data)
+    }
+  }
+  return [...perMateria.entries()].map(([materia, date]) => ({
+    materia,
+    giorni: date.map((d) => new Date(d + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric' })).join(', '),
+  }))
+})
 const MATERIE = computed(() => (portalConfigs.value as any)?.materie ?? [
   'Matematica', 'Fisica', 'Chimica', 'Italiano', 'Inglese',
   'Storia', 'Geografia', 'Latino', 'Greco', 'Scienze', 'Informatica',

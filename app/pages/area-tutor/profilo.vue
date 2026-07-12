@@ -44,6 +44,15 @@
         </UButton>
       </template>
     </UCard>
+
+    <UButton
+      block
+      variant="soft"
+      icon="i-heroicons-play-circle"
+      @click="tutorialRiapri = true"
+    >
+      Rivedi il tutorial di benvenuto
+    </UButton>
   </div>
 </template>
 
@@ -53,6 +62,7 @@ useHead({ title: 'Il mio profilo — Ti Formiamo Noi' })
 
 const toast = useToast()
 const { user } = useUserSession()
+const tutorialRiapri = useState('tutorial-riapri', () => false)
 
 const pwForm = reactive({ currentPassword: '', newPassword: '', confirmPassword: '' })
 const pwError = ref('')

@@ -19,6 +19,8 @@ node_modules
 # Dump di database (contengono dati personali: MAI su GitHub)
 *.sql
 !server/database/migrations/*.sql
+backup-*.json
+*-backup*.json
 
 # OS
 .DS_Store

@@ -7,13 +7,17 @@
       <p class="text-sm text-slate-500 mt-0.5">Configura il gestionale: pacchetti standard e parametri generali</p>
     </div>
 
-    <UTabs :items="[
+    <!-- Da mobile i tab non entrano tutti: la lista scorre in orizzontale -->
+    <UTabs
+      :ui="{ list: 'overflow-x-auto', trigger: 'shrink-0' }"
+      :items="[
       { label: 'Pacchetti Standard', slot: 'pacchetti' },
       { label: 'Slot Orari', slot: 'slot' },
       { label: 'Materie & Tariffe', slot: 'materie_tariffe' },
       { label: 'Categorie Contabili', slot: 'categorie' },
       { label: 'Spese Fisse', slot: 'spese' },
-      { label: 'Chiusure', slot: 'chiusure' }
+      { label: 'Chiusure', slot: 'chiusure' },
+      { label: 'Sconti', slot: 'sconti' }
     ]">
       <template #pacchetti>
         <UCard class="mt-4">
@@ -122,12 +126,91 @@
                 <UButton icon="i-heroicons-plus" @click="aggiungiMateria" />
               </div>
               <div class="flex flex-wrap gap-2">
-                <UBadge v-for="(m, idx) in materie" :key="idx" color="neutral" variant="subtle" class="flex items-center gap-1">
+                <UBadge
+                  v-for="(m, idx) in materie"
+                  :key="idx"
+                  :color="materieSpeciali.includes(m) ? 'warning' : 'neutral'"
+                  variant="subtle"
+                  class="flex items-center gap-1"
+                >
+                  <UIcon
+                    :name="materieSpeciali.includes(m) ? 'i-heroicons-star-solid' : 'i-heroicons-star'"
+                    class="w-3 h-3 cursor-pointer"
+                    :class="materieSpeciali.includes(m) ? 'text-amber-500' : 'text-slate-300 hover:text-amber-400'"
+                    :title="materieSpeciali.includes(m) ? 'Materia speciale — clicca per renderla standard' : 'Clicca per renderla speciale'"
+                    @click="toggleSpeciale(m)"
+                  />
                   {{ m }}
                   <UIcon name="i-heroicons-x-mark" class="w-3 h-3 cursor-pointer text-slate-400 hover:text-red-500" @click="rimuoviMateria(idx)" />
                 </UBadge>
               </div>
+              <p class="text-xs text-slate-400">
+                ⭐ = materia <strong>speciale</strong>: si prenota nelle giornate del calendario qui accanto;
+                fuori da quelle giornate scatta il supplemento di €10.
+              </p>
             </div>
+            <template #footer>
+              <UButton @click="salvaConfigs" :loading="salvandoConfigs">Salva Modifiche</UButton>
+            </template>
+          </UCard>
+
+          <!-- CARD GIORNATE SPECIALI (calendario unico) -->
+          <UCard>
+            <template #header>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-star" class="w-4 h-4 text-amber-500" />
+                  <span class="font-medium text-slate-800">Giornate speciali</span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <UButton icon="i-heroicons-chevron-left" color="neutral" variant="ghost" size="xs" @click="cambiaMeseSpeciali(-1)" />
+                  <span class="text-xs font-medium w-28 text-center capitalize">{{ nomeMeseSpeciali }}</span>
+                  <UButton icon="i-heroicons-chevron-right" color="neutral" variant="ghost" size="xs" @click="cambiaMeseSpeciali(1)" />
+                </div>
+              </div>
+            </template>
+
+            <p v-if="materieSpeciali.length === 0" class="text-sm text-slate-400 py-6 text-center">
+              Prima marca almeno una materia come ⭐ speciale nella card Materie.
+            </p>
+            <div v-else class="space-y-3">
+              <UFormField label="Materia da assegnare (poi clicca i giorni)">
+                <USelect v-model="materiaPennello" :items="materieSpeciali" class="w-full" />
+              </UFormField>
+
+              <div class="grid grid-cols-7 gap-1 text-center">
+                <div v-for="g in ['Lun','Mar','Mer','Gio','Ven','Sab','Dom']" :key="g" class="text-[10px] font-medium text-slate-400 py-1">{{ g }}</div>
+                <div v-for="blank in blankSpeciali" :key="'bs'+blank" />
+                <button
+                  v-for="day in giorniMeseSpeciali"
+                  :key="day.dateStr"
+                  type="button"
+                  class="p-1 rounded-md border text-xs min-h-[48px] flex flex-col items-center justify-start gap-0.5 relative"
+                  :class="day.domenica || chiusureSet.has(day.dateStr)
+                    ? 'bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed'
+                    : materieDelGiorno(day.dateStr).length
+                      ? (materieDelGiorno(day.dateStr).includes(materiaPennello) ? 'bg-amber-100 border-amber-400 text-amber-800 font-semibold' : 'bg-amber-50 border-amber-300 text-amber-700 font-semibold')
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-amber-300'"
+                  :title="materieDelGiorno(day.dateStr).join(', ')"
+                  @click="toggleGiornoSpeciale(day.dateStr, day.domenica)"
+                >
+                  <span>{{ day.numero }}</span>
+                  <span
+                    v-for="m in materieDelGiorno(day.dateStr)"
+                    :key="m"
+                    class="text-[9px] leading-tight truncate max-w-full w-full px-0.5 rounded"
+                    :class="m === materiaPennello ? 'bg-amber-200/70' : ''"
+                  >{{ m }}</span>
+                </button>
+              </div>
+
+              <p class="text-xs text-slate-400">
+                Calendario unico: ogni giorno può avere <strong>più materie speciali</strong>.
+                Scegli la materia col menù qui sopra, poi clicca i giorni per aggiungerla o toglierla
+                (la materia selezionata è evidenziata). Le famiglie vedono queste date nel portale. Ricordati di salvare.
+              </p>
+            </div>
+
             <template #footer>
               <UButton @click="salvaConfigs" :loading="salvandoConfigs">Salva Modifiche</UButton>
             </template>
@@ -298,6 +381,78 @@
         </UCard>
       </template>
 
+      <template #sconti>
+        <UCard class="mt-4">
+          <template #header>
+            <div class="flex items-center gap-2">
+              <UIcon name="i-heroicons-tag" class="w-4 h-4 text-tfn-500" />
+              <span class="font-medium text-slate-800">Sconti e convenzioni</span>
+              <UBadge color="neutral" variant="subtle">{{ sconti.length }}</UBadge>
+            </div>
+          </template>
+
+          <div class="space-y-4">
+            <p class="text-xs text-slate-500">
+              Le convenzioni con le attività partner (cartolibrerie, panifici, palestre…) mostrate alle famiglie
+              nella sezione <strong>Sconti</strong> del portale: immagine + breve descrizione.
+            </p>
+
+            <!-- Nuova convenzione -->
+            <div class="p-3 bg-slate-50 rounded-lg space-y-3">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <UFormField label="Nome attività" required>
+                  <UInput v-model="nuovoSconto.nome" placeholder="Es. Cartolibreria Rossi" class="w-full" />
+                </UFormField>
+                <UFormField label="Immagine (logo o foto)">
+                  <UFileUpload
+                    v-model="fileSconto"
+                    accept="image/*"
+                    label="Trascina o clicca per scegliere"
+                    description="JPG/PNG — viene ridimensionata automaticamente"
+                    class="w-full min-h-24"
+                  />
+                </UFormField>
+              </div>
+              <UFormField label="Breve descrizione dello sconto" required>
+                <UTextarea
+                  v-model="nuovoSconto.descrizione"
+                  :rows="2"
+                  placeholder="Es. 10% di sconto su tutto il materiale scolastico mostrando la tessera."
+                  class="w-full"
+                />
+              </UFormField>
+              <div class="flex items-center gap-3">
+                <img v-if="nuovoSconto.immagine" :src="nuovoSconto.immagine" class="h-12 w-12 rounded object-cover border border-slate-200" />
+                <UButton icon="i-heroicons-plus" @click="aggiungiSconto">Aggiungi convenzione</UButton>
+              </div>
+            </div>
+
+            <!-- Elenco convenzioni -->
+            <div v-if="sconti.length === 0" class="py-8 text-center text-slate-400 text-sm">
+              <UIcon name="i-heroicons-tag" class="w-8 h-8 mx-auto mb-2 text-slate-300" />
+              Nessuna convenzione. Aggiungine una qui sopra: comparirà nel portale famiglie.
+            </div>
+            <div v-else class="divide-y divide-slate-100">
+              <div v-for="(s, idx) in sconti" :key="idx" class="flex items-center gap-3 py-3 px-1">
+                <img v-if="s.immagine" :src="s.immagine" class="h-12 w-12 rounded object-cover border border-slate-200 shrink-0" />
+                <div v-else class="h-12 w-12 rounded bg-slate-100 flex items-center justify-center shrink-0">
+                  <UIcon name="i-heroicons-building-storefront" class="w-5 h-5 text-slate-300" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="font-medium text-sm text-slate-800">{{ s.nome }}</div>
+                  <p class="text-xs text-slate-500 truncate">{{ s.descrizione }}</p>
+                </div>
+                <UButton icon="i-heroicons-trash" variant="ghost" color="error" size="xs" @click="rimuoviSconto(idx)" />
+              </div>
+            </div>
+          </div>
+
+          <template #footer>
+            <UButton @click="salvaConfigs" :loading="salvandoConfigs">Salva Modifiche</UButton>
+          </template>
+        </UCard>
+      </template>
+
     </UTabs>
 
     <!-- ─── MODAL CREA TEMPLATE ─── -->
@@ -423,6 +578,8 @@
 
 <script setup lang="ts">
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
+import { addMonths, format, getDay, getDaysInMonth, setDate, startOfMonth } from 'date-fns'
+import { it } from 'date-fns/locale'
 
 definePageMeta({ middleware: ['admin-only'] })
 
@@ -613,13 +770,135 @@ const materie = ref<string[]>([])
 const tariffe = ref({ SINGOLA: 5, GRUPPO: 8, MAXI: 8.5 })
 const speseFisse = ref<{nome: string, importo: number}[]>([])
 const whatsappNumero = ref('')
+const sconti = ref<{ nome: string; descrizione: string; immagine: string }[]>([])
+const materieSpeciali = ref<string[]>([])
+const giornateSpeciali = ref<Record<string, string[]>>({})
 
 watchEffect(() => {
   try { materie.value = JSON.parse(configs.value.materie || '[]') } catch(e){}
   try { tariffe.value = JSON.parse(configs.value.tariffe_tutor || '{"SINGOLA":5,"GRUPPO":8,"MAXI":8.5}') } catch(e){}
   try { speseFisse.value = JSON.parse(configs.value.spese_fisse || '[]') } catch(e){}
+  try { sconti.value = JSON.parse(configs.value.sconti || '[]') } catch(e){}
+  try { materieSpeciali.value = JSON.parse(configs.value.materie_speciali || '[]') } catch(e){}
+  try {
+    // Normalizza in array (tollera il vecchio formato "una materia per giorno")
+    const raw = JSON.parse(configs.value.giornate_speciali || '{}')
+    const out: Record<string, string[]> = {}
+    for (const [d, m] of Object.entries(raw ?? {})) {
+      out[d] = Array.isArray(m) ? (m as string[]) : (typeof m === 'string' && m ? [m] : [])
+    }
+    giornateSpeciali.value = out
+  } catch(e){}
   whatsappNumero.value = configs.value.whatsapp_numero || ''
 })
+
+function materieDelGiorno(dateStr: string): string[] {
+  return giornateSpeciali.value[dateStr] ?? []
+}
+
+// ─── Materie speciali + calendario unico delle giornate ───
+function toggleSpeciale(m: string) {
+  const i = materieSpeciali.value.indexOf(m)
+  if (i === -1) {
+    materieSpeciali.value.push(m)
+  } else {
+    materieSpeciali.value.splice(i, 1)
+    // Togliendo la stella si libera la materia da tutte le giornate del calendario
+    for (const [d, mats] of Object.entries(giornateSpeciali.value)) {
+      const next = mats.filter((x) => x !== m)
+      if (next.length) giornateSpeciali.value[d] = next
+      else delete giornateSpeciali.value[d]
+    }
+  }
+}
+
+const meseSpeciali = ref(startOfMonth(new Date()))
+const nomeMeseSpeciali = computed(() => format(meseSpeciali.value, 'MMMM yyyy', { locale: it }))
+function cambiaMeseSpeciali(dir: number) { meseSpeciali.value = addMonths(meseSpeciali.value, dir) }
+
+const blankSpeciali = computed(() => {
+  const dow = getDay(meseSpeciali.value) // 0 = Dom
+  return dow === 0 ? 6 : dow - 1
+})
+
+const giorniMeseSpeciali = computed(() => {
+  const tot = getDaysInMonth(meseSpeciali.value)
+  return Array.from({ length: tot }, (_, i) => {
+    const d = setDate(meseSpeciali.value, i + 1)
+    return { numero: i + 1, dateStr: format(d, 'yyyy-MM-dd'), domenica: getDay(d) === 0 }
+  })
+})
+
+const materiaPennello = ref('')
+watchEffect(() => {
+  // Il "pennello" resta sempre su una materia speciale valida
+  if (!materieSpeciali.value.includes(materiaPennello.value)) {
+    materiaPennello.value = materieSpeciali.value[0] ?? ''
+  }
+})
+
+const chiusureSet = computed(() =>
+  new Set((closures.value as any[]).map((c: any) => format(new Date(c.date), 'yyyy-MM-dd')))
+)
+
+function toggleGiornoSpeciale(dateStr: string, domenica: boolean) {
+  if (domenica || chiusureSet.value.has(dateStr) || !materiaPennello.value) return
+  const arr = giornateSpeciali.value[dateStr] ?? []
+  if (arr.includes(materiaPennello.value)) {
+    const next = arr.filter((x) => x !== materiaPennello.value)
+    if (next.length) giornateSpeciali.value[dateStr] = next
+    else delete giornateSpeciali.value[dateStr]
+  } else {
+    giornateSpeciali.value[dateStr] = [...arr, materiaPennello.value]
+  }
+}
+
+// ─── Sconti e convenzioni (portale famiglie) ───
+const nuovoSconto = reactive({ nome: '', descrizione: '', immagine: '' })
+const fileSconto = ref<File | null>(null)
+
+// L'immagine scelta viene rimpicciolita nel browser (max 800px, JPEG) prima di salvarla:
+// così il database resta leggero e il portale carica in fretta.
+watch(fileSconto, async (file) => {
+  if (!file) return
+  try {
+    nuovoSconto.immagine = await ridimensionaImmagine(file)
+  } catch {
+    toast.add({ title: 'Immagine non valida', description: 'Scegli un file JPG o PNG.', color: 'error' })
+    fileSconto.value = null
+  }
+})
+
+function ridimensionaImmagine(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const MAX = 800
+      const scala = Math.min(1, MAX / Math.max(img.width, img.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(img.width * scala)
+      canvas.height = Math.round(img.height * scala)
+      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+      URL.revokeObjectURL(url)
+      resolve(canvas.toDataURL('image/jpeg', 0.82))
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Immagine non leggibile')) }
+    img.src = url
+  })
+}
+
+function aggiungiSconto() {
+  if (!nuovoSconto.nome.trim() || !nuovoSconto.descrizione.trim()) {
+    toast.add({ title: 'Compila nome e descrizione', color: 'warning', icon: 'i-heroicons-exclamation-circle' })
+    return
+  }
+  sconti.value.push({ nome: nuovoSconto.nome.trim(), descrizione: nuovoSconto.descrizione.trim(), immagine: nuovoSconto.immagine })
+  Object.assign(nuovoSconto, { nome: '', descrizione: '', immagine: '' })
+  fileSconto.value = null
+  toast.add({ title: 'Convenzione aggiunta', description: 'Ricordati di premere "Salva Modifiche".', color: 'info' })
+}
+function rimuoviSconto(idx: number) { sconti.value.splice(idx, 1) }
 
 const nuovaMateria = ref('')
 function aggiungiMateria() {
@@ -628,7 +907,11 @@ function aggiungiMateria() {
     nuovaMateria.value = ''
   }
 }
-function rimuoviMateria(idx: number) { materie.value.splice(idx, 1) }
+function rimuoviMateria(idx: number) {
+  const [rimossa] = materie.value.splice(idx, 1)
+  // Se era speciale, togli anche stella e giornate in calendario
+  if (rimossa && materieSpeciali.value.includes(rimossa)) toggleSpeciale(rimossa)
+}
 
 const nuovaSpesa = reactive({ nome: '', importo: 0 })
 function aggiungiSpesa() {
@@ -651,6 +934,9 @@ async function salvaConfigs() {
         tariffe_tutor: JSON.stringify(tariffe.value),
         spese_fisse: JSON.stringify(speseFisse.value),
         whatsapp_numero: whatsappNumero.value,
+        sconti: JSON.stringify(sconti.value),
+        materie_speciali: JSON.stringify(materieSpeciali.value),
+        giornate_speciali: JSON.stringify(giornateSpeciali.value),
       }
     })
     toast.add({ title: 'Impostazioni salvate', color: 'success' })

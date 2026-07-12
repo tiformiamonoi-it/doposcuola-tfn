@@ -1,6 +1,7 @@
 import { db } from '../../../database/client'
 import * as tables from '../../../database/schema'
 import { AdminCreateBookingSchema } from '../../../../shared/schemas/booking.schema'
+import { valutaMaterieSpeciali } from '../../../services/booking.service'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -19,6 +20,15 @@ export default defineEventHandler(async (event) => {
 
   const data = parsed.data
 
+  // Materie speciali: stesse regole del portale (max 1/giorno, fuori data → supplemento €10)
+  let supplemento: string | null = null
+  try {
+    const dateStr = new Date(data.requestedDate).toISOString().split('T')[0]
+    supplemento = await valutaMaterieSpeciali(data.subjects ?? [], dateStr!)
+  } catch (err: any) {
+    throw createError({ statusCode: 400, statusMessage: err.message })
+  }
+
   const [newBooking] = await db.insert(tables.bookings).values({
     userId: user.id, // L'admin che sta creando la prenotazione o il genitore
     studentId: data.studentId || null,
@@ -28,6 +38,7 @@ export default defineEventHandler(async (event) => {
     requestedDate: new Date(data.requestedDate),
     status: data.status,
     notes: data.notes || null,
+    supplemento,
   }).returning()
 
   if (!newBooking) {

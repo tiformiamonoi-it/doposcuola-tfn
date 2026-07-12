@@ -1,7 +1,8 @@
-import { pgTable, text, varchar, timestamp, index } from 'drizzle-orm/pg-core'
+import { pgTable, text, varchar, timestamp, index, numeric } from 'drizzle-orm/pg-core'
 import { cuid, bookingStatusEnum } from './common'
 import { users } from './users'
 import { students } from './students'
+import { packages } from './packages'
 
 export const bookings = pgTable('bookings', {
   id:             text('id').primaryKey().$defaultFn(cuid),
@@ -16,6 +17,13 @@ export const bookings = pgTable('bookings', {
   notes:         text('notes'),
 
   status: bookingStatusEnum('status').notNull().default('PENDING'),
+
+  // Materia speciale prenotata FUORI dalla sua giornata prefissata:
+  // supplemento richiesto (€10/giornata). Diventa un aumento del pacchetto dello
+  // studente solo dopo l'OK di ADMIN/SUPER_TUTOR (supplementoApplicatoAt valorizzato).
+  supplemento:            numeric('supplemento', { precision: 10, scale: 2 }),
+  supplementoApplicatoAt: timestamp('supplemento_applicato_at', { withTimezone: true }),
+  supplementoPackageId:   text('supplemento_package_id').references(() => packages.id, { onDelete: 'set null' }),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

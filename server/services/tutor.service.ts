@@ -8,6 +8,7 @@ import {
 import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { sendEmail, emailBenvenutoCredenziali } from '../utils/email'
+import { nomeProprio } from '../utils/nomi'
 import type {
   CreateTutorInput, UpdateTutorInput, TutorQuery,
   PayTutorInput, CreateReimbursementInput, PayReimbursementInput,
@@ -209,8 +210,8 @@ export async function createTutor(data: CreateTutorInput) {
     const [user] = await tx.insert(users).values({
       email:     data.email,
       password:  hashed,
-      firstName: data.firstName,
-      lastName:  data.lastName,
+      firstName: nomeProprio(data.firstName),
+      lastName:  nomeProprio(data.lastName),
       role:      data.role ?? 'TUTOR',
       phone:     data.phone ?? null,
       mustChangePassword: true, // password impostata dall'admin: obbligo cambio al primo accesso
@@ -253,6 +254,10 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
     if (userFields.includes(key))    userChanges[key]    = val
     if (profileFields.includes(key)) profileChanges[key] = val
   }
+
+  // Nomi sempre in formato "Nome Proprio" (mai tutto maiuscolo/minuscolo)
+  if (typeof userChanges.firstName === 'string') userChanges.firstName = nomeProprio(userChanges.firstName)
+  if (typeof userChanges.lastName === 'string')  userChanges.lastName  = nomeProprio(userChanges.lastName)
 
   // Reset password (admin): salvata solo hashata, mai in chiaro
   if (data.password) {
@@ -461,35 +466,55 @@ export async function getMonthlyPerformance(tutorId: string, months = 6) {
     if (parsed.SINGOLA) tariffaFallback = parseFloat(parsed.SINGOLA)
   } catch { /* fallback 25.0 */ }
 
+  // Il compenso è PER LEZIONE: va sommato una volta sola per lezione.
+  // Il vecchio JOIN diretto con lesson_students lo contava una volta per ogni alunno
+  // della lezione, gonfiando i compensi (e rendendo i margini sempre negativi).
+  // Il ricavo invece è per alunno: lo calcola la subquery LATERAL, una riga per lezione.
   const rows = await db.execute(sql`
     SELECT
       DATE_TRUNC('month', l.data) AS mese,
-      COUNT(DISTINCT l.id)::text  AS num_lezioni,
-      COUNT(ls.id)::text          AS num_studenti_slot,
+      COUNT(*)::text AS num_lezioni,
+      COALESCE(SUM(r.num_studenti), 0)::text AS num_studenti_slot,
       COALESCE(SUM(l.compenso_tutor::numeric), 0)::text AS compenso_totale,
-      COALESCE(SUM(
-        CASE WHEN l.mezza_lezione THEN 0.5 ELSE 1.0 END
-        * COALESCE(
-            p.tariffa_oraria::numeric,
-            CASE
-              WHEN p.ore_acquistate IS NOT NULL AND p.ore_acquistate::numeric > 0
-                   AND p.prezzo_totale IS NOT NULL
-              THEN p.prezzo_totale::numeric / p.ore_acquistate::numeric
-              ELSE ${tariffaFallback}
-            END
-          )
-      ), 0)::text AS ricavo_totale
+      COALESCE(SUM(r.ricavo), 0)::text AS ricavo_totale
     FROM lessons l
-    JOIN lesson_students ls ON ls.lesson_id = l.id
-    LEFT JOIN packages p ON p.id = ls.package_id
+    LEFT JOIN LATERAL (
+      SELECT COUNT(ls.id) AS num_studenti,
+             SUM(
+               CASE WHEN l.mezza_lezione THEN 0.5 ELSE 1.0 END
+               * COALESCE(
+                   p.tariffa_oraria::numeric,
+                   CASE
+                     WHEN p.ore_acquistate IS NOT NULL AND p.ore_acquistate::numeric > 0
+                          AND p.prezzo_totale IS NOT NULL
+                     THEN p.prezzo_totale::numeric / p.ore_acquistate::numeric
+                     ELSE ${tariffaFallback}
+                   END
+                 )
+             ) AS ricavo
+      FROM lesson_students ls
+      LEFT JOIN packages p ON p.id = ls.package_id
+      WHERE ls.lesson_id = l.id
+    ) r ON true
     WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate.toISOString().slice(0, 10)}
     GROUP BY DATE_TRUNC('month', l.data)
     ORDER BY mese DESC
   `)
 
+  // Tutor a fisso mensile (FORFAIT): il compenso reale è il fisso, non la somma per lezione
+  // (stessa regola dello storico compensi, così le due tabelle tornano).
+  const [profiloPerf] = await db
+    .select({ modalitaPagamento: tutorProfiles.modalitaPagamento, importoForfait: tutorProfiles.importoForfait })
+    .from(tutorProfiles)
+    .where(eq(tutorProfiles.userId, tutorId))
+    .limit(1)
+  const forfait = profiloPerf?.modalitaPagamento === 'FORFAIT' && profiloPerf.importoForfait
+    ? parseFloat(profiloPerf.importoForfait as string)
+    : null
+
   return (rows as any[]).map(row => {
     const ricavo   = parseFloat(row.ricavo_totale)
-    const compenso = parseFloat(row.compenso_totale)
+    const compenso = forfait ?? parseFloat(row.compenso_totale)
     const margine  = ricavo - compenso
     const meseDate = new Date(row.mese)
 

@@ -3,6 +3,7 @@ import { bookings, bookingSubjects, closureDates } from '../../../database/schem
 import { UpdateBookingSchema } from '#shared/schemas/booking.schema'
 import { eq, sql } from 'drizzle-orm'
 import { getPortalStudentIds } from '../../../utils/portal'
+import { valutaMaterieSpeciali } from '../../../services/booking.service'
 
 // PUT /api/portal/bookings/[id] — genitore o studente collegato
 export default defineEventHandler(async (event) => {
@@ -81,6 +82,16 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Il centro è chiuso nella data selezionata' })
   }
 
+  // 5. Materie speciali: ricalcola il supplemento su nuova data/materie.
+  // Se il supplemento è GIÀ stato applicato al pacchetto, non si tocca
+  // (l'eventuale rimborso lo gestisce la segreteria a mano).
+  let nuovoSupplemento: string | null
+  try {
+    nuovoSupplemento = await valutaMaterieSpeciali(result.data.materie, newStr!)
+  } catch (err: any) {
+    throw createError({ statusCode: 400, statusMessage: err.message })
+  }
+
   // Esegue l'aggiornamento in transazione per garantire integrità
   await db.transaction(async (tx) => {
     // 1. Aggiorna la data e le note della prenotazione principale
@@ -88,6 +99,7 @@ export default defineEventHandler(async (event) => {
       .set({
         requestedDate: newDate,
         notes: result.data.noteOrario ?? null,
+        ...(booking.supplementoApplicatoAt ? {} : { supplemento: nuovoSupplemento }),
         updatedAt: new Date()
       })
       .where(eq(bookings.id, id))
