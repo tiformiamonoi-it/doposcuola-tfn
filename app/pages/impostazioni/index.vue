@@ -371,7 +371,7 @@
             <div v-if="pendingClosures" class="py-2"><USkeleton class="h-10 w-full" /></div>
             <UTable v-else :data="closures" :columns="[{ accessorKey: 'date', header: 'Data' }, { accessorKey: 'description', header: 'Motivo' }, { id: 'azioni', header: '' }]">
               <template #date-cell="{ row }">
-                <span class="font-medium">{{ new Date(row.original.date).toLocaleDateString('it-IT') }}</span>
+                <span class="font-medium">{{ row.original.date.split('-').reverse().join('/') }}</span>
               </template>
               <template #azioni-cell="{ row }">
                 <UButton icon="i-heroicons-trash" variant="ghost" color="error" size="xs" @click="eliminaChiusura(row.original.id)" />
@@ -839,7 +839,8 @@ watchEffect(() => {
 })
 
 const chiusureSet = computed(() =>
-  new Set((closures.value as any[]).map((c: any) => format(new Date(c.date), 'yyyy-MM-dd')))
+  // c.date è già 'YYYY-MM-DD'
+  new Set((closures.value as any[]).map((c: any) => c.date))
 )
 
 function toggleGiornoSpeciale(dateStr: string, domenica: boolean) {

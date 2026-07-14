@@ -6,6 +6,6 @@ export default defineNuxtRouteMiddleware(async () => {
   }
   const allowed = ['GENITORE', 'STUDENTE', 'ADMIN', 'SUPER_TUTOR']
   if (!allowed.includes(user.value?.role ?? '')) {
-    return await navigateTo('/', { replace: true })
+    return await navigateTo(homeDiRuolo(user.value?.role), { replace: true })
   }
 })

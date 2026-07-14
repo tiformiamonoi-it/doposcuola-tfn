@@ -1,4 +1,4 @@
-import { eq, desc, sql, or, inArray } from 'drizzle-orm'
+import { eq, desc, or, inArray } from 'drizzle-orm'
 import { db } from '../database/client'
 import { bookings, bookingSubjects, students, closureDates, systemConfigs, packages } from '../database/schema'
 import { computePackageStates } from './package.service'
@@ -146,10 +146,10 @@ export async function createBooking(input: CreateBookingInput, userId: string) {
     throw new Error('Impossibile prenotare di Domenica')
   }
 
-  // 2. Controllo Chiusure
+  // 2. Controllo Chiusure (colonna date 'YYYY-MM-DD': confronto diretto, niente fusi)
   const targetDateStr = dateObj.toISOString().split('T')[0]
   const isClosed = await db.query.closureDates.findFirst({
-    where: sql`DATE(${closureDates.date}) = ${targetDateStr}`
+    where: eq(closureDates.date, targetDateStr!)
   })
   
   if (isClosed) {

@@ -76,16 +76,37 @@
             </div>
           </div>
           <div class="flex items-center gap-2">
-            <UBadge 
-              :color="nota.visibilita === 'FAMIGLIA' ? 'success' : 'warning'" 
-              variant="subtle" 
+            <UBadge
+              :color="nota.visibilita === 'FAMIGLIA' ? 'success' : 'warning'"
+              variant="subtle"
               size="xs"
             >
               {{ nota.visibilita === 'FAMIGLIA' ? 'Famiglia' : 'Interna' }}
             </UBadge>
-            
-            <UDropdownMenu 
-              v-if="puoModificare(nota)" 
+
+            <!-- Nota famiglia scritta da un tutor: visibile solo dopo l'approvazione -->
+            <UBadge
+              v-if="inAttesa(nota)"
+              color="warning"
+              variant="solid"
+              size="xs"
+            >
+              Da approvare
+            </UBadge>
+            <UButton
+              v-if="inAttesa(nota) && isAdminOrSuper"
+              size="xs"
+              color="success"
+              variant="soft"
+              icon="i-heroicons-check-circle"
+              :loading="approvando === nota.id"
+              @click="approvaNota(nota.id)"
+            >
+              Approva
+            </UButton>
+
+            <UDropdownMenu
+              v-if="puoModificare(nota)"
               :items="[
                 [
                   { label: 'Elimina', icon: 'i-heroicons-trash', color: 'error', onSelect: () => confermaElimina(nota.id) }
@@ -144,7 +165,13 @@ async function submitNota() {
       }
     })
     
-    toast.add({ title: 'Nota aggiunta', color: 'success', icon: 'i-heroicons-check-circle' })
+    const inAttesaApprovazione = nuovaNota.visibilita === 'FAMIGLIA' && !isAdminOrSuper.value
+    toast.add({
+      title: inAttesaApprovazione ? 'Nota salvata — in attesa di approvazione' : 'Nota aggiunta',
+      description: inAttesaApprovazione ? 'Sarà visibile alla famiglia dopo l\'approvazione della segreteria.' : undefined,
+      color: 'success',
+      icon: 'i-heroicons-check-circle'
+    })
     nuovaNota.contenuto = ''
     nuovaNota.visibilita = 'INTERNA'
     refresh()
@@ -156,11 +183,36 @@ async function submitNota() {
 }
 
 // Permissions
+const isAdminOrSuper = computed(() => ['ADMIN', 'SUPER_TUTOR'].includes(sessionUser.value?.role ?? ''))
+
 function puoModificare(nota: any) {
   if (!sessionUser.value) return false
   const role = sessionUser.value.role
   if (role === 'ADMIN' || role === 'SUPER_TUTOR') return true
   return nota.authorId === sessionUser.value.id
+}
+
+// ─── Approvazione note famiglia ───
+function inAttesa(nota: any) {
+  return nota.visibilita === 'FAMIGLIA' && !nota.approvataAt
+}
+
+const approvando = ref<string | null>(null)
+
+async function approvaNota(id: string) {
+  approvando.value = id
+  try {
+    await $fetch(`/api/notes/${id}/approve`, { method: 'POST' })
+    toast.add({ title: 'Nota approvata: ora è visibile alla famiglia', color: 'success', icon: 'i-heroicons-check-circle' })
+    refresh()
+    // Aggiorna il badge in nav senza ricaricare la pagina
+    const pendingCount = useState<number>('note-pending-count', () => 0)
+    pendingCount.value = Math.max(0, pendingCount.value - 1)
+  } catch (err: any) {
+    toast.add({ title: 'Errore', description: err?.data?.statusMessage || 'Impossibile approvare la nota', color: 'error' })
+  } finally {
+    approvando.value = null
+  }
 }
 
 // Delete

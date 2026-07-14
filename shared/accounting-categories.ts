@@ -11,13 +11,24 @@ export type Categoria = {
 
 // Categorie che il codice scrive da solo (pagamenti, compensi, rimborsi, rettifiche).
 // Vanno protette: non modificabili e non eliminabili.
-export const CATEGORIE_SISTEMA = ['compenso_tutor', 'rimborso_tutor', 'pacchetti', 'rettifica'] as const
+export const CATEGORIE_SISTEMA = ['compenso_tutor', 'rimborso_tutor', 'pacchetti', 'rettifica', 'proventi_diversi', 'costi_proventi_diversi'] as const
+
+// Coppia gemella dei "Proventi diversi" (+X entrata / -X uscita)
+export const CATEGORIE_PROVENTI_DIVERSI = ['proventi_diversi', 'costi_proventi_diversi']
+
+// I proventi diversi (movimenti, righe "+X" nelle card, voce nel form) sono riservati
+// a questi account ADMIN. Confronto sempre in minuscolo.
+export const EMAILS_PROVENTI_DIVERSI = ['info@tiformiamonoi.it', 'amministrazione@tiformiamonoi.it']
 
 export const CATEGORIE_DEFAULT: Categoria[] = [
   { chiave: 'compenso_tutor', etichetta: 'Compenso Tutor',      neutra: false, sistema: true },
   { chiave: 'rimborso_tutor', etichetta: 'Rimborso Tutor',      neutra: false, sistema: true },
   { chiave: 'pacchetti',      etichetta: 'Pagamento Pacchetto', neutra: false, sistema: true },
   { chiave: 'rettifica',      etichetta: 'Rettifica',           neutra: false, sistema: true },
+  // Coppia "Proventi diversi": +X in entrata e -X in uscita, margine invariato ma
+  // entrate (e quindi tasse stimate) e fatturato aumentano. NON neutre di proposito.
+  { chiave: 'proventi_diversi',       etichetta: 'Proventi diversi',           neutra: false, sistema: true },
+  { chiave: 'costi_proventi_diversi', etichetta: 'Costi per proventi diversi', neutra: false, sistema: true },
   { chiave: 'spese_generali', etichetta: 'Spese Generali',      neutra: false, sistema: false },
   { chiave: 'marketing',      etichetta: 'Marketing',           neutra: false, sistema: false },
   { chiave: 'giroconto',      etichetta: 'Giroconto',           neutra: true,  sistema: false },

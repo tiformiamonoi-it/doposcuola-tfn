@@ -81,8 +81,20 @@
                   >
                     <div class="font-medium text-slate-800">{{ badge.studentSurname }} {{ badge.studentName }}</div>
                     <div class="text-xs text-primary-600">{{ badge.subject }}</div>
-                    <div v-if="badge.supplemento" class="text-[11px] mt-0.5" :class="badge.supplementoApplicato ? 'text-emerald-600' : 'text-amber-600'">
-                      ⭐ +€{{ badge.supplemento }} {{ badge.supplementoApplicato ? 'applicato' : 'da approvare' }}
+                    <div v-if="badge.supplemento" class="text-[11px] mt-0.5 flex items-center gap-1.5 flex-wrap" :class="badge.supplementoApplicato ? 'text-emerald-600' : 'text-amber-600'">
+                      <span>⭐ +€{{ badge.supplemento }} {{ badge.supplementoApplicato ? 'applicato' : 'da approvare' }}</span>
+                      <!-- Il bottone di approvazione deve esserci anche DOPO l'assegnazione al tutor -->
+                      <UButton
+                        v-if="!badge.supplementoApplicato"
+                        size="xs"
+                        color="warning"
+                        variant="soft"
+                        class="no-print"
+                        :loading="applicandoSupplemento === badge.bookingId"
+                        @click.stop="applicaSupplemento(badge)"
+                      >
+                        OK → +€{{ SUPPLEMENTO_SPECIALE }} sul pacchetto
+                      </UButton>
                     </div>
                     <button
                       class="no-print absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-50 rounded p-1"

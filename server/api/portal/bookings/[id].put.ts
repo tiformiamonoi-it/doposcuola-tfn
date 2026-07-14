@@ -1,7 +1,7 @@
 import { db } from '../../../database/client'
 import { bookings, bookingSubjects, closureDates } from '../../../database/schema'
 import { UpdateBookingSchema } from '#shared/schemas/booking.schema'
-import { eq, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { getPortalStudentIds } from '../../../utils/portal'
 import { valutaMaterieSpeciali } from '../../../services/booking.service'
 import { toHttpError } from '../../../utils/http-error'
@@ -76,9 +76,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Impossibile spostare la lezione di Domenica' })
   }
 
-  // 4. Verifica giorni di chiusura per la nuova data
+  // 4. Verifica giorni di chiusura per la nuova data (colonna date: confronto diretto)
   const isClosed = await db.query.closureDates.findFirst({
-    where: sql`DATE(${closureDates.date}) = ${newStr}`
+    where: eq(closureDates.date, newStr!)
   })
   
   if (isClosed) {

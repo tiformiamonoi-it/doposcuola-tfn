@@ -1,9 +1,10 @@
-import { pgTable, text, varchar, timestamp, index } from 'drizzle-orm/pg-core'
+import { pgTable, text, varchar, timestamp, date, index } from 'drizzle-orm/pg-core'
 import { cuid, contactRequestStatusEnum } from './common'
 
 export const closureDates = pgTable('closure_dates', {
   id:          text('id').primaryKey().$defaultFn(cuid),
-  date:        timestamp('date', { withTimezone: true }).notNull().unique(),
+  // Giorno civile 'YYYY-MM-DD' (convenzione di progetto: mai timestamptz per le date-giorno)
+  date:        date('date').notNull().unique(),
   description: text('description'),
   createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

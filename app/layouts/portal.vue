@@ -40,6 +40,12 @@
       >
         <UIcon :name="item.icon" class="w-4 h-4" />
         {{ item.label }}
+        <span
+          v-if="item.route === '/portale/note' && noteUnseenCount > 0"
+          class="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center"
+        >
+          {{ noteUnseenCount }}
+        </span>
       </NuxtLink>
     </nav>
 
@@ -66,7 +72,15 @@
         class="flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors"
         :class="isActive(item.route) ? 'text-tfn-600' : 'text-slate-400'"
       >
-        <UIcon :name="item.icon" class="w-6 h-6" />
+        <span class="relative">
+          <UIcon :name="item.icon" class="w-6 h-6" />
+          <span
+            v-if="item.route === '/portale/note' && noteUnseenCount > 0"
+            class="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center"
+          >
+            {{ noteUnseenCount }}
+          </span>
+        </span>
         <span class="text-[10px] font-medium">{{ item.label }}</span>
       </NuxtLink>
     </nav>
@@ -110,6 +124,11 @@ function isActive(path: string) {
   if (path === '/portale') return route.path === '/portale'
   return route.path.startsWith(path)
 }
+
+// Badge "note non lette": caricato all'apertura; la pagina Note lo azzera via useState
+const noteUnseenCount = useState<number>('portal-note-unseen', () => 0)
+const { data: noteUnseenRes } = useLazyFetch('/api/portal/notes-unseen-count', { server: false })
+watchEffect(() => { noteUnseenCount.value = noteUnseenRes.value?.count ?? 0 })
 
 // ─── WhatsApp logic ───
 const { data: portalConfigs } = useLazyFetch('/api/portal/configs')

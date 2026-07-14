@@ -1,4 +1,4 @@
-import { pgTable, text, varchar, boolean, timestamp, index, numeric } from 'drizzle-orm/pg-core'
+import { pgTable, text, varchar, boolean, timestamp, index, numeric, type AnyPgColumn } from 'drizzle-orm/pg-core'
 import { cuid, accountingTypeEnum, paymentMethodEnum, tutorPaymentStatusEnum, reimbursementStatusEnum } from './common'
 import { users } from './users'
 import { packages, payments } from './packages'
@@ -59,6 +59,10 @@ export const accountingEntries = pgTable('accounting_entries', {
 
   metodoPagamento: paymentMethodEnum('metodo_pagamento'),
   fatturaEmessa:   boolean('fattura_emessa').notNull().default(false),
+  // Fattura richiesta su movimenti MANUALI (per i pagamenti pacchetto fa fede payments.richiedeFattura)
+  richiedeFattura: boolean('richiede_fattura').notNull().default(false),
+  // Gemello dei movimenti accoppiati "Proventi diversi": cancellare uno cancella l'altro (FK cascade)
+  linkedEntryId:   text('linked_entry_id').references((): AnyPgColumn => accountingEntries.id, { onDelete: 'cascade' }),
   note:            text('note'),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

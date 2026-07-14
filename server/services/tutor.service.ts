@@ -55,7 +55,8 @@ export async function listTutors(query: TutorQuery) {
     })
     .from(users)
     .leftJoin(tutorProfiles, eq(tutorProfiles.userId, users.id))
-    .where(and(eq(users.role, 'TUTOR'), activeWhere, searchWhere))
+    // Anche i SUPER_TUTOR insegnano: senza inArray chi viene promosso sparisce dalla lista
+    .where(and(inArray(users.role, ['TUTOR', 'SUPER_TUTOR']), activeWhere, searchWhere))
     .orderBy(asc(users.lastName), asc(users.firstName)),
 
     // 2. Somma compensi lezioni mese corrente per tutorId
@@ -192,7 +193,7 @@ export async function getTutorById(id: string) {
     })
     .from(users)
     .leftJoin(tutorProfiles, eq(tutorProfiles.userId, users.id))
-    .where(and(eq(users.id, id), eq(users.role, 'TUTOR')))
+    .where(and(eq(users.id, id), inArray(users.role, ['TUTOR', 'SUPER_TUTOR'])))
     .limit(1)
 
   return tutor ?? null

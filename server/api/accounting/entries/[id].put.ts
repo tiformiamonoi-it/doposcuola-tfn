@@ -10,6 +10,7 @@ const bodySchema = z.object({
   metodoPagamento: z.enum(['CONTANTI', 'BONIFICO', 'POS', 'ASSEGNO', 'ALTRO']).nullable().optional(),
   data:            z.string().optional(),
   fatturaEmessa:   z.boolean().optional(),
+  richiedeFattura: z.boolean().optional(),
 })
 
 // PUT /api/accounting/entries/:id

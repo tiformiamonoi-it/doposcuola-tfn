@@ -1,6 +1,6 @@
 import { db } from '../../../database/client'
 import { tutorAvailabilities, closureDates, tutorProfiles } from '../../../database/schema'
-import { eq, and, gte, lte, sql } from 'drizzle-orm'
+import { eq, and, gte, lte } from 'drizzle-orm'
 import { oggiRomeStr, disponibilitaOggiAncoraAperta } from '../../../utils/tutor-time-window'
 
 export default defineEventHandler(async (event) => {
@@ -27,10 +27,10 @@ export default defineEventHandler(async (event) => {
         notes: true
       }
     }),
-    // Giorni di chiusura nel periodo (per bloccarli nel calendario disponibilità)
-    db.select({ d: sql<string>`to_char(DATE(${closureDates.date}), 'YYYY-MM-DD')` })
+    // Giorni di chiusura nel periodo (colonna date 'YYYY-MM-DD': confronto diretto)
+    db.select({ d: closureDates.date })
       .from(closureDates)
-      .where(sql`DATE(${closureDates.date}) BETWEEN ${fromStr} AND ${toStr}`),
+      .where(and(gte(closureDates.date, fromStr), lte(closureDates.date, toStr))),
     db.select({ modalitaPagamento: tutorProfiles.modalitaPagamento })
       .from(tutorProfiles)
       .where(eq(tutorProfiles.userId, user.id))

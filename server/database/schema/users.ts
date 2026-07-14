@@ -19,6 +19,8 @@ export const users = pgTable('users', {
   consensoGenitoreAt:   timestamp('consenso_genitore_at', { withTimezone: true }),
   // Tutorial di benvenuto al primo accesso (tutor/famiglia/studente)
   tutorialVisto: boolean('tutorial_visto').notNull().default(false),
+  // Portale famiglia: ultima visita alla pagina Note (per il badge "note non lette")
+  noteLastSeenAt: timestamp('note_last_seen_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

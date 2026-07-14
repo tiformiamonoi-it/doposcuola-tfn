@@ -358,8 +358,8 @@ function isDayDisabled(day: number) {
   // 2. Domenica
   if (d.getDay() === 0) return true
   
-  // 3. Chiusure
-  if (closures.value.some((c: any) => c.date.split('T')[0] === dateStr)) return true
+  // 3. Chiusure (c.date è già 'YYYY-MM-DD': confronto diretto)
+  if (closures.value.some((c: any) => c.date === dateStr)) return true
 
   // 4. Oggi se oltre orario limite (11:30)
   if (dateStr === itNow.todayStr) {

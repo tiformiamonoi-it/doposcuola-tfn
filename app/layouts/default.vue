@@ -44,6 +44,15 @@
           />
           <UIcon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
           <span v-if="!collapsed" class="truncate">{{ item.label }}</span>
+          <!-- Badge note famiglia da approvare (ADMIN/SUPER_TUTOR) -->
+          <span
+            v-if="item.route === '/studenti' && notePendingCount > 0"
+            class="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center"
+            :class="collapsed ? 'absolute -top-0.5 -right-0.5' : 'ml-auto'"
+            :title="`${notePendingCount} note famiglia da approvare`"
+          >
+            {{ notePendingCount }}
+          </span>
           <!-- Tooltip sidebar collassata -->
           <span
             v-if="collapsed"
@@ -144,10 +153,18 @@
         v-for="item in bottomNavItems"
         :key="item.route"
         :to="item.route"
-        class="flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors"
+        class="flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors relative"
         :class="isActive(item.route) ? 'text-tfn-600' : 'text-slate-400'"
       >
-        <UIcon :name="item.icon" class="w-6 h-6" />
+        <span class="relative">
+          <UIcon :name="item.icon" class="w-6 h-6" />
+          <span
+            v-if="item.route === '/studenti' && notePendingCount > 0"
+            class="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center"
+          >
+            {{ notePendingCount }}
+          </span>
+        </span>
         <span class="text-[11px] font-medium">{{ item.label }}</span>
       </NuxtLink>
       <button
@@ -271,6 +288,12 @@ const portalLinks = [
   { icon: 'i-heroicons-globe-alt',   label: 'Portale Famiglie', route: '/portale' },
   { icon: 'i-heroicons-document-text', label: 'Form Contatto',  route: '/prenota' },
 ]
+
+// Badge "note famiglia da approvare": conteggio caricato all'apertura (niente polling);
+// NoteFeed lo decrementa via useState quando una nota viene approvata.
+const notePendingCount = useState<number>('note-pending-count', () => 0)
+const { data: notePendingRes } = useLazyFetch('/api/notes/pending-count', { server: false })
+watchEffect(() => { notePendingCount.value = notePendingRes.value?.count ?? 0 })
 
 const navItems = computed(() => {
   if (user.value?.role === 'TUTOR') {

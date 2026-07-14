@@ -8,9 +8,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, message: 'Forbidden' })
   }
 
-  // Prendi solo le date di chiusura da oggi in poi per ottimizzare
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  // Prendi solo le date di chiusura da oggi in poi (giorno civile italiano)
+  const today = oggiRomeStr()
 
   return await db
     .select()

@@ -2,5 +2,5 @@
 export default defineNuxtRouteMiddleware(() => {
   const { loggedIn, user } = useUserSession()
   if (!loggedIn.value) return navigateTo('/login')
-  if (user.value?.role !== 'TUTOR') return navigateTo('/')
+  if (user.value?.role !== 'TUTOR') return navigateTo(homeDiRuolo(user.value?.role))
 })

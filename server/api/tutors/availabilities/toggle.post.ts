@@ -39,7 +39,7 @@ export default defineEventHandler(async (event) => {
     }
   }
   const chiusura = await db.query.closureDates.findFirst({
-    where: sql`DATE(${closureDates.date}) = ${dateStr}`,
+    where: eq(closureDates.date, dateStr),
   })
   if (chiusura) {
     throw createError({ statusCode: 403, statusMessage: `Giorno di chiusura${chiusura.description ? ` (${chiusura.description})` : ''}` })

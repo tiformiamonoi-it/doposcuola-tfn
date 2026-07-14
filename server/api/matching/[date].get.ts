@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, ne, sql } from 'drizzle-orm'
+import { eq, and, gte, lte, ne } from 'drizzle-orm'
 import { db } from '../../database/client'
 import * as tables from '../../database/schema'
 
@@ -40,7 +40,7 @@ export default defineEventHandler(async (event) => {
   const giornoSettimana = new Date(`${targetDate}T00:00:00Z`).getUTCDay()
   if (giornoSettimana >= 1 && giornoSettimana <= 5) {
     const chiusura = await db.query.closureDates.findFirst({
-      where: sql`DATE(${tables.closureDates.date}) = ${targetDate}`,
+      where: eq(tables.closureDates.date, targetDate),
     })
     if (!chiusura) {
       const forfaitTutors = await db

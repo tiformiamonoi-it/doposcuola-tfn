@@ -222,7 +222,7 @@
           v-model:page="pagina"
           :total="meta.total"
           :items-per-page="20"
-          @update:page="caricaPacchetti"
+          @update:page="cambiaPagina"
         />
       </div>
     </UCard>
@@ -396,7 +396,10 @@ const { data, pending, refresh } = useLazyFetch('/api/packages', {
 const pacchetti = computed(() => data.value?.data ?? [])
 const meta      = computed(() => data.value?.meta)
 
+// Cambio filtri: si riparte da pagina 1. Cambio pagina: si ricarica e basta
+// (prima il pager richiamava caricaPacchetti e ogni click veniva riportato a pagina 1).
 function caricaPacchetti() { pagina.value = 1; refresh() }
+function cambiaPagina() { refresh() }
 
 // ─── Fetch studenti per selector ───
 const { data: studentiData } = useLazyFetch('/api/students', {

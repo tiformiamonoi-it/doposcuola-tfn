@@ -5,13 +5,17 @@ import { CATEGORIE_DEFAULT, type Categoria } from '#shared/accounting-categories
 
 const KEY = 'categorie_contabili'
 
-/** Lista salvata in configurazione (o i default se mai impostata). */
+/** Lista salvata in configurazione (o i default se mai impostata).
+ *  Le categorie di sistema aggiunte al codice DOPO l'ultimo salvataggio
+ *  vengono reintegrate automaticamente (es. proventi_diversi). */
 async function getCategorieSalvate(): Promise<Categoria[]> {
   const [row] = await db.select().from(systemConfigs).where(eq(systemConfigs.key, KEY)).limit(1)
   if (!row) return CATEGORIE_DEFAULT
   try {
     const parsed = JSON.parse(row.value) as Categoria[]
-    return Array.isArray(parsed) && parsed.length ? parsed : CATEGORIE_DEFAULT
+    if (!Array.isArray(parsed) || !parsed.length) return CATEGORIE_DEFAULT
+    const presenti = new Set(parsed.map((c) => c.chiave))
+    return [...parsed, ...CATEGORIE_DEFAULT.filter((c) => c.sistema && !presenti.has(c.chiave))]
   } catch {
     return CATEGORIE_DEFAULT
   }

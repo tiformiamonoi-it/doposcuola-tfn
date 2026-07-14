@@ -80,7 +80,8 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
       lastName:  input.lastName,
       role:      'GENITORE',
       active:    true,
-      // Niente obbligo di cambio password per le famiglie (scelta del titolare, 10/07/2026)
+      // GDPR: la password temporanea vista dalla segreteria vale solo per il primo accesso (13/07/2026)
+      mustChangePassword: true,
     }).returning()
 
     if (!user) throw new Error('Inserimento utente portale fallito')
@@ -123,6 +124,7 @@ export async function createStudentAccount(input: { studentId: string; email: st
       lastName:  input.lastName,
       role:      'STUDENTE',
       active:    true,
+      mustChangePassword: true,
       consensoGenitoreAt: new Date(), // il genitore ha autorizzato (spunta obbligatoria in UI)
     }).returning()
 
@@ -142,6 +144,32 @@ export async function createStudentAccount(input: { studentId: string; email: st
   })
 
   return { ...created, emailInviata: sent }
+}
+
+// Elimina l'account GENITORE collegato a uno studente (es. creato con email sbagliata).
+// Gli studenti collegati vengono scollegati automaticamente dal DB (FK on delete set null).
+// Se il genitore ha prenotazioni o altri dati collegati, il DB blocca la cancellazione:
+// giusto così — lo storico non si elimina, si può solo disattivare l'account.
+export async function deletePortalAccount(studentId: string) {
+  const student = await db.query.students.findFirst({
+    where: eq(students.id, studentId),
+    columns: { id: true, portalUserId: true },
+  })
+  if (!student) throw new Error('Studente non trovato')
+  if (!student.portalUserId) throw new Error('Questo studente non ha un account portale')
+
+  try {
+    const deleted = await db.delete(users)
+      .where(and(eq(users.id, student.portalUserId), eq(users.role, 'GENITORE')))
+      .returning({ id: users.id })
+    if (deleted.length === 0) throw new Error('Account portale non trovato')
+  } catch (err: any) {
+    if (err?.code === '23503' || err?.cause?.code === '23503') {
+      throw new Error('Il genitore ha prenotazioni o altri dati collegati: non si può eliminare l\'account.')
+    }
+    throw err
+  }
+  return { ok: true }
 }
 
 // Attiva/disattiva l'account studente (users.active): disattivo = niente login né prenotazioni
@@ -168,7 +196,7 @@ export async function resetPortalPassword(userId: string) {
   const hashedPassword = await bcrypt.hash(tempPassword, 10)
 
   await db.update(users)
-    .set({ password: hashedPassword, updatedAt: new Date() })
+    .set({ password: hashedPassword, mustChangePassword: true, updatedAt: new Date() })
     .where(eq(users.id, userId))
 
   const { sent } = await sendEmail({

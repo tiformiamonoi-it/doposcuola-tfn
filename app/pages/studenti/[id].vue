@@ -165,15 +165,39 @@
                   </UCard>
                 </div>
 
-                <!-- Note Interne -->
+                <!-- Ultime note: campo interno della scheda + ultima nota interna e famiglia dal diario -->
                 <div class="bg-white rounded-xl shadow-sm ring-1 ring-slate-200">
                   <div class="p-4 border-b border-slate-100 flex items-center gap-2">
                     <UIcon name="i-heroicons-document-text" class="w-5 h-5 text-tfn-500" />
-                    <h3 class="font-medium text-slate-800">Note Interne</h3>
+                    <h3 class="font-medium text-slate-800">Ultime note</h3>
                   </div>
-                  <div class="p-4 bg-yellow-50/30">
-                    <p v-if="studente.note" class="text-sm text-slate-700 whitespace-pre-wrap">{{ studente.note }}</p>
-                    <p v-else class="text-sm text-slate-400 italic">Nessuna nota inserita per questo studente.</p>
+                  <div class="p-4 bg-yellow-50/30 space-y-3">
+                    <!-- Note semplici della scheda: sempre visibili -->
+                    <div class="text-sm">
+                      <div class="flex items-center gap-2 mb-0.5">
+                        <UBadge color="neutral" variant="subtle" size="xs">Scheda</UBadge>
+                      </div>
+                      <p v-if="studente.note" class="text-slate-700 whitespace-pre-wrap">{{ studente.note }}</p>
+                      <p v-else class="text-slate-400 italic">Nessuna nota nella scheda.</p>
+                    </div>
+                    <!-- Bisogni speciali: sempre visibili -->
+                    <div class="text-sm">
+                      <div class="flex items-center gap-2 mb-0.5">
+                        <UBadge color="orange" variant="subtle" size="xs">BES / DSA</UBadge>
+                      </div>
+                      <p v-if="studente.bisogniSpeciali" class="text-slate-700 whitespace-pre-wrap">{{ studente.bisogniSpeciali }}</p>
+                      <p v-else class="text-slate-400 italic">Nessun bisogno speciale segnalato.</p>
+                    </div>
+                    <div v-for="nota in ultimeNote" :key="nota.id" class="text-sm">
+                      <div class="flex items-center gap-2 mb-0.5">
+                        <UBadge :color="nota.visibilita === 'FAMIGLIA' ? 'success' : 'warning'" variant="subtle" size="xs">
+                          {{ nota.visibilita === 'FAMIGLIA' ? 'Famiglia' : 'Interna' }}
+                        </UBadge>
+                        <UBadge v-if="nota.visibilita === 'FAMIGLIA' && !nota.approvataAt" color="warning" variant="solid" size="xs">Da approvare</UBadge>
+                        <span class="text-xs text-slate-400">{{ formatData(nota.createdAt) }} — {{ nota.author?.firstName }} {{ nota.author?.lastName }}</span>
+                      </div>
+                      <p class="text-slate-700 whitespace-pre-wrap line-clamp-3">{{ nota.contenuto }}</p>
+                    </div>
                   </div>
                 </div>
 
@@ -364,6 +388,7 @@
 
                     <div class="mt-4 flex gap-2">
                       <UButton variant="outline" size="sm" icon="i-heroicons-key" @click="reimpostaPassword">Genera nuova password</UButton>
+                      <UButton variant="outline" color="error" size="sm" icon="i-heroicons-trash" @click="eliminaAccessoPortale()">Elimina account</UButton>
                     </div>
                   </template>
                 </UCard>
@@ -427,6 +452,13 @@
                     </div>
                   </template>
                 </UCard>
+              </div>
+            </template>
+
+            <!-- ─── TAB NOTE (diario note interne/famiglia) ─── -->
+            <template #note>
+              <div class="mt-4">
+                <StudentNoteFeed :student-id="id" />
               </div>
             </template>
 
@@ -650,6 +682,8 @@ const tabItems = computed(() => [
   { label: 'Pacchetti', slot: 'pacchetti' },
   { label: 'Lezioni', slot: 'lezioni' },
   { label: 'Prenotazioni', slot: 'prenotazioni' },
+  // Diario note (interne + famiglia, con approvazione)
+  { label: 'Note', slot: 'note' },
   // Dati e credenziali della famiglia: riservati alla segreteria
   // (il server non manda comunque i recapiti dei genitori ai TUTOR)
   ...(isAdmin.value ? [{ label: 'Famiglia', slot: 'famiglia' }] : []),
@@ -677,6 +711,17 @@ const lezioniFiltrate = computed(() => {
 const ultimaLezione = computed(() => {
   if (lezioni.value.length === 0) return null
   return lezioni.value[0]
+})
+
+// Casella "Ultime note" in panoramica: la nota più recente per ciascuna visibilità
+// (l'API le restituisce già ordinate dalla più recente)
+const { data: noteDiario } = useLazyFetch<any[]>(`/api/students/${id}/notes`)
+const ultimeNote = computed(() => {
+  const list = (noteDiario.value ?? []) as any[]
+  return [
+    list.find(n => n.visibilita === 'INTERNA'),
+    list.find(n => n.visibilita === 'FAMIGLIA'),
+  ].filter(Boolean)
 })
 
 const lezioniSvolteMeseCorrente = computed(() => {
@@ -1104,6 +1149,29 @@ async function creaAccessoPortale(force = false) {
   } finally {
     creandoAccesso.value = false
   }
+}
+
+function eliminaAccessoPortale() {
+  const email = (portalAccess.value as any)?.portalUser?.email ?? ''
+  chiediConferma(
+    {
+      title: 'Eliminare l\'account portale?',
+      description: `L'account ${email} verrà eliminato e il genitore non potrà più accedere. Utile se l'email era sbagliata. Se l'account è collegato anche ad altri figli, perderanno l'accesso anche loro.`,
+      confirmLabel: 'Elimina',
+      confirmColor: 'error',
+    },
+    async () => {
+      try {
+        await $fetch(`/api/admin/students/${id}/portal-access`, { method: 'DELETE' })
+        toast.add({ title: 'Account portale eliminato', color: 'success', icon: 'i-heroicons-check-circle' })
+        credenziali.value = null
+        resetPassword.value = null
+        await refreshPortal()
+      } catch (e: any) {
+        toast.add({ title: 'Errore', description: e?.data?.statusMessage ?? 'Impossibile eliminare l\'account', color: 'error' })
+      }
+    }
+  )
 }
 
 async function reimpostaPassword() {

@@ -12,6 +12,10 @@ export const studentNotes = pgTable('student_notes', {
   contenuto:  text('contenuto').notNull(),
   visibilita: noteVisibilitaEnum('visibilita').notNull().default('INTERNA'),
 
+  // Nota FAMIGLIA scritta da un TUTOR: null = in attesa di approvazione (ADMIN/SUPER_TUTOR).
+  // Le note INTERNA e quelle scritte da ADMIN/SUPER_TUTOR nascono già approvate.
+  approvataAt: timestamp('approvata_at', { withTimezone: true }),
+
   lessonId: text('lesson_id').references(() => lessons.id, { onDelete: 'set null' }),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

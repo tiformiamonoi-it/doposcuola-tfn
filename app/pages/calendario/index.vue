@@ -257,27 +257,27 @@ definePageMeta({ middleware: ['admin-or-super'] })
 // ==========================================
 // STATE
 // ==========================================
-const currentDate = ref(new Date())
-
-// Oggi parte già espanso (atterraggio diretto sulla griglia di oggi).
-const expandedDays = ref<Set<string>>(new Set([format(new Date(), 'yyyy-MM-dd')]))
-const allExpanded = ref(false)
-const filtroTutor = ref<any>(null)
-
-// Deep-link: /calendario?data=YYYY-MM-DD apre il mese giusto e il giorno
+// Deep-link: /calendario?data=YYYY-MM-DD apre il mese giusto e il giorno.
+// Va letto QUI nel setup, prima del useFetch: cambiare la data a fetch già partito
+// lasciava la richiesta annullata a metà e lo spinner girava all'infinito.
 const route = useRoute()
-onMounted(() => {
-  const dataParam = route.query.data as string | undefined
+const dataParam = route.query.data as string | undefined
+const dataIniziale = (() => {
   if (dataParam && /^\d{4}-\d{2}-\d{2}$/.test(dataParam)) {
     // Costruisco la data in orario LOCALE (non UTC) per evitare che il giorno slitti
     const [y, m, gg] = dataParam.split('-').map(Number) as [number, number, number]
     const d = new Date(y, m - 1, gg)
-    if (!isNaN(d.getTime())) {
-      currentDate.value = d
-      expandedDays.value = new Set([dataParam])
-    }
+    if (!isNaN(d.getTime())) return d
   }
-})
+  return new Date()
+})()
+
+const currentDate = ref(dataIniziale)
+
+// Il giorno di atterraggio parte già espanso (oggi, o il giorno del deep-link)
+const expandedDays = ref<Set<string>>(new Set([format(dataIniziale, 'yyyy-MM-dd')]))
+const allExpanded = ref(false)
+const filtroTutor = ref<any>(null)
 
 // ==========================================
 // DATA FETCHING
@@ -297,7 +297,8 @@ const timeSlots = computed(() => {
 
 const { data: closuresRes } = useFetch('/api/settings/closures', { lazy: true })
 const dateChiusure = computed(() => {
-  return (closuresRes.value || []).map((c: any) => c.data)
+  // Il campo si chiama `date` (era letto come `c.data`: chiusure mai evidenziate)
+  return (closuresRes.value || []).map((c: any) => c.date)
 })
 
 const standardSlotStarts = computed(() => timeSlots.value.map((s: any) => s.start))
@@ -317,7 +318,6 @@ const { data: lezioniRes, pending, refresh } = useFetch('/api/lessons', {
     if (filtroTutor.value?.value) q.tutorId = filtroTutor.value.value
     return q
   }),
-  watch: [currentDate, filtroTutor]
 })
 
 function refreshData() {

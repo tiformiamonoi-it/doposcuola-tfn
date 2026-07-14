@@ -57,6 +57,9 @@
                 <p class="text-2xl font-bold text-green-700 mt-1">
                   € {{ fmt(dash.periodo.entrate) }}
                 </p>
+                <p v-if="proventiEntrate > 0" class="text-[11px] font-semibold text-green-600 mt-1">
+                  + € {{ fmt(proventiEntrate) }} da proventi diversi (a parte)
+                </p>
               </div>
               <UIcon name="i-heroicons-arrow-trending-up" class="w-6 h-6 text-green-400" />
             </div>
@@ -70,6 +73,9 @@
                 </p>
                 <p class="text-2xl font-bold text-red-700 mt-1">
                   € {{ fmt(dash.periodo.uscite) }}
+                </p>
+                <p v-if="proventiUscite > 0" class="text-[11px] font-semibold text-red-500 mt-1">
+                  − € {{ fmt(proventiUscite) }} costi per proventi diversi (a parte)
                 </p>
               </div>
               <UIcon name="i-heroicons-arrow-trending-down" class="w-6 h-6 text-red-400" />
@@ -120,7 +126,7 @@
           Altri indicatori del periodo
         </button>
         <template #content>
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-3">
 
             <!-- Costi fissi mensili -->
             <UCard class="bg-slate-50 border-slate-200">
@@ -140,17 +146,20 @@
               </div>
             </UCard>
 
-            <!-- E4 — Tasse stimate (25% entrate) -->
+            <!-- E4 — Tasse stimate (25% entrate; i proventi diversi sono mostrati a parte come +X) -->
             <UCard class="bg-violet-50 border-violet-100">
               <div class="flex items-start justify-between">
                 <div>
                   <p class="text-xs text-violet-600 font-medium uppercase tracking-wide flex items-center gap-1">Tasse stimate
-                    <StatHelp text="Stima prudenziale: il 25% delle entrate del periodo. Non è un calcolo fiscale ufficiale — serve solo a non farsi sorprendere." />
+                    <StatHelp text="Stima prudenziale: il 25% delle entrate del periodo. I proventi diversi sono indicati a parte come +X. Non è un calcolo fiscale ufficiale — serve solo a non farsi sorprendere." />
                   </p>
                   <p class="text-2xl font-bold text-violet-700 mt-1">
                     € {{ fmt(dash.periodo.entrate * 0.25) }}
                   </p>
                   <p class="text-[11px] text-violet-400 mt-1">~25% delle entrate</p>
+                  <p v-if="proventiEntrate > 0" class="text-[11px] font-semibold text-violet-600 mt-0.5">
+                    + € {{ fmt(proventiEntrate * 0.25) }} da proventi diversi
+                  </p>
                 </div>
                 <UIcon name="i-heroicons-calculator" class="w-6 h-6 text-violet-400" />
               </div>
@@ -171,6 +180,23 @@
               </div>
             </UCard>
 
+            <!-- Fatturato: tutte le fatture segnate come emesse (storico) -->
+            <UCard class="bg-teal-50 border-teal-100">
+              <div class="flex items-start justify-between">
+                <div>
+                  <p class="text-xs text-teal-600 font-medium uppercase tracking-wide flex items-center gap-1">
+                    Fatturato
+                    <StatHelp text="Numero e somma di tutte le fatture segnate come emesse, dall'inizio dell'attività (non dipende dal periodo scelto)." />
+                  </p>
+                  <p class="text-2xl font-bold text-teal-700 mt-1">
+                    € {{ fmt(dash.fatturato?.totale ?? 0) }}
+                  </p>
+                  <p class="text-[11px] text-teal-400 mt-1">{{ dash.fatturato?.count ?? 0 }} fatture emesse</p>
+                </div>
+                <UIcon name="i-heroicons-document-check" class="w-6 h-6 text-teal-400" />
+              </div>
+            </UCard>
+
           </div>
         </template>
       </UCollapsible>
@@ -188,8 +214,8 @@
             <div class="flex items-center gap-2 mb-3">
               <UIcon name="i-heroicons-academic-cap" class="w-5 h-5 text-teal-500" />
               <p class="text-sm font-semibold text-teal-700">Doposcuola</p>
-              <span class="text-[11px] text-teal-400">(tutte le voci eccetto marketing)</span>
-              <StatHelp text="Entrate, uscite e margine del periodo per l'attività principale: tutte le categorie tranne marketing." />
+              <span class="text-[11px] text-teal-400">(eccetto marketing e proventi diversi)</span>
+              <StatHelp text="Entrate, uscite e margine del periodo per l'attività principale: tutte le categorie tranne marketing e proventi diversi." />
             </div>
             <div class="grid grid-cols-3 gap-2 text-center">
               <div>
@@ -432,7 +458,12 @@
             </UBadge>
           </template>
           <template #descrizione-cell="{ row }">
-            <span class="text-sm text-slate-700">{{ row.original.descrizione }}</span>
+            <span class="text-sm text-slate-700">
+              {{ row.original.descrizione }}
+              <UTooltip v-if="row.original.linkedEntryId" text="Movimento accoppiato 'Proventi diversi': entrata e uscita gemelle">
+                <UBadge color="neutral" variant="subtle" size="xs" class="ml-1">↔</UBadge>
+              </UTooltip>
+            </span>
           </template>
           <template #categoria-cell="{ row }">
             <UBadge color="neutral" variant="outline" size="xs">{{ labelCategoria(row.original.categoria) }}</UBadge>
@@ -445,7 +476,7 @@
               {{ row.original.tipo === 'USCITA' || row.original.tipo === 'DEBITO' ? '-' : '' }}€ {{ fmt(parseFloat(row.original.importo)) }}
             </span>
           </template>
-          <!-- E1 — Colonna fattura (solo dove il cliente ha richiesto la fattura) -->
+          <!-- E1 — Colonna fattura (dove richiesta; sui manuali in entrata si può attivare al volo) -->
           <template #fatturaEmessa-cell="{ row }">
             <template v-if="row.original.richiedeFattura">
               <UTooltip :text="row.original.fatturaEmessa ? 'Fattura emessa ✓' : 'Fattura NON emessa — clicca per segnare'">
@@ -458,18 +489,26 @@
                 />
               </UTooltip>
             </template>
+            <UTooltip v-else-if="isManuale(row.original) && row.original.tipo === 'ENTRATA'" text="Aggiungi alle fatture da emettere">
+              <UButton
+                icon="i-heroicons-document-plus"
+                color="neutral" variant="ghost" size="xs"
+                :loading="toggling === row.original.id"
+                @click="richiediFattura(row.original)"
+              />
+            </UTooltip>
             <span v-else class="text-slate-200 text-xs select-none">—</span>
           </template>
           <template #azioni-cell="{ row }">
             <div class="flex justify-end gap-1">
               <UButton
-                v-if="isManuale(row.original)"
+                v-if="isManuale(row.original) && !row.original.linkedEntryId"
                 icon="i-heroicons-pencil-square"
                 size="xs" color="neutral" variant="ghost"
                 title="Modifica"
                 @click="apriModifica(row.original)"
               />
-              <UTooltip v-else text="Movimento automatico: modificalo dal pagamento di origine">
+              <UTooltip v-else :text="row.original.linkedEntryId ? 'Movimento accoppiato: elimina la coppia e ricreala' : 'Movimento automatico: modificalo dal pagamento di origine'">
                 <UButton icon="i-heroicons-pencil-square" size="xs" color="neutral" variant="ghost" disabled />
               </UTooltip>
               <UButton
@@ -524,6 +563,17 @@
 
     </template>
 
+    <!-- Errore di caricamento: prima la pagina restava semplicemente vuota -->
+    <template v-else>
+      <UAlert
+        color="error"
+        icon="i-heroicons-exclamation-triangle"
+        title="Impossibile caricare la contabilità"
+        description="Il caricamento dei dati non è andato a buon fine. Riprova; se il problema persiste, riavvia l'applicazione."
+      />
+      <UButton icon="i-heroicons-arrow-path" variant="outline" @click="refreshAll">Riprova</UButton>
+    </template>
+
     <!-- ─── MODAL NUOVO MOVIMENTO ─── -->
     <UModal v-model:open="modalNuovoMovimentoAperto" title="Nuovo Movimento Manuale">
       <template #body>
@@ -531,7 +581,7 @@
         <UForm :schema="nuovoMovimentoSchema" :state="nuovoMovimento" class="space-y-4" @submit="salvaMovimento" @error="onFormError">
           <div class="grid grid-cols-2 gap-4">
             <UFormField name="tipo" label="Tipo" required>
-              <USelect v-model="nuovoMovimento.tipo" :items="[{label: 'Entrata (Cassa Reale)', value: 'ENTRATA'}, {label: 'Uscita (Cassa Reale)', value: 'USCITA'}, {label: 'Credito (Da incassare)', value: 'CREDITO'}, {label: 'Debito (Da pagare)', value: 'DEBITO'}]" class="w-full" />
+              <USelect v-model="nuovoMovimento.tipo" :items="opzioniTipoMovimento" class="w-full" />
             </UFormField>
             <UFormField name="data" label="Data" required>
               <UInput type="date" v-model="nuovoMovimento.data" class="w-full" />
@@ -551,8 +601,19 @@
             </UFormField>
           </div>
 
-          <UFormField name="categoria" label="Categoria">
+          <!-- Proventi diversi: categorie fissate dal server, il flag fattura parte attivo -->
+          <UFormField v-if="nuovoMovimento.tipo !== 'PROVENTI_DIVERSI'" name="categoria" label="Categoria">
             <USelect v-model="nuovoMovimento.categoria" :items="opzioniForm" value-key="value" class="w-full" />
+          </UFormField>
+
+          <p v-if="nuovoMovimento.tipo === 'PROVENTI_DIVERSI'" class="text-xs text-slate-500 bg-teal-50 border border-teal-100 rounded-lg px-3 py-2">
+            Verranno creati <strong>due movimenti gemelli</strong>: +€ in entrata ("Proventi diversi") e
+            −€ in uscita ("Costi per proventi diversi"). Il margine netto non cambia, ma entrate,
+            tasse stimate e fatture aumentano.
+          </p>
+
+          <UFormField v-if="['ENTRATA', 'PROVENTI_DIVERSI'].includes(nuovoMovimento.tipo)" name="richiedeFattura">
+            <UCheckbox v-model="nuovoMovimento.richiedeFattura" label="Richiede fattura" />
           </UFormField>
 
           <div class="flex justify-end gap-3 pt-4">
@@ -575,6 +636,10 @@
           <p v-if="movimentoDaEliminare && isAuto(movimentoDaEliminare)" class="text-sm text-amber-600">
             ⚠️ È un movimento <strong>automatico</strong> collegato a un pagamento: "Elimina definitivamente"
             rimuoverà anche il pagamento di origine e ricalcolerà i saldi.
+          </p>
+          <p v-if="movimentoDaEliminare?.linkedEntryId" class="text-sm text-amber-600">
+            ⚠️ È un movimento <strong>accoppiato "Proventi diversi"</strong>: l'operazione (eliminazione o storno)
+            riguarderà anche la riga gemella, così entrate e uscite restano in equilibrio.
           </p>
           <p class="text-sm text-slate-500">
             Lo <strong>storno</strong> mantiene lo storico creando un movimento opposto (consigliato a fini fiscali).
@@ -615,6 +680,9 @@
           </div>
           <UFormField label="Categoria">
             <USelect v-model="modificaMovimento.categoria" :items="opzioniForm" value-key="value" class="w-full" />
+          </UFormField>
+          <UFormField v-if="modificaMovimento.tipo === 'ENTRATA'" name="richiedeFattura">
+            <UCheckbox v-model="modificaMovimento.richiedeFattura" label="Richiede fattura" />
           </UFormField>
         </div>
       </template>
@@ -698,6 +766,9 @@ const periodo = reactive({
   dataFine: OGGI_ISO,
 })
 
+// Mostrato nella barra periodo ("dal 1° gennaio X a oggi")
+const annoCorrente = OGGI_ISO.slice(0, 4)
+
 // ─── Fetch dashboard (reattiva al periodo) ───
 const { data: dash, pending, refresh: refreshDash } = useLazyFetch('/api/accounting/dashboard', {
   query: computed(() => ({
@@ -706,6 +777,20 @@ const { data: dash, pending, refresh: refreshDash } = useLazyFetch('/api/account
   })),
   watch: false,
 })
+
+// Proventi diversi del periodo: righe "+X (a parte)" nelle card e "+X" nelle tasse.
+// Il server manda i totali (e la voce nel form) solo agli account autorizzati.
+const proventiEntrate  = computed(() => (dash.value as any)?.proventiDiversi?.entrate ?? 0)
+const proventiUscite   = computed(() => (dash.value as any)?.proventiDiversi?.uscite ?? 0)
+const proventiVisibili = computed(() => (dash.value as any)?.proventiVisibili === true)
+
+const opzioniTipoMovimento = computed(() => [
+  { label: 'Entrata (Cassa Reale)', value: 'ENTRATA' },
+  { label: 'Uscita (Cassa Reale)', value: 'USCITA' },
+  { label: 'Credito (Da incassare)', value: 'CREDITO' },
+  { label: 'Debito (Da pagare)', value: 'DEBITO' },
+  ...(proventiVisibili.value ? [{ label: 'Proventi diversi (entrata + uscita)', value: 'PROVENTI_DIVERSI' }] : []),
+])
 
 // E5 — Debiti tutor
 const { data: debitiTutor, refresh: refreshDebitiTutor } = useLazyFetch('/api/tutors/debiti-summary', {
@@ -896,13 +981,32 @@ async function toggleFattura(entry: any) {
   }
 }
 
+// Movimento manuale in entrata senza flag fattura: lo aggiunge alle "fatture da emettere"
+async function richiediFattura(entry: any) {
+  toggling.value = entry.id
+  try {
+    await $fetch(`/api/accounting/entries/${entry.id}`, { method: 'PUT', body: { richiedeFattura: true } })
+    toast.add({ title: 'Aggiunto alle fatture da emettere', color: 'success', icon: 'i-heroicons-document-plus' })
+    refreshAll()
+  } catch (err: any) {
+    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Operazione non riuscita', color: 'error' })
+  } finally {
+    toggling.value = null
+  }
+}
+
 // ─── Segna fattura emessa (sezione Fatture in attesa) ───
 const segnandoFattura = ref<string | null>(null)
 
 async function segnaFatturaEmessa(row: any) {
   segnandoFattura.value = row.entryId
   try {
-    await $fetch(`/api/payments/${row.paymentId}/invoice`, { method: 'PUT', body: { fatturaEmessa: true } })
+    // Movimenti manuali (es. Proventi diversi) non hanno un pagamento collegato
+    if (row.paymentId) {
+      await $fetch(`/api/payments/${row.paymentId}/invoice`, { method: 'PUT', body: { fatturaEmessa: true } })
+    } else {
+      await $fetch(`/api/accounting/entries/${row.entryId}`, { method: 'PUT', body: { fatturaEmessa: true } })
+    }
     toast.add({ title: 'Fattura segnata come emessa', color: 'success', icon: 'i-heroicons-check-circle' })
     refreshDash()
   } catch (err: any) {
@@ -914,12 +1018,13 @@ async function segnaFatturaEmessa(row: any) {
 
 // ─── E2 — Schema Zod per form nuovo movimento + focus automatico ───
 const nuovoMovimentoSchema = z.object({
-  tipo:            z.enum(['ENTRATA', 'USCITA', 'CREDITO', 'DEBITO']),
+  tipo:            z.enum(['ENTRATA', 'USCITA', 'CREDITO', 'DEBITO', 'PROVENTI_DIVERSI']),
   data:            z.string().min(1),
   descrizione:     z.string().min(1, 'La descrizione è obbligatoria'),
   importo:         z.number().min(0.01, 'Importo deve essere > 0'),
   metodoPagamento: z.string().optional(),
   categoria:       z.string().optional(),
+  richiedeFattura: z.boolean().optional(),
 })
 
 function onFormError(errors: any) {
@@ -937,26 +1042,35 @@ const modalNuovoMovimentoAperto = ref(false)
 const salvandoMovimento = ref(false)
 
 const nuovoMovimento = reactive({
-  tipo: 'USCITA' as 'ENTRATA' | 'USCITA' | 'CREDITO' | 'DEBITO',
+  tipo: 'USCITA' as 'ENTRATA' | 'USCITA' | 'CREDITO' | 'DEBITO' | 'PROVENTI_DIVERSI',
   importo: 0,
   descrizione: '',
   categoria: 'spese_generali',
   metodoPagamento: 'BONIFICO',
   data: oggiISO(),
+  richiedeFattura: false,
+})
+
+// Proventi diversi nascono con "richiede fattura" attivo (si può togliere a mano)
+watch(() => nuovoMovimento.tipo, (t) => {
+  nuovoMovimento.richiedeFattura = t === 'PROVENTI_DIVERSI'
 })
 
 async function salvaMovimento() {
   salvandoMovimento.value = true
   try {
+    const isProventi = nuovoMovimento.tipo === 'PROVENTI_DIVERSI'
     await $fetch('/api/accounting/entries', {
       method: 'POST',
       body: {
         tipo: nuovoMovimento.tipo,
         importo: Number(nuovoMovimento.importo),
         descrizione: nuovoMovimento.descrizione,
-        categoria: nuovoMovimento.categoria || 'varie',
+        // Proventi diversi: le categorie le fissa il server (coppia gemella)
+        categoria: isProventi ? undefined : (nuovoMovimento.categoria || 'varie'),
         metodoPagamento: nuovoMovimento.metodoPagamento,
         data: nuovoMovimento.data,
+        richiedeFattura: nuovoMovimento.richiedeFattura,
       }
     })
     toast.add({ title: 'Movimento registrato', color: 'success' })
@@ -1008,6 +1122,7 @@ const modalModificaAperto = ref(false)
 const salvandoModifica = ref(false)
 const modificaMovimento = reactive({
   id: '', tipo: 'USCITA', importo: 0, descrizione: '', categoria: '', metodoPagamento: 'BONIFICO', data: '',
+  richiedeFattura: false,
 })
 
 function apriModifica(row: any) {
@@ -1018,6 +1133,7 @@ function apriModifica(row: any) {
   modificaMovimento.categoria   = row.categoria ?? ''
   modificaMovimento.metodoPagamento = row.metodoPagamento ?? 'BONIFICO'
   modificaMovimento.data        = row.data ? new Date(row.data).toISOString().substring(0, 10) : ''
+  modificaMovimento.richiedeFattura = !!row.richiedeFattura
   modalModificaAperto.value     = true
 }
 
@@ -1033,6 +1149,7 @@ async function salvaModifica() {
         categoria:       modificaMovimento.categoria || null,
         metodoPagamento: modificaMovimento.metodoPagamento || null,
         data:            modificaMovimento.data,
+        richiedeFattura: modificaMovimento.tipo === 'ENTRATA' ? modificaMovimento.richiedeFattura : false,
       },
     })
     toast.add({ title: 'Movimento aggiornato', color: 'success' })

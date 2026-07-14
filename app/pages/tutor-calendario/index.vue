@@ -409,8 +409,13 @@ async function salvaNota() {
   }
   salvandoNota.value = true
   try {
-    await $fetch('/api/notes', { method: 'POST', body: notaState })
-    toast.add({ title: 'Nota salvata con successo', color: 'success' })
+    const creata: any = await $fetch('/api/notes', { method: 'POST', body: notaState })
+    const inAttesa = creata?.visibilita === 'FAMIGLIA' && !creata?.approvataAt
+    toast.add({
+      title: 'Nota salvata con successo',
+      description: inAttesa ? 'Sarà visibile alla famiglia dopo l\'approvazione della segreteria.' : undefined,
+      color: 'success'
+    })
     notaState.contenuto = ''
     notaState.studentId = ''
   } catch (err) {

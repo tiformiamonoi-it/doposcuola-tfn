@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { getDashboard } from '../../services/accounting.service'
+import { getDashboard, canSeeProventiDiversi } from '../../services/accounting.service'
+import { CATEGORIE_PROVENTI_DIVERSI } from '#shared/accounting-categories'
 
 const querySchema = z.object({
   dataInizio: z.string().optional(),
@@ -15,6 +16,7 @@ const querySchema = z.object({
 //   fattureInAttesa  — fatture richieste ma non emesse
 // Default periodo: dal 1° gennaio dell'anno corrente a oggi.
 export default defineEventHandler(async (event) => {
+  const { user } = await requireUserSession(event)
   const q = await getValidatedQuery(event, querySchema.parse)
 
   const ora = new Date()
@@ -22,5 +24,20 @@ export default defineEventHandler(async (event) => {
   const end = q.dataFine ? new Date(q.dataFine) : new Date(ora)
   end.setHours(23, 59, 59, 999)
 
-  return getDashboard(start, end)
+  const [dash, proventiVisibili] = await Promise.all([
+    getDashboard(start, end),
+    canSeeProventiDiversi(user),
+  ])
+
+  // I proventi diversi sono riservati agli account in EMAILS_PROVENTI_DIVERSI:
+  // agli altri non arrivano né i totali né le loro fatture in attesa.
+  if (!proventiVisibili) {
+    dash.proventiDiversi = { entrate: 0, uscite: 0 }
+    dash.fattureInAttesa.lista = dash.fattureInAttesa.lista.filter(
+      (r: any) => !r.categoria || !CATEGORIE_PROVENTI_DIVERSI.includes(r.categoria)
+    )
+    dash.fattureInAttesa.count = dash.fattureInAttesa.lista.length
+  }
+
+  return { ...dash, proventiVisibili }
 })

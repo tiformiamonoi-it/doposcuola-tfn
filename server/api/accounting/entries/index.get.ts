@@ -1,7 +1,9 @@
 import { db } from '../../../database/client'
 import { accountingEntries, payments } from '../../../database/schema'
-import { and, desc, eq, gte, lte, count, getTableColumns, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, lte, count, getTableColumns, isNull, notInArray, or, sql } from 'drizzle-orm'
 import { z } from 'zod'
+import { canSeeProventiDiversi } from '../../../services/accounting.service'
+import { CATEGORIE_PROVENTI_DIVERSI } from '#shared/accounting-categories'
 
 const querySchema = z.object({
   page: z.coerce.number().default(1),
@@ -13,9 +15,17 @@ const querySchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
+  const { user } = await requireUserSession(event)
   const query = await getValidatedQuery(event, querySchema.parse)
 
   const conditions = []
+  // I movimenti "Proventi diversi" sono visibili solo agli account autorizzati
+  if (!(await canSeeProventiDiversi(user))) {
+    conditions.push(or(
+      isNull(accountingEntries.categoria),
+      notInArray(accountingEntries.categoria, CATEGORIE_PROVENTI_DIVERSI),
+    ))
+  }
   // "STORNO" non è un tipo reale: gli storni sono movimenti con importo negativo
   if (query.tipo === 'STORNO') {
     conditions.push(sql`${accountingEntries.importo}::numeric < 0`)
@@ -32,13 +42,13 @@ export default defineEventHandler(async (event) => {
 
   const where = conditions.length > 0 ? and(...conditions) : undefined
 
-  // Left join sui pagamenti: serve richiedeFattura per mostrare l'icona Fattura (E1)
-  // solo dove il cliente ha effettivamente richiesto la fattura al momento del pagamento.
+  // Left join sui pagamenti: serve richiedeFattura per mostrare l'icona Fattura (E1).
+  // COALESCE: per i movimenti manuali (senza pagamento) vale il flag sul movimento stesso.
   const [rows, [countRow]] = await Promise.all([
     db
       .select({
         ...getTableColumns(accountingEntries),
-        richiedeFattura: payments.richiedeFattura,
+        richiedeFattura: sql<boolean>`COALESCE(${payments.richiedeFattura}, ${accountingEntries.richiedeFattura})`,
       })
       .from(accountingEntries)
       .leftJoin(payments, eq(accountingEntries.paymentId, payments.id))

@@ -35,16 +35,9 @@
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <div class="w-7 h-7 rounded-full bg-tfn-100 flex items-center justify-center">
-                <span class="text-xs font-semibold text-tfn-700">
-                  {{ nota.author.firstName[0] }}{{ nota.author.lastName[0] }}
-                </span>
+                <span class="text-xs font-semibold text-tfn-700">S</span>
               </div>
-              <div>
-                <span class="text-sm font-medium text-slate-800">
-                  {{ nota.author.firstName }} {{ nota.author.lastName }}
-                </span>
-                <span class="text-xs text-slate-400 ml-1">(Tutor)</span>
-              </div>
+              <span class="text-sm font-medium text-slate-800">Segreteria</span>
             </div>
             <div class="flex items-center gap-2">
               <span v-if="nota.student" class="text-xs text-slate-500">
@@ -80,6 +73,15 @@ if (sessionUser.value?.role === 'STUDENTE') {
 
 const { data, pending } = useLazyFetch('/api/portal/notes')
 const notes = computed(() => (data.value as any[]) ?? [])
+
+// Visita registrata: azzera il badge "note non lette" in nav (solo genitori)
+onMounted(async () => {
+  if (sessionUser.value?.role !== 'GENITORE') return
+  try {
+    await $fetch('/api/portal/notes-seen', { method: 'POST' })
+    useState<number>('portal-note-unseen', () => 0).value = 0
+  } catch { /* badge non azzerato: nessun impatto funzionale */ }
+})
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('it-IT', {

@@ -1,7 +1,8 @@
 import { db } from '../database/client'
-import { accountingEntries, payments, systemConfigs } from '../database/schema'
-import { and, desc, eq, gte, inArray, isNull, lte, notInArray, or, sql } from 'drizzle-orm'
+import { accountingEntries, payments, systemConfigs, users } from '../database/schema'
+import { and, eq, gte, inArray, isNull, lte, notInArray, or, sql } from 'drizzle-orm'
 import { getNeutralKeys } from '../utils/categorie'
+import { CATEGORIE_PROVENTI_DIVERSI, EMAILS_PROVENTI_DIVERSI } from '#shared/accounting-categories'
 import { deletePayment } from './payment.service'
 import { deleteTutorPayment, reduceReimbursementOnEntryDelete } from './tutor.service'
 
@@ -95,8 +96,8 @@ export async function getCashFlow(startDate?: Date, endDate?: Date) {
 // ─────────────────────────────────────────────
 
 export async function getPendingInvoices() {
-  return await db
-    .select({
+  const [daPagamenti, manuali] = await Promise.all([
+    db.select({
       paymentId:     payments.id,
       packageId:     payments.packageId,
       importo:       payments.importo,
@@ -113,8 +114,136 @@ export async function getPendingInvoices() {
         eq(payments.richiedeFattura, true),
         eq(accountingEntries.fatturaEmessa, false),
       )
+    ),
+    // Movimenti manuali con "richiede fattura" (es. Proventi diversi): niente payment collegato.
+    // Solo ENTRATE: le fatture si emettono, non si ricevono.
+    db.select().from(accountingEntries).where(
+      and(
+        eq(accountingEntries.tipo, 'ENTRATA'),
+        eq(accountingEntries.richiedeFattura, true),
+        eq(accountingEntries.fatturaEmessa, false),
+        isNull(accountingEntries.paymentId),
+      )
+    ),
+  ])
+
+  const manualiMapped = manuali.map((e) => ({
+    paymentId:     null as string | null,
+    packageId:     null as string | null,
+    importo:       e.importo,
+    tipoPagamento: 'MANUALE',
+    dataPagamento: e.data,
+    riferimento:   e.descrizione,
+    entryId:       e.id,
+    metodoPagamento: e.metodoPagamento,
+    categoria:     e.categoria, // serve per nascondere le fatture dei proventi ai non autorizzati
+  }))
+
+  return [...daPagamenti, ...manualiMapped]
+    .sort((a, b) => new Date(b.dataPagamento).getTime() - new Date(a.dataPagamento).getTime())
+}
+
+// ─────────────────────────────────────────────
+// FATTURATO — Tutte le fatture segnate come emesse (storico completo):
+// quante sono e a quanto ammontano.
+// ─────────────────────────────────────────────
+export async function getFatturato() {
+  const [row] = await db
+    .select({
+      count:  sql<number>`COUNT(*)::int`,
+      totale: sql<string>`COALESCE(SUM(${accountingEntries.importo}::numeric), 0)::text`,
+    })
+    .from(accountingEntries)
+    .where(and(eq(accountingEntries.tipo, 'ENTRATA'), eq(accountingEntries.fatturaEmessa, true)))
+
+  return { count: row?.count ?? 0, totale: Number(parseFloat(row?.totale ?? '0').toFixed(2)) }
+}
+
+// ─────────────────────────────────────────────
+// PROVENTI DIVERSI — Coppia di movimenti gemelli (+X entrata / -X uscita).
+// Margine invariato; entrate, tasse stimate e (se fatturato) il fatturato aumentano.
+// Regola di visualizzazione: i numeri principali (entrate/uscite/margine/per metodo/
+// saldi/aree) li ESCLUDONO sempre; compaiono solo come riga separata "+X" nelle card
+// e SOLO per gli account autorizzati (EMAILS_PROVENTI_DIVERSI).
+// ─────────────────────────────────────────────
+const CATEGORIE_PROVENTI = CATEGORIE_PROVENTI_DIVERSI
+
+// Solo gli ADMIN con email in lista vedono i proventi diversi (email letta dal DB,
+// non dalla sessione: vale anche per sessioni aperte prima di questa modifica)
+export async function canSeeProventiDiversi(user: { id: string; role: string }): Promise<boolean> {
+  if (user.role !== 'ADMIN') return false
+  const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, user.id)).limit(1)
+  return !!u && EMAILS_PROVENTI_DIVERSI.includes(u.email.toLowerCase())
+}
+
+// Totali dei proventi diversi nel periodo (per le righe "di cui…" e "+X tasse" delle card)
+export async function getProventiDiversiTotali(startDate: Date, endDate: Date) {
+  const rows = await db
+    .select({
+      tipo:   accountingEntries.tipo,
+      totale: sql<string>`COALESCE(SUM(${accountingEntries.importo}::numeric), 0)::text`,
+    })
+    .from(accountingEntries)
+    .where(
+      and(
+        inArray(accountingEntries.tipo, ['ENTRATA', 'USCITA']),
+        gte(accountingEntries.data, startDate),
+        lte(accountingEntries.data, endDate),
+        inArray(accountingEntries.categoria, CATEGORIE_PROVENTI),
+      )
     )
-    .orderBy(desc(payments.dataPagamento))
+    .groupBy(accountingEntries.tipo)
+
+  let entrate = 0
+  let uscite = 0
+  for (const r of rows) {
+    if (r.tipo === 'ENTRATA') entrate = parseFloat(r.totale)
+    else uscite = parseFloat(r.totale)
+  }
+  const r2 = (n: number) => Number(n.toFixed(2))
+  return { entrate: r2(entrate), uscite: r2(uscite) }
+}
+
+export async function createProventiDiversi(data: {
+  importo: number
+  descrizione: string
+  data?: string
+  metodoPagamento?: string | null
+  note?: string | null
+  richiedeFattura?: boolean
+}) {
+  return await db.transaction(async (tx) => {
+    const base = {
+      importo:         data.importo.toFixed(2),
+      data:            data.data ? new Date(data.data) : new Date(),
+      metodoPagamento: (data.metodoPagamento ?? null) as any,
+      note:            data.note ?? null,
+    }
+
+    const [entrata] = await tx.insert(accountingEntries).values({
+      ...base,
+      tipo:            'ENTRATA',
+      categoria:       'proventi_diversi',
+      descrizione:     data.descrizione,
+      richiedeFattura: data.richiedeFattura ?? true,
+    }).returning()
+    if (!entrata) throw new Error('Creazione movimento entrata fallita')
+
+    const [uscita] = await tx.insert(accountingEntries).values({
+      ...base,
+      tipo:          'USCITA',
+      categoria:     'costi_proventi_diversi',
+      descrizione:   `Costi — ${data.descrizione}`,
+      linkedEntryId: entrata.id,
+    }).returning()
+    if (!uscita) throw new Error('Creazione movimento uscita fallita')
+
+    await tx.update(accountingEntries)
+      .set({ linkedEntryId: uscita.id })
+      .where(eq(accountingEntries.id, entrata.id))
+
+    return { ...entrata, linkedEntryId: uscita.id }
+  })
 }
 
 // ─────────────────────────────────────────────
@@ -126,7 +255,10 @@ export async function getPendingInvoices() {
 export async function getNetMargin(startDate: Date, endDate: Date) {
   // E3: le categorie "neutre" (giroconti, saldo iniziale…) sono escluse dal margine.
   // L'elenco è configurabile da Impostazioni → Categorie.
+  // Anche i proventi diversi restano FUORI dai numeri principali: nelle card
+  // compaiono solo come riga separata "+X" (e solo per gli account autorizzati).
   const neutre = await getNeutralKeys()
+  const escluse = [...neutre, ...CATEGORIE_PROVENTI]
 
   const rows = await db
     .select({
@@ -139,9 +271,7 @@ export async function getNetMargin(startDate: Date, endDate: Date) {
         inArray(accountingEntries.tipo, ['ENTRATA', 'USCITA']),
         gte(accountingEntries.data, startDate),
         lte(accountingEntries.data, endDate),
-        neutre.length
-          ? or(isNull(accountingEntries.categoria), notInArray(accountingEntries.categoria, neutre))
-          : undefined,
+        or(isNull(accountingEntries.categoria), notInArray(accountingEntries.categoria, escluse)),
       )
     )
     .groupBy(accountingEntries.tipo)
@@ -200,7 +330,11 @@ export async function getPrevisioni(startDate?: Date, endDate?: Date) {
 type EntrateUscite = { entrate: number; uscite: number }
 
 export async function getMovimentiPerMetodo(startDate?: Date, endDate?: Date) {
-  const conditions = [inArray(accountingEntries.tipo, ['ENTRATA', 'USCITA']) as any]
+  const conditions = [
+    inArray(accountingEntries.tipo, ['ENTRATA', 'USCITA']) as any,
+    // I proventi diversi non sono cassa reale: fuori da "per metodo" e saldi cassa
+    or(isNull(accountingEntries.categoria), notInArray(accountingEntries.categoria, CATEGORIE_PROVENTI)) as any,
+  ]
   if (startDate) conditions.push(gte(accountingEntries.data, startDate) as any)
   if (endDate)   conditions.push(lte(accountingEntries.data, endDate) as any)
 
@@ -337,7 +471,7 @@ export function mesiCalendario(start: Date, end: Date): number {
 }
 
 export async function getDashboard(startDate: Date, endDate: Date) {
-  const [periodo, perMetodo, saldiCassa, fattureInAttesa, previsioni, marketing, costiFissiMensili] = await Promise.all([
+  const [periodo, perMetodo, saldiCassa, fattureInAttesa, previsioni, marketing, costiFissiMensili, fatturato, proventiDiversi] = await Promise.all([
     getNetMargin(startDate, endDate),
     getMovimentiPerMetodo(startDate, endDate),
     getSaldiCassa(),
@@ -345,9 +479,12 @@ export async function getDashboard(startDate: Date, endDate: Date) {
     getPrevisioni(),
     getBreakdownMarketing(startDate, endDate),
     getCostiFissi(),
+    getFatturato(),
+    getProventiDiversiTotali(startDate, endDate),
   ])
 
   const r2 = (n: number) => Number(n.toFixed(2))
+  // periodo (getNetMargin) esclude già i proventi diversi → nessuna sottrazione qui
   const doposcuola = {
     entrate: r2(periodo.entrate - marketing.entrate),
     uscite:  r2(periodo.uscite  - marketing.uscite),
@@ -365,6 +502,8 @@ export async function getDashboard(startDate: Date, endDate: Date) {
     saldiCassa,
     previsioni,
     fattureInAttesa: { count: fattureInAttesa.length, lista: fattureInAttesa },
+    fatturato,
+    proventiDiversi,
     breakdown: { doposcuola, marketing },
     costiFissi: {
       mensili: costiFissiMensili,
@@ -400,7 +539,11 @@ export async function deleteAccountingEntry(
   if (!entry) throw new Error('Movimento non trovato')
 
   if (mode === 'storno') {
-    return await reverseTransaction(entryId, motivo)
+    const storno = await reverseTransaction(entryId, motivo)
+    // Coppia "Proventi diversi": lo storno deve riguardare entrambe le gambe,
+    // altrimenti il margine si sbilancia
+    if (entry.linkedEntryId) await reverseTransaction(entry.linkedEntryId, motivo)
+    return storno
   }
 
   // mode === 'delete'
@@ -435,6 +578,7 @@ export async function updateAccountingEntry(
     metodoPagamento?: string | null
     data?: string
     fatturaEmessa?: boolean
+    richiedeFattura?: boolean
   },
 ) {
   const [entry] = await db.select().from(accountingEntries).where(eq(accountingEntries.id, entryId)).limit(1)
@@ -448,8 +592,13 @@ export async function updateAccountingEntry(
     throw new Error('Questo movimento è automatico: modificalo dal pagamento di origine (oppure eliminalo).')
   }
 
+  if (entry.linkedEntryId && hasContentChange) {
+    throw new Error('Movimento accoppiato "Proventi diversi": per correggerlo elimina la coppia e ricreala.')
+  }
+
   const changes: Record<string, unknown> = { updatedAt: new Date() }
   if (data.fatturaEmessa !== undefined)   changes.fatturaEmessa   = data.fatturaEmessa
+  if (data.richiedeFattura !== undefined) changes.richiedeFattura = data.richiedeFattura
   if (data.tipo !== undefined)            changes.tipo            = data.tipo
   if (data.importo !== undefined)         changes.importo         = String(data.importo)
   if (data.descrizione !== undefined)     changes.descrizione     = data.descrizione

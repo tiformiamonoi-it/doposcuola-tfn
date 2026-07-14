@@ -20,16 +20,28 @@
       <div class="flex items-start gap-3">
         <span class="text-xl leading-none mt-0.5">⭐</span>
         <div class="flex-1 space-y-1">
-          <h3 class="font-semibold text-slate-800 text-sm">Giornate speciali di <span class="capitalize">{{ nomeMeseCorrente }}</span></h3>
-          <p class="text-xs text-slate-500">
-            In queste giornate le materie speciali si prenotano senza supplemento;
-            negli altri giorni è previsto un supplemento di €{{ SUPPLEMENTO_SPECIALE }} per giornata.
-          </p>
-          <ul class="mt-2 space-y-1">
-            <li v-for="g in giornateSpecialiMese" :key="g.materia" class="text-sm text-slate-700">
-              <strong>{{ g.materia }}</strong>: <span class="capitalize">{{ g.giorni }}</span>
-            </li>
-          </ul>
+          <button
+            type="button"
+            class="w-full flex items-center justify-between gap-2 text-left"
+            @click="giornateSpecialiAperte = !giornateSpecialiAperte"
+          >
+            <h3 class="font-semibold text-slate-800 text-sm">Giornate speciali di <span class="capitalize">{{ nomeMeseCorrente }}</span></h3>
+            <UIcon
+              :name="giornateSpecialiAperte ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
+              class="w-4 h-4 text-slate-500 shrink-0"
+            />
+          </button>
+          <template v-if="giornateSpecialiAperte">
+            <p class="text-xs text-slate-500">
+              In queste giornate le materie speciali si prenotano senza supplemento;
+              negli altri giorni è previsto un supplemento di €{{ SUPPLEMENTO_SPECIALE }} per giornata.
+            </p>
+            <ul class="mt-2 space-y-1">
+              <li v-for="g in giornateSpecialiMese" :key="g.materia" class="text-sm text-slate-700">
+                <strong>{{ g.materia }}</strong>: <span class="capitalize">{{ g.giorni }}</span>
+              </li>
+            </ul>
+          </template>
         </div>
       </div>
     </UCard>
@@ -112,7 +124,7 @@
           Le tue Lezioni Prenotate
         </h2>
         <UButton
-          v-if="prenotazioneAbilitata"
+          v-if="prenotazioneAbilitata || isStudente"
           to="/portale/prenota"
           size="sm"
           color="primary"
@@ -122,6 +134,11 @@
         </UButton>
       </div>
 
+      <p class="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+        <UIcon name="i-heroicons-information-circle" class="w-4 h-4 shrink-0 text-slate-400" />
+        Puoi modificare una prenotazione entro le <strong>11:30</strong> e annullarla entro le <strong>12:30</strong> del giorno stesso.
+      </p>
+
       <div v-if="pendingBookings" class="space-y-3">
         <USkeleton v-for="i in 2" :key="i" class="h-32 w-full rounded-xl" />
       </div>
@@ -130,7 +147,7 @@
         <UIcon name="i-heroicons-calendar-days" class="w-8 h-8 mx-auto text-slate-400" />
         <p class="text-sm font-medium">Non hai lezioni prenotate nel sistema.</p>
         <p class="text-xs text-slate-400 max-w-xs mx-auto">Le lezioni che prenoti appariranno qui pronte per essere svolte.</p>
-        <UButton v-if="prenotazioneAbilitata" to="/portale/prenota" size="xs" color="indigo" variant="outline">Prenota Ora</UButton>
+        <UButton v-if="prenotazioneAbilitata || isStudente" to="/portale/prenota" size="xs" color="indigo" variant="outline">Prenota Ora</UButton>
       </div>
 
       <div v-else class="space-y-3">
@@ -223,7 +240,7 @@
         <div class="space-y-4 p-4">
           <p class="text-xs text-slate-500">
             Modifica la data, le materie o le note per questa lezione.
-            <span class="text-amber-600 block mt-1 font-semibold">⚠️ Nota: Se la lezione era già stata abbinata a un tutor, la modifica azzererà il matching per consentire alla segreteria di riassegnarla correttamente.</span>
+            <span class="block mt-1 font-semibold text-slate-600">Puoi modificare la prenotazione entro le 11:30 e annullarla entro le 12:30 del giorno stesso.</span>
           </p>
 
           <!-- Data -->
@@ -308,6 +325,10 @@ useHead({ title: 'Home — Portale Famiglie' })
 
 const toast = useToast()
 const { user } = useUserSession()
+const isStudente = computed(() => (user.value as any)?.role === 'STUDENTE')
+
+// Card giornate speciali: chiusa di default, si apre con la freccetta
+const giornateSpecialiAperte = ref(false)
 
 const { data: portalConfigs } = useLazyFetch('/api/portal/configs')
 
@@ -541,7 +562,7 @@ function validaDataModifica() {
   }
 
   // 2. Controllo Chiusure
-  const isChiuso = closures.value.some((c: any) => c.date.split('T')[0] === modificaForm.dataDesiderata)
+  const isChiuso = closures.value.some((c: any) => c.date === modificaForm.dataDesiderata)
   if (isChiuso) {
     toast.add({ title: 'Il centro è chiuso in questa data', color: 'error' })
     modificaForm.dataDesiderata = ''
