@@ -122,7 +122,7 @@
               <UInputNumber v-model="dati.pacchetto.oreAcquistate" :min="0.5" :step="0.5" class="w-full" />
             </UFormField>
             <UFormField label="Prezzo totale (€)" required>
-              <UInputNumber v-model="dati.pacchetto.prezzoTotale" :min="0" :step="10" class="w-full" />
+              <UInputNumber v-model="dati.pacchetto.prezzoTotale" :min="0" :step="10" :step-snapping="false" class="w-full" />
             </UFormField>
           </div>
           <div class="grid grid-cols-2 gap-4">
@@ -148,7 +148,7 @@
           </div>
           <USeparator label="Pagamento iniziale (opzionale)" />
           <UFormField label="Acconto subito (€)">
-            <UInputNumber v-model="dati.pacchetto.accontoImporto" :min="0" :step="10" class="w-full" />
+            <UInputNumber v-model="dati.pacchetto.accontoImporto" :min="0" :step="10" :step-snapping="false" class="w-full" />
           </UFormField>
           <div v-if="dati.pacchetto.accontoImporto > 0" class="grid grid-cols-2 gap-4">
             <UFormField label="Metodo pagamento" required>

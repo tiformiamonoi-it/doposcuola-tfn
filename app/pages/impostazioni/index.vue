@@ -329,7 +329,7 @@
                 <UInput v-model="nuovaSpesa.nome" placeholder="Es. Affitto locale" />
               </UFormField>
               <UFormField label="Importo mensile (€)" class="w-40">
-                <UInputNumber v-model="nuovaSpesa.importo" :min="0" :step="10" />
+                <UInputNumber v-model="nuovaSpesa.importo" :min="0" :step="10" :step-snapping="false" />
               </UFormField>
               <UButton icon="i-heroicons-plus" @click="aggiungiSpesa">Aggiungi</UButton>
             </div>
@@ -488,7 +488,7 @@
               <UInputNumber v-model="nuovo.oreIncluse" :min="0.5" :step="0.5" class="w-full" />
             </UFormField>
             <UFormField label="Prezzo standard (€)" required>
-              <UInputNumber v-model="nuovo.prezzoStandard" :min="0" :step="10" class="w-full" />
+              <UInputNumber v-model="nuovo.prezzoStandard" :min="0" :step="10" :step-snapping="false" class="w-full" />
             </UFormField>
           </div>
 
@@ -498,7 +498,7 @@
               <UInputNumber v-model="nuovo.tariffaOraria" :min="1" :step="0.5" class="w-full" />
             </UFormField>
             <UFormField label="Prima ricarica base (€)" required>
-              <UInputNumber v-model="nuovo.prezzoStandard" :min="0" :step="10" class="w-full" />
+              <UInputNumber v-model="nuovo.prezzoStandard" :min="0" :step="10" :step-snapping="false" class="w-full" />
             </UFormField>
           </div>
 
@@ -520,7 +520,7 @@
                 </template>
               </UFormField>
               <UFormField label="Prezzo standard (€)" required>
-                <UInputNumber v-model="nuovo.prezzoStandard" :min="0" :step="10" class="w-full" />
+                <UInputNumber v-model="nuovo.prezzoStandard" :min="0" :step="10" :step-snapping="false" class="w-full" />
               </UFormField>
             </div>
           </template>

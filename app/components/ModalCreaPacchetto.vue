@@ -114,7 +114,8 @@
 
         <div class="grid grid-cols-2 gap-4">
           <UFormField :label="nuovo.tipo === 'A_CONSUMO' ? 'Prima ricarica base (€)' : 'Prezzo totale (€)'" required>
-            <UInputNumber v-model="nuovo.prezzoTotale" :min="0" :step="10" class="w-full" />
+            <!-- step-snapping off: le frecce vanno di 10 in 10 ma a mano si scrive qualsiasi cifra -->
+            <UInputNumber v-model="nuovo.prezzoTotale" :min="0" :step="10" :step-snapping="false" class="w-full" />
           </UFormField>
           <UFormField label="Data inizio" required>
             <UInput v-model="nuovo.dataInizio" type="date" class="w-full" />
@@ -133,7 +134,7 @@
         <USeparator label="Pagamento iniziale (opzionale)" />
 
         <UFormField label="Acconto subito (€)">
-          <UInputNumber v-model="nuovo.accontoImporto" :min="0" :step="10" class="w-full" />
+          <UInputNumber v-model="nuovo.accontoImporto" :min="0" :step="10" :step-snapping="false" class="w-full" />
         </UFormField>
 
         <div v-if="nuovo.accontoImporto > 0" class="grid grid-cols-2 gap-4">

@@ -19,9 +19,13 @@ function createDb(): DrizzleDb {
   // e tutte aspettavano l'unico slot disponibile → timeout infinito (Status: 0).
   return drizzle(postgres(url, {
     ssl: 'require',
-    max: 10,          // Pool sicuro: permette query in parallelo senza deadlock
-    prepare: false,   // Necessario per Supabase PgBouncer in Transaction Mode
-    fetch_types: false // Previene i timeout della query di introspezione iniziale
+    max: 10,           // Pool sicuro: permette query in parallelo senza deadlock
+    prepare: false,    // Necessario per Supabase PgBouncer in Transaction Mode
+    fetch_types: false, // Previene i timeout della query di introspezione iniziale
+    idle_timeout: 20,   // Chiude le connessioni inattive dopo 20s: evita socket "morti"
+                        // quando il pooler Supabase le butta giù dall'altra parte
+    max_lifetime: 60 * 15, // Ricicla comunque ogni connessione dopo 15 minuti
+    connect_timeout: 10,   // Se non si connette in 10s → errore chiaro, non attesa infinita
   }), { schema })
 }
 

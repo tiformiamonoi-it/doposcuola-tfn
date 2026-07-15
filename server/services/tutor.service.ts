@@ -13,6 +13,18 @@ import type {
   PayTutorInput, CreateReimbursementInput, PayReimbursementInput,
 } from '#shared/schemas/tutor.schema'
 
+// Giorno civile 'YYYY-MM-DD' dal fuso locale.
+// NON usare toISOString(): converte in UTC e in ora legale sposta la data al giorno prima
+// (1 agosto 00:00 Europe/Rome → '2025-07-31'), falsando i confronti su lessons.data.
+function ymd(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// Chiave mese 'YYYY-MM' dal fuso locale, stessa ragione di ymd().
+function ym(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 // ─────────────────────────────────────────────
 // LIST — GET /api/tutors
 // 4 query parallele per evitare N+1
@@ -22,9 +34,8 @@ export async function listTutors(query: TutorQuery) {
   const meseStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const meseEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
   // Confini del mese come stringhe 'YYYY-MM-DD' per la colonna lessons.data (giorno civile)
-  const meseMM       = String(now.getMonth() + 1).padStart(2, '0')
-  const meseStartStr = `${now.getFullYear()}-${meseMM}-01`
-  const meseEndStr   = `${now.getFullYear()}-${meseMM}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`
+  const meseStartStr = ymd(meseStart)
+  const meseEndStr   = ymd(meseEnd)
   const pastStart = new Date(now.getFullYear() - 1, now.getMonth() + 1, 1)
   const pastEnd   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)
 
@@ -86,7 +97,7 @@ export async function listTutors(query: TutorQuery) {
                DATE_TRUNC('month', data) AS mese,
                FLOOR(COALESCE(SUM(compenso_tutor::numeric), 0)) AS compenso_calcolato
         FROM lessons
-        WHERE data >= ${pastStart.toISOString().slice(0, 10)} AND data <= ${pastEnd.toISOString().slice(0, 10)}
+        WHERE data >= ${ymd(pastStart)} AND data <= ${ymd(pastEnd)}
         GROUP BY tutor_id, DATE_TRUNC('month', data)
       ),
       monthly_payments AS (
@@ -320,7 +331,7 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
              COUNT(*)::text AS num_lezioni,
              COALESCE(SUM(compenso_tutor::numeric), 0)::text AS compenso_grezzo
       FROM lessons
-      WHERE tutor_id = ${tutorId} AND data >= ${pastStart.toISOString().slice(0, 10)}
+      WHERE tutor_id = ${tutorId} AND data >= ${ymd(pastStart)}
       GROUP BY DATE_TRUNC('month', data)
       ORDER BY mese DESC
     `),
@@ -345,8 +356,7 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
   // Mappa pagamenti per chiave YYYY-MM (Local Time per evitare shift di fuso orario)
   const payByMonth = new Map<string, { totale: number; proBono: boolean }>()
   for (const p of paymentRows) {
-    const pDate = new Date(p.mese)
-    const key = `${pDate.getFullYear()}-${String(pDate.getMonth() + 1).padStart(2, '0')}`
+    const key = ym(new Date(p.mese))
     const cur = payByMonth.get(key) ?? { totale: 0, proBono: false }
     payByMonth.set(key, {
       totale:  cur.totale + parseFloat(p.importo),
@@ -354,11 +364,11 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
     })
   }
 
-  const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const nowKey = ym(now)
 
   return (lessonRows as any[]).map(row => {
     const meseDate          = new Date(row.mese)
-    const meseKey           = `${meseDate.getFullYear()}-${String(meseDate.getMonth() + 1).padStart(2, '0')}`
+    const meseKey           = ym(meseDate)
     const compensoGrezzo    = parseFloat(row.compenso_grezzo)
     
     let compensoCalcolato = Math.floor(compensoGrezzo)
@@ -487,7 +497,7 @@ export async function getMonthlyPerformance(tutorId: string, months = 6) {
       LEFT JOIN packages p ON p.id = ls.package_id
       WHERE ls.lesson_id = l.id
     ) r ON true
-    WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate.toISOString().slice(0, 10)}
+    WHERE l.tutor_id = ${tutorId} AND l.data >= ${ymd(startDate)}
     GROUP BY DATE_TRUNC('month', l.data)
     ORDER BY mese DESC
   `)
@@ -510,7 +520,7 @@ export async function getMonthlyPerformance(tutorId: string, months = 6) {
     const meseDate = new Date(row.mese)
 
     return {
-      mese:        meseDate.toISOString().substring(0, 7),
+      mese:        ym(meseDate),
       meseLabel:   meseDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' }),
       numLezioni:  parseInt(row.num_lezioni),
       numStudenti: parseInt(row.num_studenti_slot),
@@ -536,7 +546,7 @@ export async function getDetailedStats(tutorId: string, months = 6) {
              COALESCE(SUM(CASE WHEN l.mezza_lezione THEN 0.5 ELSE 1.0 END), 0)::text AS ore_totali
       FROM lessons l
       JOIN lesson_students ls ON ls.lesson_id = l.id
-      WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate.toISOString().slice(0, 10)}
+      WHERE l.tutor_id = ${tutorId} AND l.data >= ${ymd(startDate)}
       GROUP BY l.tipo
     `)
 
@@ -549,7 +559,7 @@ export async function getDetailedStats(tutorId: string, months = 6) {
       FROM lessons l
       JOIN lesson_students ls ON ls.lesson_id = l.id
       JOIN students s ON s.id = ls.student_id
-      WHERE l.tutor_id = ${tutorId} AND l.data >= ${startDate.toISOString().slice(0, 10)}
+      WHERE l.tutor_id = ${tutorId} AND l.data >= ${ymd(startDate)}
       GROUP BY s.id, s.first_name, s.last_name
       ORDER BY COALESCE(SUM(CASE WHEN l.mezza_lezione THEN 0.5 ELSE 1.0 END), 0) DESC
       LIMIT 5

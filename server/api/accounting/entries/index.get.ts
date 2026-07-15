@@ -12,6 +12,8 @@ const querySchema = z.object({
   dataInizio: z.string().optional(),
   dataFine: z.string().optional(),
   categoria: z.string().optional(),
+  // Filtro fattura: CON = da emettere + emesse, DA_EMETTERE = richiesta ma non emessa, EMESSE = già emessa
+  fattura: z.enum(['CON', 'DA_EMETTERE', 'EMESSE']).optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -40,6 +42,15 @@ export default defineEventHandler(async (event) => {
   }
   if (query.categoria) conditions.push(eq(accountingEntries.categoria, query.categoria))
 
+  // Fattura richiesta: sui pagamenti fa fede payments.richiedeFattura, sui manuali il flag del movimento
+  if (query.fattura) {
+    const richiesta = sql`COALESCE(${payments.richiedeFattura}, ${accountingEntries.richiedeFattura}) = true`
+    const emessa = eq(accountingEntries.fatturaEmessa, true)
+    if (query.fattura === 'CON') conditions.push(or(richiesta, emessa))
+    else if (query.fattura === 'DA_EMETTERE') conditions.push(and(richiesta, eq(accountingEntries.fatturaEmessa, false)))
+    else conditions.push(emessa)
+  }
+
   const where = conditions.length > 0 ? and(...conditions) : undefined
 
   // Left join sui pagamenti: serve richiedeFattura per mostrare l'icona Fattura (E1).
@@ -56,7 +67,11 @@ export default defineEventHandler(async (event) => {
       .orderBy(desc(accountingEntries.data), desc(accountingEntries.id))
       .limit(query.limit)
       .offset((query.page - 1) * query.limit),
-    db.select({ total: count() }).from(accountingEntries).where(where),
+    // Stesso leftJoin della query principale: il filtro fattura legge payments.richiedeFattura
+    db.select({ total: count() })
+      .from(accountingEntries)
+      .leftJoin(payments, eq(accountingEntries.paymentId, payments.id))
+      .where(where),
   ])
 
   return {

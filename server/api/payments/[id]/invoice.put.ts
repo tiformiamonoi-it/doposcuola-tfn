@@ -6,7 +6,7 @@ import { toggleInvoiceStatus } from '../../../services/payment.service'
 // Aggiorna accounting_entries.fatturaEmessa (NON la tabella payments).
 // Dopo questa chiamata, il pagamento sparirà o apparirà nella lista "Fatture da emettere".
 //
-// Body: { "fatturaEmessa": true } oppure { "fatturaEmessa": false }
+// Body: { "fatturaEmessa": true|false } e/o { "richiedeFattura": true|false }
 export default defineEventHandler(async (event) => {
   const paymentId = getRouterParam(event, 'id')
 
@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const updated = await toggleInvoiceStatus(paymentId, parsed.data.fatturaEmessa)
+  const updated = await toggleInvoiceStatus(paymentId, parsed.data)
 
   if (!updated) {
     throw createError({

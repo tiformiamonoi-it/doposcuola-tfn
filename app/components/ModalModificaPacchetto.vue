@@ -34,7 +34,7 @@
           </div>
 
           <UFormField label="Nuovo Prezzo Totale (€)" :error="prezzoError" required>
-            <UInputNumber v-model="form.nuovoPrezzoTotale" :min="0" :step="10" class="w-full" />
+            <UInputNumber v-model="form.nuovoPrezzoTotale" :min="0" :step="10" :step-snapping="false" class="w-full" />
             <template #help>
               Attenzione: non puoi inserire un totale inferiore a quanto lo studente ha già pagato.
             </template>

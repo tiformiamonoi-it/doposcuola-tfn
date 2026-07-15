@@ -448,6 +448,18 @@
           <UFormField label="Categoria">
             <USelect v-model="filtroEntries.categoria" :items="opzioniFiltro" class="w-52" />
           </UFormField>
+          <UFormField label="Fattura">
+            <USelect
+              v-model="filtroEntries.fattura"
+              :items="[
+                { label: 'Tutti i movimenti', value: 'TUTTE' },
+                { label: 'Con fattura (da emettere + emesse)', value: 'CON' },
+                { label: 'Solo da emettere', value: 'DA_EMETTERE' },
+                { label: 'Solo emesse', value: 'EMESSE' },
+              ]"
+              class="w-64"
+            />
+          </UFormField>
         </div>
 
         <UTable :data="entries" :columns="colonneEntries" :loading="pendingEntries">
@@ -476,7 +488,7 @@
               {{ row.original.tipo === 'USCITA' || row.original.tipo === 'DEBITO' ? '-' : '' }}€ {{ fmt(parseFloat(row.original.importo)) }}
             </span>
           </template>
-          <!-- E1 — Colonna fattura (dove richiesta; sui manuali in entrata si può attivare al volo) -->
+          <!-- E1 — Colonna fattura (dove richiesta; sulle entrate manuali si attiva al volo; sulle automatiche col bottone nascosto, visibile al passaggio del mouse) -->
           <template #fatturaEmessa-cell="{ row }">
             <template v-if="row.original.richiedeFattura">
               <UTooltip :text="row.original.fatturaEmessa ? 'Fattura emessa ✓' : 'Fattura NON emessa — clicca per segnare'">
@@ -489,10 +501,11 @@
                 />
               </UTooltip>
             </template>
-            <UTooltip v-else-if="isManuale(row.original) && row.original.tipo === 'ENTRATA'" text="Aggiungi alle fatture da emettere">
+            <UTooltip v-else-if="row.original.tipo === 'ENTRATA' && (isManuale(row.original) || row.original.paymentId)" text="Aggiungi alle fatture da emettere">
               <UButton
                 icon="i-heroicons-document-plus"
                 color="neutral" variant="ghost" size="xs"
+                :class="row.original.paymentId ? 'opacity-0 hover:opacity-100 focus-visible:opacity-100 transition-opacity' : ''"
                 :loading="toggling === row.original.id"
                 @click="richiediFattura(row.original)"
               />
@@ -819,9 +832,12 @@ async function apriPrevisionale(tipo: 'CREDITO' | 'DEBITO') {
 const filtroEntries = reactive({
   tipo:      'TUTTI',
   categoria: 'TUTTE',
+  fattura:   'TUTTE',
   page:      1,
   limit:     50,
 })
+
+const filtroFatturaQuery = () => (filtroEntries.fattura !== 'TUTTE' ? filtroEntries.fattura : undefined)
 
 const { data: entriesData, pending: pendingEntries, refresh: refreshEntries } = useLazyFetch('/api/accounting/entries', {
   query: computed(() => ({
@@ -829,6 +845,7 @@ const { data: entriesData, pending: pendingEntries, refresh: refreshEntries } = 
     dataFine: periodo.dataFine || undefined,
     tipo: (filtroEntries.tipo && filtroEntries.tipo !== 'TUTTI') ? filtroEntries.tipo : undefined,
     categoria: (filtroEntries.categoria && filtroEntries.categoria !== 'TUTTE') ? filtroEntries.categoria : undefined,
+    fattura: filtroFatturaQuery(),
     page: filtroEntries.page,
     limit: filtroEntries.limit,
   })),
@@ -854,6 +871,7 @@ async function scaricaCsv() {
         dataFine: periodo.dataFine || undefined,
         tipo: (filtroEntries.tipo && filtroEntries.tipo !== 'TUTTI') ? filtroEntries.tipo : undefined,
         categoria: (filtroEntries.categoria && filtroEntries.categoria !== 'TUTTE') ? filtroEntries.categoria : undefined,
+        fattura: filtroFatturaQuery(),
         page: 1,
         limit: 10000, // ponytail: una sola pagina gigante — sopra i 10k movimenti servirà uno streaming
       },
@@ -892,7 +910,7 @@ async function scaricaCsv() {
 }
 
 // USelect (Reka UI) non emette un evento `change` affidabile → osserviamo i filtri.
-watch(() => [filtroEntries.tipo, filtroEntries.categoria], caricaEntries)
+watch(() => [filtroEntries.tipo, filtroEntries.categoria, filtroEntries.fattura], caricaEntries)
 
 function cambiaPagina() {
   refreshEntries()
@@ -909,6 +927,7 @@ function azzeraFiltri() {
   periodo.dataFine = OGGI_ISO
   filtroEntries.tipo = 'TUTTI'
   filtroEntries.categoria = 'TUTTE'
+  filtroEntries.fattura = 'TUTTE'
   filtroEntries.page = 1
   refreshDash()
   refreshEntries()
@@ -981,11 +1000,16 @@ async function toggleFattura(entry: any) {
   }
 }
 
-// Movimento manuale in entrata senza flag fattura: lo aggiunge alle "fatture da emettere"
+// Movimento in entrata senza flag fattura: lo aggiunge alle "fatture da emettere".
+// Manuale → flag sul movimento; automatico → flag sul pagamento di origine.
 async function richiediFattura(entry: any) {
   toggling.value = entry.id
   try {
-    await $fetch(`/api/accounting/entries/${entry.id}`, { method: 'PUT', body: { richiedeFattura: true } })
+    if (entry.paymentId) {
+      await $fetch(`/api/payments/${entry.paymentId}/invoice`, { method: 'PUT', body: { richiedeFattura: true } })
+    } else {
+      await $fetch(`/api/accounting/entries/${entry.id}`, { method: 'PUT', body: { richiedeFattura: true } })
+    }
     toast.add({ title: 'Aggiunto alle fatture da emettere', color: 'success', icon: 'i-heroicons-document-plus' })
     refreshAll()
   } catch (err: any) {

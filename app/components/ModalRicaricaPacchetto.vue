@@ -7,7 +7,7 @@
           :description="`Tariffa oraria: € ${parseFloat(pacchetto.tariffaOraria ?? '0').toFixed(2)} / h`"
         />
         <UFormField label="Importo ricarica (€)" required>
-          <UInputNumber v-model="ricarica.importo" :min="10" :step="10" class="w-full" />
+          <UInputNumber v-model="ricarica.importo" :min="10" :step="10" :step-snapping="false" class="w-full" />
         </UFormField>
         <div class="text-xs text-slate-500">
           Ore che verranno aggiunte: <strong>{{ oreAggiunteStimate }}</strong>
@@ -16,7 +16,7 @@
         <USeparator label="Pagamento (opzionale)" />
         
         <UFormField label="Pagato subito (€)">
-          <UInputNumber v-model="ricarica.pagatoSubito" :min="0" :step="10" :max="ricarica.importo" class="w-full" />
+          <UInputNumber v-model="ricarica.pagatoSubito" :min="0" :step="10" :step-snapping="false" :max="ricarica.importo" class="w-full" />
         </UFormField>
         
         <div v-if="ricarica.pagatoSubito > 0" class="grid grid-cols-2 gap-4">

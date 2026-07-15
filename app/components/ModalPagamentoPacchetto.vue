@@ -9,8 +9,8 @@
 
         <div class="grid grid-cols-2 gap-4">
           <UFormField label="Importo (€)" required>
-            <!-- min 0 (non 0.01): con min 0.01 lo stepper agganciava tutti i valori a X,01 -->
-            <UInputNumber v-model="pagamento.importo" :min="0" :step="10" class="w-full" />
+            <!-- step-snapping off: le frecce vanno di 10 in 10 ma a mano si scrive qualsiasi cifra -->
+            <UInputNumber v-model="pagamento.importo" :min="0" :step="10" :step-snapping="false" class="w-full" />
           </UFormField>
           <UFormField label="Data" required>
             <UInput v-model="pagamento.data" type="date" class="w-full" />
@@ -59,7 +59,7 @@
               <!-- Riga in modifica -->
               <div v-else class="space-y-2">
                 <div class="grid grid-cols-2 gap-2">
-                  <UInputNumber v-model="editForm.importo" :min="0" :step="10" size="xs" />
+                  <UInputNumber v-model="editForm.importo" :min="0" :step="10" :step-snapping="false" size="xs" />
                   <UInput v-model="editForm.data" type="date" size="xs" />
                 </div>
                 <div class="grid grid-cols-2 gap-2">

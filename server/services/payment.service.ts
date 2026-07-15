@@ -128,7 +128,10 @@ export async function createPayment(data: CreatePaymentInput) {
 // si aggiorna solo il movimento contabile collegato.
 // ─────────────────────────────────────────────
 
-export async function toggleInvoiceStatus(paymentId: string, fatturaEmessa: boolean) {
+export async function toggleInvoiceStatus(
+  paymentId: string,
+  data: { fatturaEmessa?: boolean; richiedeFattura?: boolean },
+) {
   // Trova il movimento contabile collegato a questo pagamento (relazione 1:1)
   const [entry] = await db
     .select()
@@ -138,9 +141,20 @@ export async function toggleInvoiceStatus(paymentId: string, fatturaEmessa: bool
 
   if (!entry) return null
 
+  // Eccezione alla "Penna Indelebile": richiedeFattura è un flag amministrativo,
+  // non tocca importi né date del pagamento.
+  if (data.richiedeFattura !== undefined) {
+    await db
+      .update(payments)
+      .set({ richiedeFattura: data.richiedeFattura, updatedAt: new Date() })
+      .where(eq(payments.id, paymentId))
+  }
+
+  if (data.fatturaEmessa === undefined) return entry
+
   const [updated] = await db
     .update(accountingEntries)
-    .set({ fatturaEmessa, updatedAt: new Date() })
+    .set({ fatturaEmessa: data.fatturaEmessa, updatedAt: new Date() })
     .where(eq(accountingEntries.id, entry.id))
     .returning()
 

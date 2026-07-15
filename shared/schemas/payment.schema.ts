@@ -80,9 +80,11 @@ export const UpdatePaymentSchema = z.object({
 // ─────────────────────────────────────────────
 
 export const UpdateInvoiceStatusSchema = z.object({
-  fatturaEmessa: z.boolean({
-    message: "Il valore 'fattura emessa' è obbligatorio",
-  }),
+  fatturaEmessa:   z.boolean().optional(),
+  // Movimenti automatici: attiva la richiesta fattura (payments.richiedeFattura)
+  richiedeFattura: z.boolean().optional(),
+}).refine(d => d.fatturaEmessa !== undefined || d.richiedeFattura !== undefined, {
+  message: 'Indicare almeno un campo da aggiornare',
 })
 
 // ─────────────────────────────────────────────
