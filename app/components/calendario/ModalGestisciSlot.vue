@@ -297,11 +297,14 @@ function initModal() {
   }
 }
 
+// immediate: la pagina crea la modale (v-if) e la apre nello stesso istante, quindi
+// `open` è GIÀ true alla nascita e un watch normale non scatterebbe mai: senza questo
+// la prima apertura non caricherebbe la lezione esistente.
 watch(() => isOpen.value, (newVal) => {
   if (newVal) {
     initModal()
   }
-})
+}, { immediate: true })
 
 async function saveLesson() {
   saving.value = true

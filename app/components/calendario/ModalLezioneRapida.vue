@@ -256,6 +256,9 @@ async function checkDuplicate() {
   } catch (e) { console.error(e) }
 }
 
+// immediate: la pagina crea la modale (v-if) e la apre nello stesso istante, quindi
+// `open` è GIÀ true alla nascita e un watch normale non scatterebbe mai: senza questo
+// il tutor bloccato non verrebbe impostato e "Salva Lezione" resterebbe disabilitato.
 watch(() => isOpen.value, (newVal) => {
   if (newVal) {
     tutorItem.value = props.lockedTutorId ? { label: props.lockedTutorName, value: props.lockedTutorId } : null
@@ -268,7 +271,7 @@ watch(() => isOpen.value, (newVal) => {
     existingLessonId.value = null
     existingLessonStudents.value = []
   }
-})
+}, { immediate: true })
 
 async function saveLesson() {
   saving.value = true
