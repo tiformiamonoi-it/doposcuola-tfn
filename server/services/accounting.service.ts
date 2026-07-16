@@ -3,6 +3,7 @@ import { accountingEntries, payments, systemConfigs, users } from '../database/s
 import { and, eq, gte, inArray, isNull, lte, notInArray, or, sql } from 'drizzle-orm'
 import { getNeutralKeys } from '../utils/categorie'
 import { CATEGORIE_PROVENTI_DIVERSI, EMAILS_PROVENTI_DIVERSI } from '#shared/accounting-categories'
+import { conFattura, rimuoviSuffissoFattura } from '#shared/fattura'
 import { deletePayment } from './payment.service'
 import { deleteTutorPayment, reduceReimbursementOnEntryDelete } from './tutor.service'
 
@@ -106,6 +107,7 @@ export async function getPendingInvoices() {
       riferimento:   payments.riferimento,
       entryId:       accountingEntries.id,
       metodoPagamento: accountingEntries.metodoPagamento,
+      descrizione:   accountingEntries.descrizione,
     })
     .from(payments)
     .innerJoin(accountingEntries, eq(accountingEntries.paymentId, payments.id))
@@ -115,11 +117,11 @@ export async function getPendingInvoices() {
         eq(accountingEntries.fatturaEmessa, false),
       )
     ),
-    // Movimenti manuali con "richiede fattura" (es. Proventi diversi): niente payment collegato.
-    // Solo ENTRATE: le fatture si emettono, non si ricevono.
+    // Movimenti manuali con "richiede fattura" (es. Proventi diversi, Crediti): niente payment collegato.
+    // ENTRATE e CREDITI: le fatture si emettono, non si ricevono.
     db.select().from(accountingEntries).where(
       and(
-        eq(accountingEntries.tipo, 'ENTRATA'),
+        inArray(accountingEntries.tipo, ['ENTRATA', 'CREDITO']),
         eq(accountingEntries.richiedeFattura, true),
         eq(accountingEntries.fatturaEmessa, false),
         isNull(accountingEntries.paymentId),
@@ -137,6 +139,8 @@ export async function getPendingInvoices() {
     entryId:       e.id,
     metodoPagamento: e.metodoPagamento,
     categoria:     e.categoria, // serve per nascondere le fatture dei proventi ai non autorizzati
+    descrizione:   e.descrizione,
+    tipoMovimento: e.tipo as 'ENTRATA' | 'CREDITO',
   }))
 
   return [...daPagamenti, ...manualiMapped]
@@ -154,7 +158,7 @@ export async function getFatturato() {
       totale: sql<string>`COALESCE(SUM(${accountingEntries.importo}::numeric), 0)::text`,
     })
     .from(accountingEntries)
-    .where(and(eq(accountingEntries.tipo, 'ENTRATA'), eq(accountingEntries.fatturaEmessa, true)))
+    .where(and(inArray(accountingEntries.tipo, ['ENTRATA', 'CREDITO']), eq(accountingEntries.fatturaEmessa, true)))
 
   return { count: row?.count ?? 0, totale: Number(parseFloat(row?.totale ?? '0').toFixed(2)) }
 }
@@ -579,6 +583,8 @@ export async function updateAccountingEntry(
     data?: string
     fatturaEmessa?: boolean
     richiedeFattura?: boolean
+    numeroFattura?: string
+    dataFattura?: string
   },
 ) {
   const [entry] = await db.select().from(accountingEntries).where(eq(accountingEntries.id, entryId)).limit(1)
@@ -605,6 +611,15 @@ export async function updateAccountingEntry(
   if (data.categoria !== undefined)       changes.categoria       = data.categoria
   if (data.metodoPagamento !== undefined) changes.metodoPagamento = data.metodoPagamento
   if (data.data !== undefined)            changes.data            = new Date(data.data)
+
+  // Numero+data fattura: si accodano (o si rimuovono) dalla descrizione, non hanno colonna dedicata
+  if (data.fatturaEmessa === true && data.numeroFattura) {
+    const base = (changes.descrizione as string | undefined) ?? entry.descrizione
+    changes.descrizione = conFattura(base, data.numeroFattura, data.dataFattura ?? new Date().toISOString().slice(0, 10))
+  } else if (data.fatturaEmessa === false) {
+    const base = (changes.descrizione as string | undefined) ?? entry.descrizione
+    changes.descrizione = rimuoviSuffissoFattura(base)
+  }
 
   const [updated] = await db.update(accountingEntries).set(changes as any).where(eq(accountingEntries.id, entryId)).returning()
   return updated

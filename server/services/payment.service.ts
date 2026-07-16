@@ -2,6 +2,7 @@ import { db } from '../database/client'
 import { accountingEntries, packages, payments, students } from '../database/schema'
 import { and, count, desc, eq, sql } from 'drizzle-orm'
 import { computePackageStates } from './package.service'
+import { conFattura, rimuoviSuffissoFattura } from '#shared/fattura'
 import type { CreatePaymentInput, PaymentQuery, UpdatePaymentInput } from '#shared/schemas/payment.schema'
 
 // ─────────────────────────────────────────────
@@ -130,7 +131,7 @@ export async function createPayment(data: CreatePaymentInput) {
 
 export async function toggleInvoiceStatus(
   paymentId: string,
-  data: { fatturaEmessa?: boolean; richiedeFattura?: boolean },
+  data: { fatturaEmessa?: boolean; richiedeFattura?: boolean; numeroFattura?: string; dataFattura?: string },
 ) {
   // Trova il movimento contabile collegato a questo pagamento (relazione 1:1)
   const [entry] = await db
@@ -152,9 +153,17 @@ export async function toggleInvoiceStatus(
 
   if (data.fatturaEmessa === undefined) return entry
 
+  // Numero+data fattura: accodati alla descrizione se emessa, rimossi se annullata
+  const changes: Record<string, unknown> = { fatturaEmessa: data.fatturaEmessa, updatedAt: new Date() }
+  if (data.fatturaEmessa && data.numeroFattura) {
+    changes.descrizione = conFattura(entry.descrizione, data.numeroFattura, data.dataFattura ?? new Date().toISOString().slice(0, 10))
+  } else if (!data.fatturaEmessa) {
+    changes.descrizione = rimuoviSuffissoFattura(entry.descrizione)
+  }
+
   const [updated] = await db
     .update(accountingEntries)
-    .set({ fatturaEmessa: data.fatturaEmessa, updatedAt: new Date() })
+    .set(changes as any)
     .where(eq(accountingEntries.id, entry.id))
     .returning()
 

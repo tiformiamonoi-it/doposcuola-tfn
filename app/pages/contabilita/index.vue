@@ -514,6 +514,13 @@
           </template>
           <template #azioni-cell="{ row }">
             <div class="flex justify-end gap-1">
+              <UTooltip v-if="row.original.tipo === 'CREDITO' && isManuale(row.original)" text="Segna come incassato (diventa un'Entrata)">
+                <UButton
+                  icon="i-heroicons-banknotes"
+                  size="xs" color="indigo" variant="ghost"
+                  @click="apriIncasso(row.original)"
+                />
+              </UTooltip>
               <UButton
                 v-if="isManuale(row.original) && !row.original.linkedEntryId"
                 icon="i-heroicons-pencil-square"
@@ -551,6 +558,13 @@
           :data="dash.fattureInAttesa.lista"
           :columns="colonneFatture"
         >
+          <template #descrizione-cell="{ row }">
+            <span class="text-sm text-slate-700">{{ row.original.descrizione || row.original.riferimento || '—' }}</span>
+          </template>
+          <template #tipoPagamento-cell="{ row }">
+            <UBadge v-if="row.original.tipoMovimento === 'CREDITO'" color="indigo" variant="subtle" size="xs">Credito</UBadge>
+            <span v-else class="text-sm text-slate-600">{{ row.original.tipoPagamento }}</span>
+          </template>
           <template #importo-cell="{ row }">
             <span class="font-medium text-slate-800">€ {{ fmt(parseFloat(row.original.importo)) }}</span>
           </template>
@@ -618,6 +632,30 @@
           <UFormField v-if="nuovoMovimento.tipo !== 'PROVENTI_DIVERSI'" name="categoria" label="Categoria">
             <USelect v-model="nuovoMovimento.categoria" :items="opzioniForm" value-key="value" class="w-full" />
           </UFormField>
+
+          <!-- Credito: scelta stato fattura (nessuna / da emettere / emessa) -->
+          <template v-if="nuovoMovimento.tipo === 'CREDITO'">
+            <UFormField label="Fattura">
+              <USelect
+                v-model="nuovoMovimento.statoFattura"
+                :items="[
+                  { label: 'Nessuna fattura', value: 'NESSUNA' },
+                  { label: 'Da emettere', value: 'DA_EMETTERE' },
+                  { label: 'Emessa', value: 'EMESSA' },
+                ]"
+                value-key="value"
+                class="w-full"
+              />
+            </UFormField>
+            <div v-if="nuovoMovimento.statoFattura === 'EMESSA'" class="grid grid-cols-2 gap-4">
+              <UFormField label="Numero fattura">
+                <UInput v-model="nuovoMovimento.numeroFattura" placeholder="Es. 42" class="w-full" />
+              </UFormField>
+              <UFormField label="Data emissione">
+                <UInput type="date" v-model="nuovoMovimento.dataFattura" class="w-full" />
+              </UFormField>
+            </div>
+          </template>
 
           <p v-if="nuovoMovimento.tipo === 'PROVENTI_DIVERSI'" class="text-xs text-slate-500 bg-teal-50 border border-teal-100 rounded-lg px-3 py-2">
             Verranno creati <strong>due movimenti gemelli</strong>: +€ in entrata ("Proventi diversi") e
@@ -694,8 +732,9 @@
           <UFormField label="Categoria">
             <USelect v-model="modificaMovimento.categoria" :items="opzioniForm" value-key="value" class="w-full" />
           </UFormField>
-          <UFormField v-if="modificaMovimento.tipo === 'ENTRATA'" name="richiedeFattura">
-            <UCheckbox v-model="modificaMovimento.richiedeFattura" label="Richiede fattura" />
+          <UFormField v-if="['ENTRATA', 'CREDITO'].includes(modificaMovimento.tipo)" name="richiedeFattura">
+            <UCheckbox v-model="modificaMovimento.richiedeFattura" label="Fattura richiesta (da emettere)" />
+            <p class="text-xs text-slate-400 mt-1">Per segnarla come <strong>emessa</strong> usa l'icona fattura nella lista movimenti (chiede numero e data).</p>
           </UFormField>
         </div>
       </template>
@@ -736,6 +775,53 @@
             <span class="font-medium text-slate-800">€ {{ fmt(parseFloat(row.original.importo)) }}</span>
           </template>
         </UTable>
+      </template>
+    </UModal>
+
+    <!-- ─── MODAL DATI FATTURA (numero + data emissione) ─── -->
+    <UModal v-model:open="modalDatiFatturaAperto" title="Dati fattura">
+      <template #body>
+        <div class="space-y-4">
+          <p class="text-sm text-slate-500">Inserisci numero e data della fattura: verranno aggiunti in coda alla descrizione del movimento.</p>
+          <UFormField label="Numero fattura" required>
+            <UInput v-model="datiFattura.numero" placeholder="Es. 42" class="w-full" autofocus />
+          </UFormField>
+          <UFormField label="Data emissione" required>
+            <UInput type="date" v-model="datiFattura.data" class="w-full" />
+          </UFormField>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex justify-end gap-2 w-full">
+          <UButton variant="ghost" @click="modalDatiFatturaAperto = false">Annulla</UButton>
+          <UButton :disabled="!datiFattura.numero || !datiFattura.data" @click="confermaDatiFattura">Conferma</UButton>
+        </div>
+      </template>
+    </UModal>
+
+    <!-- ─── MODAL SEGNA INCASSATO (credito → entrata) ─── -->
+    <UModal v-model:open="modalIncassoAperto" title="Segna credito come incassato">
+      <template #body>
+        <div class="space-y-4">
+          <p class="text-sm text-slate-500">
+            Il credito diventerà un'<strong>Entrata</strong> reale. Il Fatturato non cambia
+            (se la fattura era già emessa resta contata una sola volta).
+          </p>
+          <div class="grid grid-cols-2 gap-4">
+            <UFormField label="Data incasso">
+              <UInput type="date" v-model="datiIncasso.data" class="w-full" />
+            </UFormField>
+            <UFormField label="Metodo">
+              <USelect v-model="datiIncasso.metodo" :items="['CONTANTI', 'BONIFICO', 'POS', 'ASSEGNO', 'ALTRO']" class="w-full" />
+            </UFormField>
+          </div>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex justify-end gap-2 w-full">
+          <UButton variant="ghost" @click="modalIncassoAperto = false">Annulla</UButton>
+          <UButton :loading="salvandoIncasso" @click="confermaIncasso">Conferma incasso</UButton>
+        </div>
       </template>
     </UModal>
 
@@ -972,6 +1058,7 @@ const colonneEntries = [
 ]
 
 const colonneFatture = [
+  { accessorKey: 'descrizione',     header: 'Riferimento' },
   { accessorKey: 'importo',         header: 'Importo' },
   { accessorKey: 'dataPagamento',   header: 'Data pagamento' },
   { accessorKey: 'tipoPagamento',   header: 'Tipo' },
@@ -982,16 +1069,51 @@ const colonneFatture = [
 // ─── E1 — Toggle fattura ───
 const toggling = ref<string | null>(null)
 
+// ─── Modal "Dati fattura" (numero + data alla marcatura come emessa) ───
+const modalDatiFatturaAperto = ref(false)
+const datiFattura = reactive({ numero: '', data: oggiISO() })
+// callback eseguita alla conferma del modal (sa quale entry sta marcando)
+const confermaFatturaFn = ref<((numero: string, data: string) => Promise<void>) | null>(null)
+
+function chiediDatiFattura(fn: (numero: string, data: string) => Promise<void>) {
+  datiFattura.numero = ''
+  datiFattura.data = oggiISO()
+  confermaFatturaFn.value = fn
+  modalDatiFatturaAperto.value = true
+}
+
+async function confermaDatiFattura() {
+  if (!confermaFatturaFn.value) return
+  await confermaFatturaFn.value(datiFattura.numero, datiFattura.data)
+  modalDatiFatturaAperto.value = false
+  confermaFatturaFn.value = null
+}
+
 async function toggleFattura(entry: any) {
-  toggling.value = entry.id
   const nuovoStato = !entry.fatturaEmessa
+  // Marcatura come EMESSA → chiedi numero + data
+  if (nuovoStato) {
+    chiediDatiFattura(async (numero, data) => {
+      await inviaFattura(entry, true, numero, data)
+    })
+    return
+  }
+  // Rimozione della fattura → nessun dato richiesto
+  await inviaFattura(entry, false)
+}
+
+// Invio effettivo: sceglie l'endpoint giusto (pagamento vs movimento manuale)
+async function inviaFattura(entry: any, emessa: boolean, numero?: string, data?: string) {
+  toggling.value = entry.id
   try {
+    const body: Record<string, unknown> = { fatturaEmessa: emessa }
+    if (emessa) { body.numeroFattura = numero; body.dataFattura = data }
     if (entry.paymentId) {
-      await $fetch(`/api/payments/${entry.paymentId}/invoice`, { method: 'PUT', body: { fatturaEmessa: nuovoStato } })
+      await $fetch(`/api/payments/${entry.paymentId}/invoice`, { method: 'PUT', body })
     } else {
-      await $fetch(`/api/accounting/entries/${entry.id}`, { method: 'PUT', body: { fatturaEmessa: nuovoStato } })
+      await $fetch(`/api/accounting/entries/${entry.id}`, { method: 'PUT', body })
     }
-    toast.add({ title: nuovoStato ? 'Fattura segnata come emessa' : 'Fattura rimossa', color: 'success', icon: 'i-heroicons-check-circle' })
+    toast.add({ title: emessa ? 'Fattura segnata come emessa' : 'Fattura rimossa', color: 'success', icon: 'i-heroicons-check-circle' })
     refreshAll()
   } catch (err: any) {
     toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Operazione non riuscita', color: 'error' })
@@ -1022,22 +1144,25 @@ async function richiediFattura(entry: any) {
 // ─── Segna fattura emessa (sezione Fatture in attesa) ───
 const segnandoFattura = ref<string | null>(null)
 
-async function segnaFatturaEmessa(row: any) {
-  segnandoFattura.value = row.entryId
-  try {
-    // Movimenti manuali (es. Proventi diversi) non hanno un pagamento collegato
-    if (row.paymentId) {
-      await $fetch(`/api/payments/${row.paymentId}/invoice`, { method: 'PUT', body: { fatturaEmessa: true } })
-    } else {
-      await $fetch(`/api/accounting/entries/${row.entryId}`, { method: 'PUT', body: { fatturaEmessa: true } })
+function segnaFatturaEmessa(row: any) {
+  chiediDatiFattura(async (numero, data) => {
+    segnandoFattura.value = row.entryId
+    try {
+      const body = { fatturaEmessa: true, numeroFattura: numero, dataFattura: data }
+      // Movimenti manuali (es. Proventi diversi, Crediti) non hanno un pagamento collegato
+      if (row.paymentId) {
+        await $fetch(`/api/payments/${row.paymentId}/invoice`, { method: 'PUT', body })
+      } else {
+        await $fetch(`/api/accounting/entries/${row.entryId}`, { method: 'PUT', body })
+      }
+      toast.add({ title: 'Fattura segnata come emessa', color: 'success', icon: 'i-heroicons-check-circle' })
+      refreshDash()
+    } catch (err: any) {
+      toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile aggiornare', color: 'error' })
+    } finally {
+      segnandoFattura.value = null
     }
-    toast.add({ title: 'Fattura segnata come emessa', color: 'success', icon: 'i-heroicons-check-circle' })
-    refreshDash()
-  } catch (err: any) {
-    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile aggiornare', color: 'error' })
-  } finally {
-    segnandoFattura.value = null
-  }
+  })
 }
 
 // ─── E2 — Schema Zod per form nuovo movimento + focus automatico ───
@@ -1073,6 +1198,9 @@ const nuovoMovimento = reactive({
   metodoPagamento: 'BONIFICO',
   data: oggiISO(),
   richiedeFattura: false,
+  statoFattura: 'NESSUNA' as 'NESSUNA' | 'DA_EMETTERE' | 'EMESSA',
+  numeroFattura: '',
+  dataFattura: oggiISO(),
 })
 
 // Proventi diversi nascono con "richiede fattura" attivo (si può togliere a mano)
@@ -1094,7 +1222,13 @@ async function salvaMovimento() {
         categoria: isProventi ? undefined : (nuovoMovimento.categoria || 'varie'),
         metodoPagamento: nuovoMovimento.metodoPagamento,
         data: nuovoMovimento.data,
-        richiedeFattura: nuovoMovimento.richiedeFattura,
+        // Credito: la richiesta/emissione fattura arriva dalla tendina statoFattura
+        richiedeFattura: nuovoMovimento.tipo === 'CREDITO'
+          ? nuovoMovimento.statoFattura !== 'NESSUNA'
+          : nuovoMovimento.richiedeFattura,
+        fatturaEmessa: nuovoMovimento.tipo === 'CREDITO' && nuovoMovimento.statoFattura === 'EMESSA',
+        numeroFattura: nuovoMovimento.numeroFattura || undefined,
+        dataFattura: nuovoMovimento.dataFattura || undefined,
       }
     })
     toast.add({ title: 'Movimento registrato', color: 'success' })
@@ -1115,6 +1249,38 @@ function isAuto(row: any) {
 }
 function isManuale(row: any) {
   return !isAuto(row)
+}
+
+// ─── "Segna incassato": trasforma un Credito in Entrata ───
+const modalIncassoAperto = ref(false)
+const creditoDaIncassare = ref<any>(null)
+const salvandoIncasso = ref(false)
+const datiIncasso = reactive({ data: oggiISO(), metodo: 'BONIFICO' })
+
+function apriIncasso(row: any) {
+  creditoDaIncassare.value = row
+  datiIncasso.data = oggiISO()
+  datiIncasso.metodo = row.metodoPagamento || 'BONIFICO'
+  modalIncassoAperto.value = true
+}
+
+async function confermaIncasso() {
+  if (!creditoDaIncassare.value) return
+  salvandoIncasso.value = true
+  try {
+    await $fetch(`/api/accounting/entries/${creditoDaIncassare.value.id}`, {
+      method: 'PUT',
+      body: { tipo: 'ENTRATA', data: datiIncasso.data, metodoPagamento: datiIncasso.metodo },
+    })
+    toast.add({ title: 'Credito incassato', color: 'success', icon: 'i-heroicons-check-circle' })
+    modalIncassoAperto.value = false
+    creditoDaIncassare.value = null
+    refreshAll()
+  } catch (err: any) {
+    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Operazione non riuscita', color: 'error' })
+  } finally {
+    salvandoIncasso.value = false
+  }
 }
 
 const modalEliminaAperto = ref(false)
@@ -1173,7 +1339,7 @@ async function salvaModifica() {
         categoria:       modificaMovimento.categoria || null,
         metodoPagamento: modificaMovimento.metodoPagamento || null,
         data:            modificaMovimento.data,
-        richiedeFattura: modificaMovimento.tipo === 'ENTRATA' ? modificaMovimento.richiedeFattura : false,
+        richiedeFattura: ['ENTRATA', 'CREDITO'].includes(modificaMovimento.tipo) ? modificaMovimento.richiedeFattura : false,
       },
     })
     toast.add({ title: 'Movimento aggiornato', color: 'success' })

@@ -83,6 +83,9 @@ export const UpdateInvoiceStatusSchema = z.object({
   fatturaEmessa:   z.boolean().optional(),
   // Movimenti automatici: attiva la richiesta fattura (payments.richiedeFattura)
   richiedeFattura: z.boolean().optional(),
+  // Numero e data emissione: accodati alla descrizione del movimento contabile
+  numeroFattura:   z.string().optional(),
+  dataFattura:     z.string().optional(),
 }).refine(d => d.fatturaEmessa !== undefined || d.richiedeFattura !== undefined, {
   message: 'Indicare almeno un campo da aggiornare',
 })

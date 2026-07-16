@@ -123,7 +123,7 @@
                 <!-- Footer Slot (Impostazioni) -->
                 <div class="mt-4 pt-3 border-t border-slate-100 space-y-2">
                   <UCheckbox v-model="slot.mezzaLezione" size="sm" label="Mezza Lezione (per tutti)" />
-                  <UCheckbox v-model="slot.forzaGruppo" :disabled="slot.studenti.length < 2" size="sm" label="Forza GRUPPO" />
+                  <UCheckbox v-model="slot.forzaGruppo" :disabled="slot.studenti.length < 1" size="sm" label="Forza GRUPPO (paga come gruppo)" />
                 </div>
               </UCard>
             </div>
@@ -330,7 +330,7 @@ function apriPickerPerSlot(slotIdx: number) {
   pickerAperto.value = true
 }
 
-async function onPickerConfirm(picked: Array<{ studentId: string; nome: string }>) {
+async function onPickerConfirm(picked: Array<{ studentId: string; nome: string; pacchettiAttivi?: any[] }>) {
   pickerAperto.value = false
   const slotIdx = pickerSlotIndex.value
   if (slotIdx < 0 || !activeSlots.value[slotIdx]) return
@@ -342,19 +342,25 @@ async function onPickerConfirm(picked: Array<{ studentId: string; nome: string }
     const stu = { studentItem: { label: p.nome, value: p.studentId }, packageItem: null, packageOptions: [], loadingPackages: false }
     activeSlots.value[slotIdx].studenti.push(stu)
     const stuIdx = activeSlots.value[slotIdx].studenti.length - 1
-    await onStudenteSelezionato(slotIdx, stuIdx, { value: p.studentId })
+    await onStudenteSelezionato(slotIdx, stuIdx, { value: p.studentId }, p.pacchettiAttivi)
   }
 }
 
-async function onStudenteSelezionato(slotIdx: number, stuIdx: number, newVal: any) {
+async function onStudenteSelezionato(slotIdx: number, stuIdx: number, newVal: any, prefetched?: any[]) {
   const stu = activeSlots.value[slotIdx].studenti[stuIdx]
   const targetId = newVal?.value
   if (!targetId) { stu.packageOptions = []; stu.packageItem = null; return }
-  
+
   stu.loadingPackages = true
   try {
-    const res: any = await $fetch(`/api/packages?studentId=${targetId}&stati=ATTIVO`)
-    const pkgs = res.data || []
+    // Pacchetti già forniti dal picker (admin) → nessuna chiamata; fetch solo di riserva.
+    let pkgs: any[]
+    if (prefetched !== undefined) {
+      pkgs = prefetched
+    } else {
+      const res: any = await $fetch(`/api/packages?studentId=${targetId}&stati=ATTIVO`)
+      pkgs = res.data || []
+    }
     pkgs.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     
     stu.packageOptions = pkgs.map((p: any) => ({

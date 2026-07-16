@@ -2,6 +2,7 @@ import { db } from '../database/client'
 import { students, packages } from '../database/schema'
 import { and, asc, count, desc, eq, ilike, or, inArray, exists, notExists, not, arrayContains } from 'drizzle-orm'
 import { nomeProprio } from '../utils/nomi'
+import { computePackageStates } from './package.service'
 import type { CreateStudentInput, StudentQuery, UpdateStudentInput } from '#shared/schemas/student.schema'
 
 // Mappa i valori sortBy (dalla query) alle colonne Drizzle
@@ -87,19 +88,42 @@ export async function listStudents(query: StudentQuery) {
   }
 
   const studentIds = rows.map(r => r.id)
-  let studentPackages: { studentId: string, stati: string[], createdAt: Date, oreResiduo: string | null, tipo: string | null }[] = []
+  let studentPackages: {
+    id: string, nome: string, studentId: string, stati: string[], createdAt: Date, oreResiduo: string | null, tipo: string | null,
+    oreAcquistate: string, importoResiduo: string, dataScadenza: Date | null, giorniResiduo: number | null, sospeso: boolean | null,
+  }[] = []
   if (studentIds.length > 0) {
     studentPackages = await db.select({
+      id: packages.id,
+      nome: packages.nome,
       studentId: packages.studentId,
       stati: packages.stati,
       createdAt: packages.createdAt,
       oreResiduo: packages.oreResiduo,
       tipo: packages.tipo,
+      oreAcquistate: packages.oreAcquistate,
+      importoResiduo: packages.importoResiduo,
+      dataScadenza: packages.dataScadenza,
+      giorniResiduo: packages.giorniResiduo,
+      sospeso: packages.sospeso,
     }).from(packages).where(inArray(packages.studentId, studentIds))
   }
 
   const dataWithStatus = rows.map(student => {
-    const pkgs = studentPackages.filter(p => p.studentId === student.id && !p.stati.includes('CHIUSO'))
+    // Ricalcola gli stati al volo (la colonna salvata può essere obsoleta, es. scadenza
+    // superata dopo l'ultima scrittura) così SCADUTO/ESAURITO sono sempre veritieri.
+    const pkgsAll = studentPackages
+      .filter(p => p.studentId === student.id)
+      .map(p => ({ ...p, stati: computePackageStates({
+        oreAcquistate:  p.oreAcquistate,
+        oreResiduo:     p.oreResiduo ?? '0',
+        importoResiduo: p.importoResiduo,
+        dataScadenza:   p.dataScadenza,
+        giorniResiduo:  p.giorniResiduo,
+        sospeso:        p.sospeso,
+      }) as string[] }))
+
+    const pkgs = pkgsAll.filter(p => !p.stati.includes('CHIUSO'))
 
     let globalStatus = 'Inattivo'
     let statusColor = 'neutral'
@@ -132,8 +156,26 @@ export async function listStudents(query: StudentQuery) {
     }
 
     // Pacchetto attivo più rilevante (il primo non chiuso)
-    const pkgAttivo = studentPackages.find(p => p.studentId === student.id && !p.stati.includes('CHIUSO'))
-    const hasPacchetti = studentPackages.some(p => p.studentId === student.id)
+    const pkgAttivo = pkgs[0]
+    const hasPacchetti = pkgsAll.length > 0
+
+    // Selezionabile per una lezione se ha ALMENO un pacchetto ancora "buono":
+    // non esaurito (ore/giorni finiti) e non scaduto. Il saldo "da pagare" NON blocca.
+    const usable = pkgs.some(p => !p.stati.includes('ESAURITO') && !p.stati.includes('SCADUTO'))
+    let blockLabel: string | null = null
+    if (student.active && !usable) {
+      if      (pkgs.some(p => p.stati.includes('SCADUTO')))  blockLabel = 'Scaduto'
+      else if (pkgs.some(p => p.stati.includes('ESAURITO'))) blockLabel = 'Esaurito'
+      else if (hasPacchetti)                                 blockLabel = 'Pacchetti chiusi'
+    }
+
+    // Pacchetti ATTIVI pronti per il form lezione: così il picker li invia già col
+    // suo confirm e la finestra lezione NON deve fare una nuova chiamata /api/packages
+    // alla selezione (che su connessione fredda costava ~0,5-2s di "caricamento").
+    const pacchettiAttivi = pkgs
+      .filter(p => p.stati.includes('ATTIVO'))
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map(p => ({ id: p.id, nome: p.nome, tipo: p.tipo, oreResiduo: p.oreResiduo, giorniResiduo: p.giorniResiduo, createdAt: p.createdAt }))
 
     return {
       ...student,
@@ -142,6 +184,8 @@ export async function listStudents(query: StudentQuery) {
       pkgOreResiduo: pkgAttivo?.oreResiduo ?? null,
       pkgTipo: pkgAttivo?.tipo ?? null,
       hasPacchetti,
+      blockLabel,
+      pacchettiAttivi,
     }
   })
 

@@ -11,6 +11,8 @@ const bodySchema = z.object({
   data:            z.string().optional(),
   fatturaEmessa:   z.boolean().optional(),
   richiedeFattura: z.boolean().optional(),
+  numeroFattura:   z.string().optional(),
+  dataFattura:     z.string().optional(),
 })
 
 // PUT /api/accounting/entries/:id

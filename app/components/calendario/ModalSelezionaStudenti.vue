@@ -108,7 +108,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:open': [val: boolean]
-  'confirm': [students: Array<{ studentId: string; nome: string; oreResiduo: string | null; pkgTipo: string | null }>]
+  'confirm': [students: Array<{ studentId: string; nome: string; oreResiduo: string | null; pkgTipo: string | null; pacchettiAttivi?: any[] }>]
 }>()
 
 const isOpen = computed({
@@ -131,6 +131,8 @@ type StudentRow = {
   pkgTipo: string | null
   globalStatus: string
   hasPacchetti: boolean
+  blockLabel: string | null
+  pacchettiAttivi?: any[]
 }
 
 const allStudents = computed<StudentRow[]>(() => {
@@ -143,6 +145,7 @@ const allStudents = computed<StudentRow[]>(() => {
       pkgTipo: null,
       globalStatus: 'Attivo',
       hasPacchetti: true,
+      blockLabel: null,
     }))
   }
   return ((studentsRes.value as any)?.data ?? []).map((s: any) => ({
@@ -153,17 +156,15 @@ const allStudents = computed<StudentRow[]>(() => {
     pkgTipo: s.pkgTipo ?? null,
     globalStatus: s.globalStatus ?? 'Attivo',
     hasPacchetti: s.hasPacchetti ?? false,
+    blockLabel: s.blockLabel ?? null,
+    pacchettiAttivi: s.pacchettiAttivi ?? [],
   }))
 })
 
-// Restituisce il motivo del blocco, o null se lo studente è selezionabile
+// Motivo del blocco deciso dal server: si blocca SOLO se il pacchetto è
+// esaurito (ore/giorni finiti) o scaduto. Il saldo "da pagare" non blocca.
 function blockedReason(s: StudentRow): string | null {
-  if (s.globalStatus === 'Scaduto') return 'Scaduto'
-  if (s.globalStatus === 'Da pagare') return 'Da pagare'
-  if (s.globalStatus === 'Da rinnovare') return 'Da rinnovare'
-  if (s.globalStatus === 'Nessun pacchetto' && s.hasPacchetti) return 'Pacchetti chiusi'
-  if (s.pkgTipo === 'ORE' && s.pkgOreResiduo !== null && parseFloat(s.pkgOreResiduo) <= 0) return 'Ore esaurite'
-  return null
+  return s.blockLabel ?? null
 }
 
 // Nasconde: inattivi + studenti senza mai un pacchetto
@@ -198,13 +199,19 @@ function toggleStudent(id: string) {
 }
 
 function onConfirm() {
-  const picked = visibleStudents.value
+  // Filtra su TUTTI gli studenti, non solo quelli visibili: se l'utente ha usato
+  // la ricerca per selezionarli uno alla volta, i selezionati fuori dal filtro
+  // corrente NON devono essere persi (altrimenti arriva solo l'ultimo cercato).
+  const picked = allStudents.value
     .filter(s => selected.value.has(s.id))
     .map(s => ({
       studentId: s.id,
       nome: props.studentsPool ? s.firstName : `${s.firstName} ${s.lastName}`.trim(),
       oreResiduo: s.pkgOreResiduo,
       pkgTipo: s.pkgTipo,
+      // In modalità pool (area tutor) non abbiamo i pacchetti pronti → resta undefined
+      // e la finestra lezione farà il fetch come prima. In modalità admin arrivano già.
+      pacchettiAttivi: props.studentsPool ? undefined : s.pacchettiAttivi,
     }))
   emit('confirm', picked)
   isOpen.value = false
