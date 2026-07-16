@@ -277,12 +277,14 @@ export async function createPackage(data: CreatePackageInput) {
     const importoResiduo = data.prezzoTotale - importoPagato
 
     // Data di scadenza:
-    //  - MENSILE: calcolata da dataInizio + giorni (se non fornita esplicitamente)
+    //  - MENSILE: dataInizio + 30 giorni di calendario (se non fornita esplicitamente).
+    //    NON usare giorniAcquistati: quelli sono i giorni di LEZIONE compresi (es. 12),
+    //    non la durata del pacchetto.
     //  - ORE / A_CONSUMO: usa quella inviata dal frontend (es. 15/06)
     let dataScadenza: Date | null = data.dataScadenza ?? null
-    if (!dataScadenza && data.tipo === 'MENSILE' && data.giorniAcquistati) {
+    if (!dataScadenza && data.tipo === 'MENSILE') {
       dataScadenza = new Date(data.dataInizio)
-      dataScadenza.setDate(dataScadenza.getDate() + data.giorniAcquistati)
+      dataScadenza.setDate(dataScadenza.getDate() + 30)
     }
 
     // Calcola gli stati iniziali
