@@ -1,6 +1,7 @@
 import { db } from '../database/client'
 import { accountingEntries, packages, packageRecharges, payments, students, lessonStudents } from '../database/schema'
 import { and, count, desc, eq, getTableColumns } from 'drizzle-orm'
+import { oggiRomeStr, romeDateStr } from '../utils/tutor-time-window'
 import type { CreatePackageInput, PackageQuery, RechargePackageInput, UpdatePackageInput } from '#shared/schemas/package.schema'
 
 // ─────────────────────────────────────────────
@@ -40,8 +41,11 @@ export function computePackageStates(pkg: PackageStateInput): PackageStatus[] {
   const oreAcquistate = parseFloat(pkg!.oreAcquistate)
   const importoResiduo = parseFloat(pkg.importoResiduo)
 
-  const oggi = new Date()
-  oggi.setHours(0, 0, 0, 0)
+  // Confronti per GIORNO CIVILE ITALIANO ('YYYY-MM-DD'), mai per istante: la scadenza
+  // è salvata come timestamptz (a mezzanotte UTC, o a mezzanotte italiana per i dati
+  // importati) e il troncamento nel fuso del server faceva scadere i pacchetti con
+  // un giorno di anticipo. Il pacchetto vale TUTTO il giorno di scadenza.
+  const oggiStr = oggiRomeStr()
 
   const stati: PackageStatus[] = []
 
@@ -54,9 +58,7 @@ export function computePackageStates(pkg: PackageStateInput): PackageStatus[] {
   // REGOLA 2 — SCADUTO
   let isScaduto = false
   if (pkg!.dataScadenza) {
-    const scadenza = new Date(pkg!.dataScadenza)
-    scadenza.setHours(0, 0, 0, 0)
-    if (scadenza < oggi) {
+    if (romeDateStr(new Date(pkg!.dataScadenza)) < oggiStr) {
       stati.push('SCADUTO')
       isScaduto = true
     }
@@ -72,9 +74,8 @@ export function computePackageStates(pkg: PackageStateInput): PackageStatus[] {
 
     let giorniAllaScadenza = Infinity
     if (pkg!.dataScadenza) {
-      const scadenza = new Date(pkg!.dataScadenza)
-      scadenza.setHours(0, 0, 0, 0)
-      giorniAllaScadenza = Math.ceil((scadenza.getTime() - oggi.getTime()) / (1000 * 60 * 60 * 24))
+      const scadenzaStr = romeDateStr(new Date(pkg!.dataScadenza))
+      giorniAllaScadenza = Math.round((Date.parse(scadenzaStr) - Date.parse(oggiStr)) / (1000 * 60 * 60 * 24))
     }
 
     if (percentuale < 20 || giorniAllaScadenza <= 3) stati.push('DA_RINNOVARE')

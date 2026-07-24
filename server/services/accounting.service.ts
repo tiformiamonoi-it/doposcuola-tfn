@@ -334,10 +334,13 @@ export async function getPrevisioni(startDate?: Date, endDate?: Date) {
 type EntrateUscite = { entrate: number; uscite: number }
 
 export async function getMovimentiPerMetodo(startDate?: Date, endDate?: Date) {
+  // Le categorie neutre (giroconti, saldo iniziale…) e i proventi diversi non sono
+  // cassa reale: fuori da "per metodo" e dai saldi Banca/Contanti.
+  const neutre = await getNeutralKeys()
+  const escluse = [...neutre, ...CATEGORIE_PROVENTI]
   const conditions = [
     inArray(accountingEntries.tipo, ['ENTRATA', 'USCITA']) as any,
-    // I proventi diversi non sono cassa reale: fuori da "per metodo" e saldi cassa
-    or(isNull(accountingEntries.categoria), notInArray(accountingEntries.categoria, CATEGORIE_PROVENTI)) as any,
+    or(isNull(accountingEntries.categoria), notInArray(accountingEntries.categoria, escluse)) as any,
   ]
   if (startDate) conditions.push(gte(accountingEntries.data, startDate) as any)
   if (endDate)   conditions.push(lte(accountingEntries.data, endDate) as any)

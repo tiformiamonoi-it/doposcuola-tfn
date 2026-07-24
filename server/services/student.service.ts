@@ -1,8 +1,9 @@
 import { db } from '../database/client'
-import { students, packages } from '../database/schema'
-import { and, asc, count, desc, eq, ilike, or, inArray, exists, notExists, not, arrayContains } from 'drizzle-orm'
+import { students, packages, lessons, lessonStudents } from '../database/schema'
+import { and, asc, count, desc, eq, gt, gte, ilike, isNull, or, inArray, exists, notExists, sql, arrayContains } from 'drizzle-orm'
 import { nomeProprio } from '../utils/nomi'
 import { computePackageStates } from './package.service'
+import { confiniGiornoOggiRome } from '../utils/tutor-time-window'
 import type { CreateStudentInput, StudentQuery, UpdateStudentInput } from '#shared/schemas/student.schema'
 
 // Mappa i valori sortBy (dalla query) alle colonne Drizzle
@@ -11,6 +12,23 @@ const SORT_COLUMNS = {
   firstName: students.firstName,
   createdAt: students.createdAt,
 } as const
+
+// Pacchetto ancora "aperto" (= NON chiuso) calcolato dalle colonne base, mai dalla
+// colonna stati salvata: quella resta obsoleta se la scadenza passa senza nuove
+// scritture, e faceva comparire alunni con soli pacchetti ormai chiusi.
+// Aperto = c'è ancora un saldo da pagare, OPPURE è ancora spendibile
+// (ore rimaste, giorni rimasti se mensile, scadenza non superata — giorno civile italiano).
+function pacchettoAperto() {
+  const inizioOggiRome = confiniGiornoOggiRome().start
+  return or(
+    sql`${packages.importoResiduo}::numeric > 0.001`,
+    and(
+      sql`${packages.oreResiduo}::numeric > 0`,
+      or(isNull(packages.giorniResiduo), gt(packages.giorniResiduo, 0)),
+      or(isNull(packages.dataScadenza), gte(packages.dataScadenza, inizioOggiRome)),
+    ),
+  )
+}
 
 // ─────────────────────────────────────────────
 // LIST  — GET /api/students
@@ -33,7 +51,7 @@ export async function listStudents(query: StudentQuery) {
     conditions.push(eq(students.active, true))
     conditions.push(
       exists(
-        db.select({ id: packages.id }).from(packages).where(and(eq(packages.studentId, students.id), not(arrayContains(packages.stati, ['CHIUSO']))))
+        db.select({ id: packages.id }).from(packages).where(and(eq(packages.studentId, students.id), pacchettoAperto()))
       )
     )
   }
@@ -42,7 +60,7 @@ export async function listStudents(query: StudentQuery) {
     if (query.packageStatus === 'NESSUNO') {
       conditions.push(
         notExists(
-          db.select({ id: packages.id }).from(packages).where(and(eq(packages.studentId, students.id), not(arrayContains(packages.stati, ['CHIUSO']))))
+          db.select({ id: packages.id }).from(packages).where(and(eq(packages.studentId, students.id), pacchettoAperto()))
         )
       )
     } else {
@@ -51,7 +69,7 @@ export async function listStudents(query: StudentQuery) {
           db.select({ id: packages.id }).from(packages).where(
             and(
               eq(packages.studentId, students.id),
-              not(arrayContains(packages.stati, ['CHIUSO'])),
+              pacchettoAperto(),
               arrayContains(packages.stati, [query.packageStatus as any])
             )
           )
@@ -109,6 +127,26 @@ export async function listStudents(query: StudentQuery) {
     }).from(packages).where(inArray(packages.studentId, studentIds))
   }
 
+  // Eccezione "stesso giorno" (mensili a giorni finiti ma con ore rimaste): se il
+  // picker chiede la lista per una data precisa (lessonDate) e il pacchetto ha GIÀ
+  // una lezione in quella data, l'alunno resta selezionabile per le ore aggiuntive.
+  const pacchettiConLezioneNellaData = new Set<string>()
+  if (query.lessonDate) {
+    const candidati = studentPackages.filter(p =>
+      p.giorniResiduo !== null && p.giorniResiduo <= 0 && parseFloat(p.oreResiduo ?? '0') > 0 && !p.sospeso)
+    if (candidati.length > 0) {
+      const lezioniQuelGiorno = await db
+        .select({ packageId: lessonStudents.packageId })
+        .from(lessonStudents)
+        .innerJoin(lessons, eq(lessonStudents.lessonId, lessons.id))
+        .where(and(
+          inArray(lessonStudents.packageId, candidati.map(c => c.id)),
+          eq(lessons.data, query.lessonDate),
+        ))
+      for (const r of lezioniQuelGiorno) pacchettiConLezioneNellaData.add(r.packageId)
+    }
+  }
+
   const dataWithStatus = rows.map(student => {
     // Ricalcola gli stati al volo (la colonna salvata può essere obsoleta, es. scadenza
     // superata dopo l'ultima scrittura) così SCADUTO/ESAURITO sono sempre veritieri.
@@ -161,7 +199,11 @@ export async function listStudents(query: StudentQuery) {
 
     // Selezionabile per una lezione se ha ALMENO un pacchetto ancora "buono":
     // non esaurito (ore/giorni finiti) e non scaduto. Il saldo "da pagare" NON blocca.
+    // Eccezione: mensile a giorni finiti ma con la giornata (lessonDate) già conteggiata.
+    const sbloccoStessoGiorno = (p: { id: string; stati: string[] }) =>
+      pacchettiConLezioneNellaData.has(p.id) && !p.stati.includes('SCADUTO')
     const usable = pkgs.some(p => !p.stati.includes('ESAURITO') && !p.stati.includes('SCADUTO'))
+      || pkgsAll.some(sbloccoStessoGiorno)
     let blockLabel: string | null = null
     if (student.active && !usable) {
       if      (pkgs.some(p => p.stati.includes('SCADUTO')))  blockLabel = 'Scaduto'
@@ -172,8 +214,12 @@ export async function listStudents(query: StudentQuery) {
     // Pacchetti ATTIVI pronti per il form lezione: così il picker li invia già col
     // suo confirm e la finestra lezione NON deve fare una nuova chiamata /api/packages
     // alla selezione (che su connessione fredda costava ~0,5-2s di "caricamento").
-    const pacchettiAttivi = pkgs
-      .filter(p => p.stati.includes('ATTIVO'))
+    const pacchettiAttivi = [
+      ...pkgs.filter(p => p.stati.includes('ATTIVO')),
+      // Mensile già CHIUSO ma con la giornata richiesta già conteggiata: proposto
+      // comunque, così le ore aggiuntive dello stesso giorno si registrano su di lui
+      ...pkgsAll.filter(p => p.stati.includes('CHIUSO') && sbloccoStessoGiorno(p)),
+    ]
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
       .map(p => ({ id: p.id, nome: p.nome, tipo: p.tipo, oreResiduo: p.oreResiduo, giorniResiduo: p.giorniResiduo, createdAt: p.createdAt }))
 
@@ -214,7 +260,7 @@ export async function getStudentsStats() {
       db.select({ id: packages.id }).from(packages).where(
         and(
           eq(packages.studentId, students.id),
-          not(arrayContains(packages.stati, ['CHIUSO'])),
+          pacchettoAperto(),
           arrayContains(packages.stati, [stato as any]),
         ),
       ),

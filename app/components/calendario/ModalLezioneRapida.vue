@@ -81,6 +81,7 @@
           v-model:open="pickerAperto"
           :already-selected-ids="students.map(s => s.studentItem?.value).filter(Boolean)"
           :students-pool="props.studentsPool"
+          :lesson-date="props.date"
           @confirm="onPickerConfirm"
         />
 
@@ -172,7 +173,7 @@ const calculatedType = computed(() => {
   if (num === 0) return ''
   if (forzaGruppo.value) return 'GRUPPO'
   if (num === 1) return 'SINGOLA'
-  if (num <= 3) return 'GRUPPO'
+  if (num <= 4) return 'GRUPPO'   // MAXI solo da 5 studenti (come il server)
   return 'MAXI'
 })
 

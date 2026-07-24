@@ -104,6 +104,9 @@ const props = defineProps<{
   open: boolean
   alreadySelectedIds?: string[]
   studentsPool?: { studentId: string; nome: string }[]
+  // Data della lezione che si sta creando ('YYYY-MM-DD'): il server la usa per NON
+  // bloccare i mensili a giorni finiti che hanno già una lezione in quella data
+  lessonDate?: string
 }>()
 
 const emit = defineEmits<{
@@ -119,7 +122,12 @@ const isOpen = computed({
 const selected = ref<Set<string>>(new Set())
 const query = ref('')
 
-const { data: studentsRes, pending } = useLazyFetch('/api/students?active=true&limit=500', {
+const { data: studentsRes, pending } = useLazyFetch('/api/students', {
+  query: computed(() => ({
+    active: 'true',
+    limit: 500,
+    ...(props.lessonDate ? { lessonDate: props.lessonDate } : {}),
+  })),
   immediate: !props.studentsPool,
 })
 

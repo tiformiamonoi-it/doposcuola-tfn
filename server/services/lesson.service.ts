@@ -82,6 +82,34 @@ function determineLessonType(numStudenti: number, forzaGruppo: boolean): LessonT
   return 'SINGOLA'
 }
 
+// Eccezione "stesso giorno" per i pacchetti MENSILI: se i giorni sono finiti ma la
+// giornata della lezione è GIÀ stata conteggiata (esiste già una lezione di quel
+// pacchetto in quella data), le ore aggiuntive dello stesso giorno restano permesse.
+// Es: ultimo giorno rimasto, oggi 3 ore → la 1ª ora consuma il giorno, la 2ª e 3ª passano.
+async function oreAggiuntiveStessoGiornoOk(
+  tx: any,
+  pkg: { oreResiduo: string; giorniResiduo: number | null },
+  statiFreschi: string[],
+  studentId: string,
+  packageId: string,
+  lessonDateStr: string,
+  oreScalate: number,
+): Promise<boolean> {
+  if (Number(pkg.oreResiduo) < oreScalate) return false                 // le ore servono comunque
+  if (statiFreschi.includes('SCADUTO')) return false                    // scaduto resta bloccato
+  if (pkg.giorniResiduo == null || pkg.giorniResiduo > 0) return false  // blocco non dovuto ai giorni
+  const res = await tx
+    .select({ n: count() })
+    .from(lessonStudents)
+    .innerJoin(lessons, eq(lessonStudents.lessonId, lessons.id))
+    .where(and(
+      eq(lessonStudents.studentId, studentId),
+      eq(lessonStudents.packageId, packageId),
+      eq(lessons.data, lessonDateStr),
+    ))
+  return (res[0]?.n ?? 0) > 0
+}
+
 // ─────────────────────────────────────────────
 // CREATE — POST /api/lessons
 // Transazione atomica: lezione + scalamento ore + stati + compenso
@@ -196,7 +224,10 @@ export async function createLesson(data: CreateLessonInput) {
       const hasInvalidState = statiFreschi.includes('CHIUSO') || statiFreschi.includes('ESAURITO') || statiFreschi.includes('SCADUTO')
 
       if (Number(pkgCheck.oreResiduo) < oreScalate || hasInvalidState) {
-        throw new Error(`${nomeStudente(studente.studentId)}: il pacchetto non ha ore sufficienti oppure è chiuso, esaurito o scaduto.`)
+        const okStessoGiorno = await oreAggiuntiveStessoGiornoOk(tx, pkgCheck, statiFreschi, studente.studentId, studente.packageId, lessonDateStr, oreScalate)
+        if (!okStessoGiorno) {
+          throw new Error(`${nomeStudente(studente.studentId)}: il pacchetto non ha ore sufficienti oppure è chiuso, esaurito o scaduto.`)
+        }
       }
 
       // Inserisce il record studente nella lezione
@@ -408,7 +439,10 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
         const hasInvalidState = statiFreschi.includes('CHIUSO') || statiFreschi.includes('ESAURITO') || statiFreschi.includes('SCADUTO')
 
         if (Number(pkgCheck.oreResiduo) < oreScalate || hasInvalidState) {
-          throw new Error(`${nomeStudenteUpd(nuovo.studentId)}: il pacchetto non ha ore sufficienti oppure è chiuso, esaurito o scaduto.`)
+          const okStessoGiorno = await oreAggiuntiveStessoGiornoOk(tx, pkgCheck, statiFreschi, nuovo.studentId, nuovo.packageId, lessonDateStr, oreScalate)
+          if (!okStessoGiorno) {
+            throw new Error(`${nomeStudenteUpd(nuovo.studentId)}: il pacchetto non ha ore sufficienti oppure è chiuso, esaurito o scaduto.`)
+          }
         }
 
         await tx.insert(lessonStudents).values({
@@ -501,7 +535,10 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
         const statiFreschiF7 = computePackageStates(newPkgCheck)
         const hasInvalidStateF7 = statiFreschiF7.includes('CHIUSO') || statiFreschiF7.includes('ESAURITO') || statiFreschiF7.includes('SCADUTO')
         if (Number(newPkgCheck.oreResiduo) < oreScalate || hasInvalidStateF7) {
-          throw new Error(`${nomeStudenteUpd(newStu.studentId)}: il nuovo pacchetto non ha ore sufficienti oppure è chiuso, esaurito o scaduto.`)
+          const okStessoGiorno = await oreAggiuntiveStessoGiornoOk(tx, newPkgCheck, statiFreschiF7, newStu.studentId, newStu.packageId, lessonDateStr, oreScalate)
+          if (!okStessoGiorno) {
+            throw new Error(`${nomeStudenteUpd(newStu.studentId)}: il nuovo pacchetto non ha ore sufficienti oppure è chiuso, esaurito o scaduto.`)
+          }
         }
 
         // Scala ore dal nuovo pacchetto
@@ -836,11 +873,19 @@ export async function getPoolStudentiOggi() {
       lte(bookings.requestedDate, end),
     ))
 
-  return rows.map(r => ({
-    studentId: r.studentId as string,
-    nome:      `${r.studentName} ${r.studentSurname}`,
-    materia:   r.subject,
-  }))
+  // Uno studente prenotato per più materie (o con più prenotazioni) deve comparire
+  // UNA volta sola nel picker del tutor: dedup per studentId, materie unite.
+  const perStudente = new Map<string, { studentId: string; nome: string; materia: string }>()
+  for (const r of rows) {
+    const id = r.studentId as string
+    const esistente = perStudente.get(id)
+    if (!esistente) {
+      perStudente.set(id, { studentId: id, nome: `${r.studentName} ${r.studentSurname}`, materia: r.subject })
+    } else if (r.subject && !esistente.materia.split(', ').includes(r.subject)) {
+      esistente.materia += `, ${r.subject}`
+    }
+  }
+  return [...perStudente.values()]
 }
 
 // Verifica che ogni studente sia nel pool di oggi — usata per impedire a un TUTOR di

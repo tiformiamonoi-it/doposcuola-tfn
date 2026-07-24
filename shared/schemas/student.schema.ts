@@ -148,6 +148,9 @@ export const StudentQuerySchema = z.object({
   active:   z.enum(['true', 'false']).optional(),
   packageStatus: z.enum(['DA_PAGARE', 'DA_RINNOVARE', 'SCADUTO', 'ATTIVO', 'NESSUNO', 'all']).optional(),
   hideInactive: z.enum(['true', 'false']).optional(),
+  // Data della lezione che si sta creando ('YYYY-MM-DD'): serve al picker per NON
+  // bloccare i mensili a giorni finiti che hanno GIÀ una lezione in quella data
+  lessonDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   // Modalità leggera per tendine/autocomplete: salta join pacchetti e badge di stato
   light:    z.enum(['true', 'false']).optional(),
   classe:   z.string().optional(),

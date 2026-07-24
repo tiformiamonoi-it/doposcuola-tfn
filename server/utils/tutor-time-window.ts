@@ -28,6 +28,12 @@ export function oggiRomeStr(): string {
   return romeParts(new Date()).dateStr
 }
 
+// Giorno civile a Roma di un qualsiasi istante ('YYYY-MM-DD') — corregge lo sfasamento
+// dei timestamptz salvati a mezzanotte UTC oppure a mezzanotte italiana (dati importati)
+export function romeDateStr(d: Date): string {
+  return romeParts(d).dateStr
+}
+
 // La disponibilità di OGGI si può modificare solo entro le 9:30 (ora italiana)
 export function disponibilitaOggiAncoraAperta(): boolean {
   const { hour, minute } = romeParts(new Date())

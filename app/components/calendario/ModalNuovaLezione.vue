@@ -181,6 +181,7 @@
         <ModalSelezionaStudenti
           v-model:open="pickerAperto"
           :already-selected-ids="pickerSlotIndex >= 0 ? activeSlots[pickerSlotIndex]?.studenti.map((s: any) => s.studentItem?.value).filter(Boolean) : []"
+          :lesson-date="selectedDate"
           @confirm="onPickerConfirm"
         />
       </div>
@@ -403,7 +404,7 @@ const totalCompenso = computed(() => {
     let tipo = 'SINGOLA'
     if (slot.forzaGruppo) tipo = 'GRUPPO'
     else if (validStudents === 1) tipo = 'SINGOLA'
-    else if (validStudents <= 3) tipo = 'GRUPPO'
+    else if (validStudents <= 4) tipo = 'GRUPPO'   // MAXI solo da 5 studenti (come il server)
     else tipo = 'MAXI'
     
     // Mezza lezione: tariffe fisse da shared/tariffe.ts (mezza MAXI = €4,00, NON tariffa/2)
