@@ -44,4 +44,4 @@ append-docs.mjs
 # Ignora file markdown nella root tranne README.md
 /*.md
 !/README.md
-
+manuale/
