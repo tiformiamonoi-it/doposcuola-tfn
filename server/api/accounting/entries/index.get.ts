@@ -1,5 +1,5 @@
 import { db } from '../../../database/client'
-import { accountingEntries, payments } from '../../../database/schema'
+import { accountingEntries, payments, tutorPayments, tutorReimbursements, users } from '../../../database/schema'
 import { and, desc, eq, gte, lte, count, getTableColumns, isNull, notInArray, or, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { canSeeProventiDiversi } from '../../../services/accounting.service'
@@ -60,9 +60,16 @@ export default defineEventHandler(async (event) => {
       .select({
         ...getTableColumns(accountingEntries),
         richiedeFattura: sql<boolean>`COALESCE(${payments.richiedeFattura}, ${accountingEntries.richiedeFattura})`,
+        // Compensi e rimborsi tutor: la descrizione salvata non contiene il nome.
+        // Lo ricaviamo dal pagamento collegato, così sono nominativi anche i movimenti già registrati.
+        tutorId:   sql<string | null>`COALESCE(${tutorPayments.tutorId}, ${tutorReimbursements.tutorId})`,
+        tutorNome: sql<string | null>`NULLIF(TRIM(COALESCE(${users.firstName}, '') || ' ' || COALESCE(${users.lastName}, '')), '')`,
       })
       .from(accountingEntries)
       .leftJoin(payments, eq(accountingEntries.paymentId, payments.id))
+      .leftJoin(tutorPayments, eq(accountingEntries.tutorPaymentId, tutorPayments.id))
+      .leftJoin(tutorReimbursements, eq(accountingEntries.reimbursementId, tutorReimbursements.id))
+      .leftJoin(users, eq(users.id, sql`COALESCE(${tutorPayments.tutorId}, ${tutorReimbursements.tutorId})`))
       .where(where)
       .orderBy(desc(accountingEntries.data), desc(accountingEntries.id))
       .limit(query.limit)

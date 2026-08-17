@@ -129,6 +129,14 @@ export async function getPendingInvoices() {
     ),
   ])
 
+  // Le due liste devono avere la STESSA forma, altrimenti chi le legge non può
+  // usare i campi presenti solo su una delle due (es. tipoMovimento nella tabella).
+  const daPagamentiMapped = daPagamenti.map((p) => ({
+    ...p,
+    categoria:     null as string | null,
+    tipoMovimento: 'PAGAMENTO' as 'ENTRATA' | 'CREDITO' | 'PAGAMENTO',
+  }))
+
   const manualiMapped = manuali.map((e) => ({
     paymentId:     null as string | null,
     packageId:     null as string | null,
@@ -140,10 +148,10 @@ export async function getPendingInvoices() {
     metodoPagamento: e.metodoPagamento,
     categoria:     e.categoria, // serve per nascondere le fatture dei proventi ai non autorizzati
     descrizione:   e.descrizione,
-    tipoMovimento: e.tipo as 'ENTRATA' | 'CREDITO',
+    tipoMovimento: e.tipo as 'ENTRATA' | 'CREDITO' | 'PAGAMENTO',
   }))
 
-  return [...daPagamenti, ...manualiMapped]
+  return [...daPagamentiMapped, ...manualiMapped]
     .sort((a, b) => new Date(b.dataPagamento).getTime() - new Date(a.dataPagamento).getTime())
 }
 

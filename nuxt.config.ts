@@ -39,6 +39,15 @@ export default defineNuxtConfig({
     'nuxt-auth-utils',
   ],
 
+  // 'indigo' (Crediti) e 'pink' (Debiti) sono usati come color= su badge e bottoni
+  // in Contabilità: vanno dichiarati qui, altrimenti Nuxt UI non genera le loro
+  // variabili di tema (colore assente a schermo) e TypeScript li segnala come errore.
+  ui: {
+    theme: {
+      colors: ['primary', 'secondary', 'success', 'info', 'warning', 'error', 'indigo', 'pink'],
+    },
+  },
+
   runtimeConfig: {
     // Email transazionali via Brevo (https://brevo.com). Se le chiavi mancano,
     // l'invio è disattivato e l'app continua a funzionare (utile in sviluppo).

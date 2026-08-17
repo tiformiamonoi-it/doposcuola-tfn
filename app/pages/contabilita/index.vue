@@ -11,7 +11,7 @@
         <UButton icon="i-heroicons-arrow-path" variant="outline" size="sm" :loading="pending" @click="refreshAll">
           Aggiorna
         </UButton>
-        <UButton icon="i-heroicons-plus" size="sm" @click="modalNuovoMovimentoAperto = true">
+        <UButton icon="i-heroicons-plus" size="sm" @click="modalNuovoMovimentoAperto = true;">
           Nuovo Movimento
         </UButton>
       </div>
@@ -472,6 +472,12 @@
           <template #descrizione-cell="{ row }">
             <span class="text-sm text-slate-700">
               {{ row.original.descrizione }}
+              <!-- Compensi e rimborsi: nome del tutor, cliccabile per aprire la sua scheda -->
+              <NuxtLink
+                v-if="nomeTutor(row.original)"
+                :to="`/tutor/${row.original.tutorId}`"
+                class="font-medium text-primary-600 hover:underline"
+              >· {{ nomeTutor(row.original) }}</NuxtLink>
               <UTooltip v-if="row.original.linkedEntryId" text="Movimento accoppiato 'Proventi diversi': entrata e uscita gemelle">
                 <UBadge color="neutral" variant="subtle" size="xs" class="ml-1">↔</UBadge>
               </UTooltip>
@@ -675,7 +681,7 @@
           </UFormField>
 
           <div class="flex justify-end gap-3 pt-4">
-            <UButton variant="ghost" @click="modalNuovoMovimentoAperto = false">Annulla</UButton>
+            <UButton variant="ghost" @click="modalNuovoMovimentoAperto = false;">Annulla</UButton>
             <UButton type="submit" :loading="salvandoMovimento">Registra</UButton>
           </div>
         </UForm>
@@ -706,7 +712,7 @@
       </template>
       <template #footer>
         <div class="flex justify-end gap-2 w-full">
-          <UButton variant="ghost" @click="modalEliminaAperto = false">Annulla</UButton>
+          <UButton variant="ghost" @click="modalEliminaAperto = false;">Annulla</UButton>
           <UButton color="neutral" variant="outline" :loading="eliminando === 'storno'" @click="eseguiElimina('storno')">Crea storno</UButton>
           <UButton color="error" :loading="eliminando === 'delete'" @click="eseguiElimina('delete')">Elimina definitivamente</UButton>
         </div>
@@ -747,7 +753,7 @@
       </template>
       <template #footer>
         <div class="flex justify-end gap-2 w-full">
-          <UButton variant="ghost" @click="modalModificaAperto = false">Annulla</UButton>
+          <UButton variant="ghost" @click="modalModificaAperto = false;">Annulla</UButton>
           <UButton :loading="salvandoModifica" @click="salvaModifica">Salva modifiche</UButton>
         </div>
       </template>
@@ -800,7 +806,7 @@
       </template>
       <template #footer>
         <div class="flex justify-end gap-2 w-full">
-          <UButton variant="ghost" @click="modalDatiFatturaAperto = false">Annulla</UButton>
+          <UButton variant="ghost" @click="modalDatiFatturaAperto = false;">Annulla</UButton>
           <UButton :disabled="!datiFattura.numero || !datiFattura.data" @click="confermaDatiFattura">Conferma</UButton>
         </div>
       </template>
@@ -829,7 +835,7 @@
       </template>
       <template #footer>
         <div class="flex justify-end gap-2 w-full">
-          <UButton variant="ghost" @click="modalIncassoAperto = false">Annulla</UButton>
+          <UButton variant="ghost" @click="modalIncassoAperto = false;">Annulla</UButton>
           <UButton :loading="salvandoIncasso" @click="confermaIncasso">
             {{ isDebitoDaSaldare ? 'Conferma pagamento' : 'Conferma incasso' }}
           </UButton>
@@ -983,7 +989,7 @@ async function scaricaCsv() {
       formatData(r.data),
       labelTipo(r.tipo),
       labelCategoria(r.categoria),
-      r.descrizione ?? '',
+      (r.descrizione ?? '') + (nomeTutor(r) ? ` · ${nomeTutor(r)}` : ''),
       labelMetodo(r.metodoPagamento),
       // Virgola decimale per Excel italiano
       String(parseFloat(r.importo ?? '0').toFixed(2)).replace('.', ','),
@@ -1253,6 +1259,14 @@ async function salvaMovimento() {
   } finally {
     salvandoMovimento.value = false
   }
+}
+
+// Nome del tutor sui compensi/rimborsi (arriva dalla giunzione lato server).
+// Lo mostriamo solo se non è già nella descrizione: i movimenti importati dal
+// vecchio gestionale lo contengono già ("Compenso Mario Rossi - dicembre 2025").
+function nomeTutor(r: any): string | null {
+  if (!r.tutorNome) return null
+  return (r.descrizione ?? '').includes(r.tutorNome) ? null : r.tutorNome
 }
 
 // ─── Azioni movimenti ───
