@@ -521,6 +521,13 @@
                   @click="apriIncasso(row.original)"
                 />
               </UTooltip>
+              <UTooltip v-if="row.original.tipo === 'DEBITO' && isManuale(row.original)" text="Segna come pagato (diventa un'Uscita)">
+                <UButton
+                  icon="i-heroicons-banknotes"
+                  size="xs" color="pink" variant="ghost"
+                  @click="apriIncasso(row.original)"
+                />
+              </UTooltip>
               <UButton
                 v-if="isManuale(row.original) && !row.original.linkedEntryId"
                 icon="i-heroicons-pencil-square"
@@ -799,16 +806,19 @@
       </template>
     </UModal>
 
-    <!-- ─── MODAL SEGNA INCASSATO (credito → entrata) ─── -->
-    <UModal v-model:open="modalIncassoAperto" title="Segna credito come incassato">
+    <!-- ─── MODAL SEGNA SALDATO (credito → entrata, debito → uscita) ─── -->
+    <UModal v-model:open="modalIncassoAperto" :title="isDebitoDaSaldare ? 'Segna debito come pagato' : 'Segna credito come incassato'">
       <template #body>
         <div class="space-y-4">
-          <p class="text-sm text-slate-500">
+          <p v-if="isDebitoDaSaldare" class="text-sm text-slate-500">
+            Il debito diventerà un'<strong>Uscita</strong> reale e sparirà dal totale "Da Pagare".
+          </p>
+          <p v-else class="text-sm text-slate-500">
             Il credito diventerà un'<strong>Entrata</strong> reale. Il Fatturato non cambia
             (se la fattura era già emessa resta contata una sola volta).
           </p>
           <div class="grid grid-cols-2 gap-4">
-            <UFormField label="Data incasso">
+            <UFormField :label="isDebitoDaSaldare ? 'Data pagamento' : 'Data incasso'">
               <UInput type="date" v-model="datiIncasso.data" class="w-full" />
             </UFormField>
             <UFormField label="Metodo">
@@ -820,7 +830,9 @@
       <template #footer>
         <div class="flex justify-end gap-2 w-full">
           <UButton variant="ghost" @click="modalIncassoAperto = false">Annulla</UButton>
-          <UButton :loading="salvandoIncasso" @click="confermaIncasso">Conferma incasso</UButton>
+          <UButton :loading="salvandoIncasso" @click="confermaIncasso">
+            {{ isDebitoDaSaldare ? 'Conferma pagamento' : 'Conferma incasso' }}
+          </UButton>
         </div>
       </template>
     </UModal>
@@ -1251,30 +1263,32 @@ function isManuale(row: any) {
   return !isAuto(row)
 }
 
-// ─── "Segna incassato": trasforma un Credito in Entrata ───
+// ─── "Segna saldato": Credito → Entrata, Debito → Uscita ───
 const modalIncassoAperto = ref(false)
-const creditoDaIncassare = ref<any>(null)
+const movimentoDaSaldare = ref<any>(null)
 const salvandoIncasso = ref(false)
 const datiIncasso = reactive({ data: oggiISO(), metodo: 'BONIFICO' })
+const isDebitoDaSaldare = computed(() => movimentoDaSaldare.value?.tipo === 'DEBITO')
 
 function apriIncasso(row: any) {
-  creditoDaIncassare.value = row
+  movimentoDaSaldare.value = row
   datiIncasso.data = oggiISO()
   datiIncasso.metodo = row.metodoPagamento || 'BONIFICO'
   modalIncassoAperto.value = true
 }
 
 async function confermaIncasso() {
-  if (!creditoDaIncassare.value) return
+  if (!movimentoDaSaldare.value) return
+  const debito = isDebitoDaSaldare.value
   salvandoIncasso.value = true
   try {
-    await $fetch(`/api/accounting/entries/${creditoDaIncassare.value.id}`, {
+    await $fetch(`/api/accounting/entries/${movimentoDaSaldare.value.id}`, {
       method: 'PUT',
-      body: { tipo: 'ENTRATA', data: datiIncasso.data, metodoPagamento: datiIncasso.metodo },
+      body: { tipo: debito ? 'USCITA' : 'ENTRATA', data: datiIncasso.data, metodoPagamento: datiIncasso.metodo },
     })
-    toast.add({ title: 'Credito incassato', color: 'success', icon: 'i-heroicons-check-circle' })
+    toast.add({ title: debito ? 'Debito pagato' : 'Credito incassato', color: 'success', icon: 'i-heroicons-check-circle' })
     modalIncassoAperto.value = false
-    creditoDaIncassare.value = null
+    movimentoDaSaldare.value = null
     refreshAll()
   } catch (err: any) {
     toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Operazione non riuscita', color: 'error' })

@@ -1,6 +1,14 @@
 // shared/schemas/tutor.schema.ts
 import { z } from 'zod'
 
+// Gli importi arrivano da <UInput type="number">, che restituisce un NUMERO appena
+// l'utente tocca il campo (Nuxt UI, Input.vue → looseToNumber) e una stringa se resta
+// com'era: accettiamo entrambi (e la virgola italiana) normalizzando a stringa decimale,
+// che è il formato delle colonne `numeric` a DB.
+const ImportoSchema = z.union([z.string(), z.number()])
+  .transform(v => String(v).trim().replace(',', '.'))
+  .refine(v => Number.isFinite(parseFloat(v)), 'Importo non valido')
+
 // ─── Crea Tutor ───────────────────────────────
 export const CreateTutorSchema = z.object({
   firstName:         z.string({ message: 'Nome obbligatorio' }).min(1, 'Nome obbligatorio').max(100).trim(),
@@ -47,7 +55,7 @@ export type TutorQuery = z.infer<typeof TutorQuerySchema>
 // ─── Liquida mese ─────────────────────────────
 export const PayTutorSchema = z.object({
   mese:    z.string({ message: 'Mese obbligatorio' }),
-  importo: z.string({ message: 'Importo obbligatorio' }),
+  importo: ImportoSchema,
   metodo:  z.enum(['CONTANTI', 'BONIFICO', 'POS', 'ASSEGNO', 'ALTRO']),
   proBono: z.boolean().default(false),
   note:    z.string().optional(),
@@ -56,7 +64,7 @@ export type PayTutorInput = z.infer<typeof PayTutorSchema>
 
 // ─── Rimborso spese ───────────────────────────
 export const CreateReimbursementSchema = z.object({
-  importo:       z.string({ message: 'Importo obbligatorio' }),
+  importo:       ImportoSchema,
   descrizione:   z.string({ message: 'Descrizione obbligatoria' }).min(1),
   dataRichiesta: z.string().optional(),
   note:          z.string().optional(),
@@ -64,7 +72,7 @@ export const CreateReimbursementSchema = z.object({
 export type CreateReimbursementInput = z.infer<typeof CreateReimbursementSchema>
 
 export const PayReimbursementSchema = z.object({
-  importoPagamento: z.string({ message: 'Importo pagamento obbligatorio' }),
+  importoPagamento: ImportoSchema,
   metodo:           z.enum(['CONTANTI', 'BONIFICO', 'POS', 'ASSEGNO', 'ALTRO']),
   note:             z.string().optional(),
 })

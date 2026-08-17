@@ -895,8 +895,8 @@ async function confermaLiquidaDettaglio() {
     refreshComp()
     refreshTutor()
     refreshTutorPayments()
-  } catch {
-    toast.add({ title: 'Errore nella liquidazione', color: 'error' })
+  } catch (err: any) {
+    toast.add({ title: 'Errore nella liquidazione', description: err?.data?.statusMessage, color: 'error' })
   } finally {
     salvando.value = false
   }

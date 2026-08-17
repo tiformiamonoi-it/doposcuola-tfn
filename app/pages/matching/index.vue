@@ -54,6 +54,15 @@
               <div class="font-semibold text-slate-800 flex items-center gap-2">
                 <UIcon name="i-heroicons-user" class="w-4 h-4 text-tfn-500" />
                 {{ tutor.name }}
+                <UButton
+                  v-if="tutor.daDisponibilita"
+                  class="no-print ml-auto"
+                  icon="i-heroicons-x-mark"
+                  size="xs" color="error" variant="ghost"
+                  title="Togli questo tutor dal giorno"
+                  :loading="cambiandoDisponibilita === tutor.id"
+                  @click="cambiaDisponibilitaTutor(tutor.id, false)"
+                />
               </div>
               <div v-if="tutor.notes" class="text-xs text-slate-500 italic mt-1">{{ tutor.notes }}</div>
             </div>
@@ -107,6 +116,34 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- Aggiungi un tutor al giorno anche senza disponibilità spuntata -->
+        <div class="no-print border-t border-slate-200 pt-4 space-y-3">
+          <h3 class="font-medium text-sm text-slate-500">Aggiungi tutor a questo giorno</h3>
+          <div class="flex flex-col sm:flex-row gap-3">
+            <USelectMenu
+              v-model="tutorDaAggiungere"
+              searchable
+              :items="tutorOptions"
+              placeholder="Seleziona tutor..."
+              label-key="label"
+              value-key="value"
+              class="flex-1"
+            />
+            <UButton
+              icon="i-heroicons-plus"
+              size="sm"
+              :disabled="!tutorDaAggiungere"
+              :loading="cambiandoDisponibilita === tutorDaAggiungere"
+              @click="cambiaDisponibilitaTutor(tutorDaAggiungere, true)"
+            >
+              Aggiungi
+            </UButton>
+          </div>
+          <p class="text-xs text-slate-400">
+            Vale come se il tutor avesse dato lui la disponibilità: comparirà nel tabellone e potrà ricevere assegnazioni.
+          </p>
         </div>
       </div>
 
@@ -253,6 +290,33 @@ const MATERIE = computed<string[]>(() => {
 const manualeStudentId = ref('')
 const manualeMateria = ref('')
 const aggiungendoManuale = ref(false)
+
+// ─── Tutor forzati sul giorno (senza disponibilità spuntata) ───
+const { data: tutorsRes } = useFetch<any>('/api/tutors?active=true', { lazy: true })
+const tutorDaAggiungere = ref('')
+const cambiandoDisponibilita = ref<string | null>(null)
+
+const tutorOptions = computed(() =>
+  (tutorsRes.value?.data || [])
+    .filter((t: any) => !tutors.value.some(x => x.id === t.id))
+    .map((t: any) => ({ label: `${t.lastName} ${t.firstName}`, value: t.id })))
+
+async function cambiaDisponibilitaTutor(tutorId: string, presente: boolean) {
+  cambiandoDisponibilita.value = tutorId
+  try {
+    await $fetch('/api/matching/tutor-availability', {
+      method: 'POST',
+      body: { tutorId, date: dateParam.value, presente },
+    })
+    tutorDaAggiungere.value = ''
+    await loadData()
+    toast.add({ title: presente ? 'Tutor aggiunto al giorno' : 'Tutor tolto dal giorno', color: 'success' })
+  } catch (err: any) {
+    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Operazione non riuscita', color: 'error' })
+  } finally {
+    cambiandoDisponibilita.value = null
+  }
+}
 
 function cambiaGiorno(dir: number) {
   currentDate.value = dir > 0 ? addDays(currentDate.value, 1) : subDays(currentDate.value, 1)

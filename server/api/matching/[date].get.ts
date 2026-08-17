@@ -32,7 +32,9 @@ export default defineEventHandler(async (event) => {
     name: `${a.user.firstName} ${a.user.lastName}`,
     phone: a.user.phone,
     notes: a.notes || '',
-    subjects: a.user.tutorProfile?.materie || []
+    subjects: a.user.tutorProfile?.materie || [],
+    // Ha una riga di disponibilità → l'admin può toglierla dal giorno
+    daDisponibilita: true,
   }))
 
   // Tutor a fisso mensile (FORFAIT): sempre disponibili dal lunedì al venerdì,
@@ -66,6 +68,7 @@ export default defineEventHandler(async (event) => {
             phone: t.phone,
             notes: '',
             subjects: t.materie || [],
+            daDisponibilita: false,
           })
         }
       }
