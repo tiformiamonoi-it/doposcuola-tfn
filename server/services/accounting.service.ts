@@ -2,7 +2,7 @@ import { db } from '../database/client'
 import { accountingEntries, payments, systemConfigs, users } from '../database/schema'
 import { and, eq, gte, inArray, isNull, lte, notInArray, or, sql } from 'drizzle-orm'
 import { getNeutralKeys } from '../utils/categorie'
-import { CATEGORIE_PROVENTI_DIVERSI, EMAILS_PROVENTI_DIVERSI } from '#shared/accounting-categories'
+import { CAT, CATEGORIE_PROVENTI_DIVERSI, EMAILS_PROVENTI_DIVERSI } from '#shared/accounting-categories'
 import { conFattura, rimuoviSuffissoFattura } from '#shared/fattura'
 import { deletePayment } from './payment.service'
 import { deleteTutorPayment, reduceReimbursementOnEntryDelete } from './tutor.service'
@@ -235,7 +235,7 @@ export async function createProventiDiversi(data: {
     const [entrata] = await tx.insert(accountingEntries).values({
       ...base,
       tipo:            'ENTRATA',
-      categoria:       'proventi_diversi',
+      categoria:       CAT.PROVENTI_DIVERSI,
       descrizione:     data.descrizione,
       richiedeFattura: data.richiedeFattura ?? true,
     }).returning()
@@ -244,7 +244,7 @@ export async function createProventiDiversi(data: {
     const [uscita] = await tx.insert(accountingEntries).values({
       ...base,
       tipo:          'USCITA',
-      categoria:     'costi_proventi_diversi',
+      categoria:     CAT.COSTI_PROVENTI_DIVERSI,
       descrizione:   `Costi — ${data.descrizione}`,
       linkedEntryId: entrata.id,
     }).returning()
@@ -426,7 +426,7 @@ export async function getBreakdownMarketing(startDate: Date, endDate: Date) {
         inArray(accountingEntries.tipo, ['ENTRATA', 'USCITA']),
         gte(accountingEntries.data, startDate),
         lte(accountingEntries.data, endDate),
-        eq(accountingEntries.categoria, 'marketing'),
+        eq(accountingEntries.categoria, CAT.MARKETING),
       )
     )
     .groupBy(accountingEntries.tipo)
@@ -447,8 +447,22 @@ export async function getBreakdownMarketing(startDate: Date, endDate: Date) {
 
 // ─────────────────────────────────────────────
 // COSTI FISSI — Spese mensili configurate in Impostazioni
+//
+// Ogni spesa può avere una validità: `dal` / `al` ('YYYY-MM-DD', entrambi opzionali).
+// Una spesa SENZA date vale sempre (è il comportamento storico: i numeri non cambiano
+// finché non si compilano le date). Con le date, invece, chiudere una spesa non tocca
+// più i mesi già passati: l'affitto pagato fino a giugno resta nei conti fino a giugno.
 // ─────────────────────────────────────────────
-export async function getCostiFissi(): Promise<number> {
+export type SpesaFissa = { nome: string; importo: number; dal: string | null; al: string | null }
+
+// 'YYYY-MM-DD' → data locale a mezzanotte (nessuno slittamento di fuso)
+function giornoDaStringa(s: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y!, m! - 1, d!)
+}
+
+export async function getSpeseFisse(): Promise<SpesaFissa[]> {
   try {
     const [row] = await db
       .select({ value: systemConfigs.value })
@@ -456,12 +470,54 @@ export async function getCostiFissi(): Promise<number> {
       .where(eq(systemConfigs.key, 'spese_fisse'))
       .limit(1)
 
-    if (!row?.value) return 0
-    const spese: { nome: string; importo: number }[] = JSON.parse(row.value)
-    return spese.reduce((sum, s) => sum + (Number(s.importo) || 0), 0)
+    if (!row?.value) return []
+    const raw = JSON.parse(row.value)
+    if (!Array.isArray(raw)) return []
+
+    return raw.map((s: any) => ({
+      nome:    String(s?.nome ?? ''),
+      importo: Number(s?.importo) || 0,
+      dal:     typeof s?.dal === 'string' && s.dal ? s.dal : null,
+      al:      typeof s?.al  === 'string' && s.al  ? s.al  : null,
+    }))
   } catch {
-    return 0
+    return []
   }
+}
+
+// Totale MENSILE delle spese attive in un dato giorno (default: oggi).
+export async function getCostiFissi(alGiorno?: Date): Promise<number> {
+  const spese = await getSpeseFisse()
+  return costiFissiMensiliAl(spese, alGiorno ?? new Date())
+}
+
+export function costiFissiMensiliAl(spese: SpesaFissa[], giorno: Date): number {
+  let totale = 0
+  for (const s of spese) {
+    const dal = s.dal ? giornoDaStringa(s.dal) : null
+    const al  = s.al  ? giornoDaStringa(s.al)  : null
+    if (dal && giorno < dal) continue
+    if (al  && giorno > al)  continue
+    totale += s.importo
+  }
+  return Number(totale.toFixed(2))
+}
+
+// Costo fisso TOTALE di un periodo: ogni spesa pesa solo per i mesi in cui era davvero
+// in vigore (intersezione fra il periodo scelto e la sua validità).
+export function costiFissiDelPeriodo(spese: SpesaFissa[], start: Date, end: Date): number {
+  let totale = 0
+  for (const s of spese) {
+    const dal = s.dal ? giornoDaStringa(s.dal) : null
+    const al  = s.al  ? giornoDaStringa(s.al)  : null
+
+    const da = dal && dal > start ? dal : start
+    const a  = al  && al  < end   ? al  : end
+    if (a < da) continue // spesa fuori dal periodo
+
+    totale += s.importo * mesiCalendario(da, a)
+  }
+  return Number(totale.toFixed(2))
 }
 
 // Mesi di calendario coperti dal periodo, frazioni comprese: un periodo che copre
@@ -483,14 +539,14 @@ export function mesiCalendario(start: Date, end: Date): number {
 }
 
 export async function getDashboard(startDate: Date, endDate: Date) {
-  const [periodo, perMetodo, saldiCassa, fattureInAttesa, previsioni, marketing, costiFissiMensili, fatturato, proventiDiversi] = await Promise.all([
+  const [periodo, perMetodo, saldiCassa, fattureInAttesa, previsioni, marketing, speseFisse, fatturato, proventiDiversi] = await Promise.all([
     getNetMargin(startDate, endDate),
     getMovimentiPerMetodo(startDate, endDate),
     getSaldiCassa(),
     getPendingInvoices(),
     getPrevisioni(),
     getBreakdownMarketing(startDate, endDate),
-    getCostiFissi(),
+    getSpeseFisse(),
     getFatturato(),
     getProventiDiversiTotali(startDate, endDate),
   ])
@@ -503,9 +559,11 @@ export async function getDashboard(startDate: Date, endDate: Date) {
     margine: r2(periodo.margine - marketing.margine),
   }
 
-  // Costi fissi proporzionati ai mesi di calendario realmente coperti dal periodo
-  const mesiNelPeriodo = mesiCalendario(startDate, endDate)
-  const costiFissiPeriodo = r2(costiFissiMensili * mesiNelPeriodo)
+  // Costi fissi: ogni spesa pesa solo per i mesi in cui era in vigore.
+  // "mensili" = quanto pesano al mese le spese attive a fine periodo (la foto di quel momento).
+  const mesiNelPeriodo    = mesiCalendario(startDate, endDate)
+  const costiFissiMensili = costiFissiMensiliAl(speseFisse, endDate)
+  const costiFissiPeriodo = costiFissiDelPeriodo(speseFisse, startDate, endDate)
   const breakEven = r2(periodo.margine - costiFissiPeriodo)
 
   return {

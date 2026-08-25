@@ -10,7 +10,7 @@
           Ciao{{ user?.firstName ? `, ${user.firstName}` : '' }}! 👋
         </h1>
         <p class="text-indigo-100 text-sm sm:text-base max-w-md">
-          Qui puoi monitorare le ore dei ragazzi e gestire in autonomia le lezioni prenotate.
+          Qui puoi controllare lo stato dei pacchetti dei ragazzi e gestire in autonomia le lezioni prenotate.
         </p>
       </div>
     </div>
@@ -84,27 +84,25 @@
           <!-- Stato pacchetto attivo -->
           <div class="mt-4 pt-3 border-t border-slate-50">
             <div v-if="student.packages && student.packages.length > 0">
+              <!-- Solo lo STATO del pacchetto: ore e giorni residui restano in segreteria -->
               <div v-for="pkg in student.packages" :key="pkg.id" class="space-y-2">
-                <div class="flex justify-between items-center text-xs font-semibold text-slate-600">
-                  <span>{{ pkg.nome }}</span>
-                  <span class="text-tfn-600">
-                    <template v-if="pkg.tipo === 'ORE'">
-                      {{ parseFloat(pkg.oreResiduo) }} ore residue
-                    </template>
-                    <template v-else-if="pkg.tipo === 'MENSILE'">
-                      {{ pkg.giorniResiduo }} giorni residui
-                    </template>
-                    <template v-else-if="pkg.tipo === 'A_CONSUMO'">
-                      {{ parseFloat(pkg.oreResiduo) }} ore libretto
-                    </template>
-                  </span>
+                <div class="flex justify-between items-center gap-2 text-xs font-semibold text-slate-600">
+                  <span class="truncate">{{ pkg.nome }}</span>
+                  <div class="flex flex-wrap gap-1 justify-end shrink-0">
+                    <UBadge
+                      v-for="stato in statiVisibili(pkg)"
+                      :key="stato"
+                      :color="coloreStato(stato)"
+                      variant="subtle"
+                      size="xs"
+                    >
+                      {{ etichettaStato(stato) }}
+                    </UBadge>
+                  </div>
                 </div>
-                <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                  <div 
-                    class="bg-tfn-500 h-full rounded-full transition-all duration-500" 
-                    :style="{ width: getProgressPercentage(pkg) + '%' }"
-                  />
-                </div>
+                <p class="text-[11px] text-slate-400 leading-snug">
+                  Per conoscere le ore o i giorni ancora disponibili contatta la segreteria.
+                </p>
               </div>
             </div>
             <div v-else class="text-xs text-amber-500 font-medium flex items-center gap-1">
@@ -368,17 +366,36 @@ const bookings = computed(() => (bookingsData.value as any[]) ?? [])
 const { data: closuresData } = useLazyFetch('/api/portal/closures')
 const closures = computed(() => (closuresData.value as any[]) ?? [])
 
-// ─── UTILS GRAFICI ───
-function getProgressPercentage(pkg: any) {
-  if (pkg.tipo === 'MENSILE') {
-    // Calcoliamo basandoci sui giorni inseriti
-    const acq = pkg.giorniAcquistati ?? 1
-    const res = pkg.giorniResiduo ?? 0
-    return Math.min(100, Math.max(0, (res / acq) * 100))
+// ─── STATO PACCHETTO (senza ore/giorni residui) ───
+// Alla famiglia mostriamo solo gli stati del ciclo di vita del pacchetto.
+// Restano fuori DA_PAGARE/PAGATO (informazioni contabili, si vedono in segreteria)
+// e DA_RINNOVARE (direbbe indirettamente quante ore mancano).
+const STATI_FAMIGLIA = ['ATTIVO', 'SCADUTO', 'ESAURITO', 'SOSPESO'] as const
+
+function statiVisibili(pkg: any): string[] {
+  const stati = (pkg?.stati ?? []).filter((s: string) => STATI_FAMIGLIA.includes(s as any))
+  // Nessuno stato riconosciuto: meglio una parola sola che una card muta
+  return stati.length > 0 ? stati : ['ATTIVO']
+}
+
+function etichettaStato(stato: string) {
+  switch (stato) {
+    case 'ATTIVO':   return 'Attivo'
+    case 'SCADUTO':  return 'Scaduto'
+    case 'ESAURITO': return 'Esaurito'
+    case 'SOSPESO':  return 'Sospeso'
+    default:         return stato.replace(/_/g, ' ')
   }
-  const acq = parseFloat(pkg.oreAcquistate || '1')
-  const res = parseFloat(pkg.oreResiduo || '0')
-  return Math.min(100, Math.max(0, (res / acq) * 100))
+}
+
+function coloreStato(stato: string) {
+  switch (stato) {
+    case 'ATTIVO':   return 'success'
+    case 'SCADUTO':  return 'error'
+    case 'ESAURITO': return 'error'
+    case 'SOSPESO':  return 'neutral'
+    default:         return 'neutral'
+  }
 }
 
 function getStatusColor(status: string) {

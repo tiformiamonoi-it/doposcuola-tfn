@@ -148,6 +148,20 @@ export const CheckDuplicateSchema = z.object({
 })
 
 // ─────────────────────────────────────────────
+// SCHEMA APPROVAZIONE IN BLOCCO (POST /api/lessons/confirm-day)
+// Conferma la visione di TUTTE le lezioni di un giorno (tutti gli slot orari).
+// `tutorId` opzionale: se il calendario è filtrato su un tutor, si approva solo il suo.
+// ─────────────────────────────────────────────
+
+export const ConfirmLessonsDaySchema = z.object({
+  data: z
+    .string({ message: 'La data è obbligatoria' })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La data deve essere nel formato YYYY-MM-DD (es: 2025-11-15)'),
+
+  tutorId: z.string().cuid2('ID tutor non valido').optional(),
+})
+
+// ─────────────────────────────────────────────
 // TIPI TypeScript inferiti dagli schemi
 // ─────────────────────────────────────────────
 export type CreateLessonInput      = z.infer<typeof CreateLessonSchema>
@@ -157,3 +171,4 @@ export type LessonStudentInput     = z.infer<typeof LessonStudentSchema>
 export type LessonQuery            = z.infer<typeof LessonQuerySchema>
 export type CalendarQuery          = z.infer<typeof CalendarQuerySchema>
 export type CheckDuplicateInput    = z.infer<typeof CheckDuplicateSchema>
+export type ConfirmLessonsDayInput = z.infer<typeof ConfirmLessonsDaySchema>

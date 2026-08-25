@@ -7,7 +7,9 @@ export default defineNuxtRouteMiddleware((to) => {
   const { loggedIn, user } = useUserSession()
   if (!loggedIn.value || !user.value) return
 
-  const whitelist = ['/login', '/cambio-password', '/portale/accetta-termini', '/termini', '/privacy', '/privacy-studente', '/prenota']
+  // I documenti legali devono restare raggiungibili SEMPRE: chi non ha ancora accettato
+  // i termini deve poterli leggere (compresa la cookie policy, che prima veniva rimbalzata).
+  const whitelist = ['/login', '/cambio-password', '/portale/accetta-termini', '/termini', '/privacy', '/privacy-studente', '/cookie', '/prenota']
   if (whitelist.includes(to.path)) return
 
   if (user.value.mustChangePassword) {

@@ -76,7 +76,6 @@ export async function runPackageAlerts() {
           nomeStudente,
           nomePacchetto: row.nome,
           tipoAvviso: 'ore',
-          oreResiduo: row.oreResiduo,
         }),
       })
       if (sent) { flags.avvisoOreInviatoAt = new Date(); inviati++ }

@@ -85,6 +85,27 @@
           </div>
 
           <div class="flex items-center gap-4">
+            <!-- Approvazione in blocco della giornata (solo ADMIN / SUPER_TUTOR).
+                 @click.stop: senza, il click aprirebbe/chiuderebbe anche il giorno. -->
+            <template v-if="puoApprovare && giorno.numeroLezioni > 0">
+              <UButton
+                v-if="giorno.daConfermare > 0"
+                size="xs"
+                color="success"
+                variant="soft"
+                icon="i-heroicons-check-badge"
+                :loading="approvandoGiorno === giorno.dateStr"
+                :title="`Approva in un colpo solo le ${giorno.daConfermare} lezioni ancora da confermare`"
+                @click.stop="chiediApprovazioneGiorno(giorno)"
+              >
+                Approva giornata ({{ giorno.daConfermare }})
+              </UButton>
+              <UBadge v-else color="success" variant="subtle" size="xs" class="flex items-center gap-1" title="Tutte le lezioni del giorno sono state approvate">
+                <UIcon name="i-heroicons-check-badge" class="w-3.5 h-3.5" />
+                Approvata
+              </UBadge>
+            </template>
+
             <!-- Ricavo stimato della giornata -->
             <div v-if="giorno.numeroLezioni > 0" class="text-right">
               <p class="text-[10px] uppercase tracking-wider text-slate-400 leading-none">Ricavo stim.</p>
@@ -171,7 +192,16 @@
 
                       <!-- Header banda -->
                       <div class="flex items-center justify-between px-2.5 py-1.5 bg-white/60">
-                        <span class="text-xs font-bold text-slate-600 font-mono">{{ slot.label }}</span>
+                        <span class="text-xs font-bold text-slate-600 font-mono flex items-center gap-1">
+                          {{ slot.label }}
+                          <!-- Spunta verde: tutte le lezioni di questo slot sono approvate -->
+                          <UIcon
+                            v-if="slotConfermato(giorno, tutorData.tutor.id, slot.id)"
+                            name="i-heroicons-check-badge"
+                            class="w-3.5 h-3.5 text-emerald-500"
+                            title="Visione confermata"
+                          />
+                        </span>
                         <span v-if="getStudentsInSlot(giorno, tutorData.tutor.id, slot.id).length > 0"
                               class="text-[10px] font-bold uppercase tracking-wider"
                               :class="labelColoreTipo(tipoLezioneSlot(giorno, tutorData.tutor.id, slot.id))">
@@ -238,6 +268,15 @@
       v-bind="modaleGestisciProps"
       @refresh="refreshData"
     />
+
+    <ConfirmDialog
+      v-model:open="approvaOpen"
+      :title="approvaTitle"
+      :description="approvaDescription"
+      confirm-label="Approva tutto"
+      confirm-color="primary"
+      @confirm="eseguiApprovazioneGiorno"
+    />
   </div>
 </template>
 
@@ -251,8 +290,17 @@ import { ricavoOrarioPacchetto } from '#shared/tariffe'
 import ModalNuovaLezione from '~/components/calendario/ModalNuovaLezione.vue'
 import ModalLezioneRapida from '~/components/calendario/ModalLezioneRapida.vue'
 import ModalGestisciSlot from '~/components/calendario/ModalGestisciSlot.vue'
+import ConfirmDialog from '~/components/ConfirmDialog.vue'
 
 definePageMeta({ middleware: ['admin-or-super'] })
+
+const toast = useToast()
+
+// La pagina è già riservata ad ADMIN/SUPER_TUTOR dal middleware, ma il pulsante di
+// approvazione controlla di nuovo il ruolo: se un domani il calendario venisse aperto
+// anche ai tutor, il tastino resterebbe comunque invisibile a loro.
+const { user } = useUserSession()
+const puoApprovare = computed(() => ['ADMIN', 'SUPER_TUTOR'].includes((user.value as any)?.role ?? ''))
 
 // ==========================================
 // STATE
@@ -374,10 +422,12 @@ const giorniWithTutorRecap = computed(() => {
     // Calcolo totali giorno + RICAVO STIMATO (ipotetico)
     // ricavo = Σ lezioni [ Σ alunni (prezzo÷ore × ore scalate) − compenso tutor ]
     let totalLez = 0
+    let daConfermare = 0
     let studentiUniciGiorno = new Set()
     let ricavoGiorno = 0
     lezioniGiorno.forEach((l: any) => {
       totalLez++
+      if (!l.confermata) daConfermare++
       let incasso = 0
       l.lessonStudents?.forEach((ls: any) => {
         studentiUniciGiorno.add(ls.studentId)
@@ -397,6 +447,7 @@ const giorniWithTutorRecap = computed(() => {
       giornoNomeCorto: format(dateObj, 'EEE', { locale: it }),
       giornoNomeLungo: format(dateObj, 'EEEE', { locale: it }),
       numeroLezioni: totalLez,
+      daConfermare,
       numeroStudenti: studentiUniciGiorno.size,
       ricavo: Number(ricavoGiorno.toFixed(2)),
       tutorsRecap,
@@ -492,9 +543,16 @@ function tipoLezioneSlot(giorno: any, tutorId: string, slotId: string): string {
       if (lesson.tipo) return lesson.tipo
     }
   }
+  // Anteprima prima del salvataggio: MAXI solo da 5 studenti, come il server
   if (stus.length === 1) return 'SINGOLA'
-  if (stus.length <= 3) return 'GRUPPO'
+  if (stus.length <= 4) return 'GRUPPO'
   return 'MAXI'
+}
+
+// Vero solo se lo slot ha lezioni e TUTTE sono già state confermate.
+function slotConfermato(giorno: any, tutorId: string, slotId: string): boolean {
+  const lezioniSlot = (giorno.lezioniBase || []).filter((l: any) => l.tutorId === tutorId && l.timeSlotId === slotId)
+  return lezioniSlot.length > 0 && lezioniSlot.every((l: any) => l.confermata)
 }
 
 function coloreBandaSlot(tipo: string): string {
@@ -508,6 +566,61 @@ function labelColoreTipo(tipo: string): string {
   if (tipo === 'GRUPPO') return 'text-primary-500'
   if (tipo === 'MAXI')   return 'text-amber-500'
   return 'text-slate-400'
+}
+
+// ==========================================
+// APPROVAZIONE IN BLOCCO DELLA GIORNATA
+// ==========================================
+// Un solo click nella barra del giorno conferma la visione di TUTTI gli slot orari.
+// Se il calendario è filtrato su un tutor, si approva soltanto quel tutor: si approva
+// esattamente ciò che si sta guardando, mai lezioni fuori schermo.
+const approvandoGiorno = ref<string | null>(null)
+const approvaOpen = ref(false)
+const approvaTitle = ref('')
+const approvaDescription = ref('')
+const giornoDaApprovare = ref<any>(null)
+
+function chiediApprovazioneGiorno(giorno: any) {
+  giornoDaApprovare.value = giorno
+  approvaTitle.value = 'Approvare tutta la giornata?'
+  const ambito = filtroTutor.value?.label
+    ? `del tutor ${filtroTutor.value.label}`
+    : 'di tutti i tutor'
+  approvaDescription.value =
+    `Verranno confermate ${giorno.daConfermare} lezioni ${ambito} di ${giorno.giornoNomeLungo} ${giorno.giornoNumero}, in tutti gli slot orari.\n\n`
+    + `La conferma di visione non può essere annullata.`
+  approvaOpen.value = true
+}
+
+async function eseguiApprovazioneGiorno() {
+  approvaOpen.value = false
+  const giorno = giornoDaApprovare.value
+  if (!giorno) return
+
+  approvandoGiorno.value = giorno.dateStr
+  try {
+    const res: any = await $fetch('/api/lessons/confirm-day', {
+      method: 'POST',
+      body: {
+        data: giorno.dateStr,
+        tutorId: filtroTutor.value?.value || undefined,
+      },
+    })
+    toast.add({
+      title: res.confermate === 1 ? '1 lezione approvata' : `${res.confermate} lezioni approvate`,
+      color: 'success',
+    })
+    await refresh()
+  } catch (err: any) {
+    toast.add({
+      title: 'Errore',
+      description: err.data?.statusMessage ?? 'Impossibile approvare la giornata',
+      color: 'error',
+    })
+  } finally {
+    approvandoGiorno.value = null
+    giornoDaApprovare.value = null
+  }
 }
 
 // ==========================================

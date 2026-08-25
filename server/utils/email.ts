@@ -73,15 +73,17 @@ export function emailBenvenutoCredenziali(p: { nome: string; email: string; temp
   }
 }
 
+// NB: l'avviso "ore" NON indica quante ore restano. Il conteggio residuo è un dato
+// che il portale non mostra alla famiglia (vedi getPortalStudents): dirlo per email
+// aggirerebbe la stessa riservatezza. Il numero esatto lo comunica la segreteria.
 export function emailAvvisoPacchetto(p: {
   nomeStudente: string
   nomePacchetto: string
   tipoAvviso: 'ore' | 'scadenza'
-  oreResiduo?: string
   dataScadenza?: string
 }): { subject: string; html: string } {
   const dettaglio = p.tipoAvviso === 'ore'
-    ? `<p style="font-size: 14px;">Il pacchetto <strong>${p.nomePacchetto}</strong> di <strong>${p.nomeStudente}</strong> è quasi esaurito: restano <strong>${p.oreResiduo} ore</strong>.</p>`
+    ? `<p style="font-size: 14px;">Il pacchetto <strong>${p.nomePacchetto}</strong> di <strong>${p.nomeStudente}</strong> sta per esaurirsi.</p>`
     : `<p style="font-size: 14px;">Il pacchetto <strong>${p.nomePacchetto}</strong> di <strong>${p.nomeStudente}</strong> scadrà il <strong>${p.dataScadenza}</strong>.</p>`
   return {
     subject: p.tipoAvviso === 'ore'

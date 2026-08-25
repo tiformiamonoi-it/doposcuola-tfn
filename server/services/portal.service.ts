@@ -17,18 +17,16 @@ export async function getPortalStudents(linkedStudentIds: string[]) {
       abilitatoPrenotazioneOnline: true,
     },
     with: {
+      // Al portale famiglie NON arrivano ore/giorni residui: la famiglia vede solo
+      // lo STATO del pacchetto (attivo, scaduto, esaurito...). I conteggi restano
+      // in segreteria. Non basta nasconderli nella pagina: se non escono dal server,
+      // non sono leggibili nemmeno dagli strumenti per sviluppatori del browser.
       packages: {
         columns: {
           id: true,
           nome: true,
           tipo: true,
-          oreResiduo: true,
-          oreAcquistate: true,
-          giorniResiduo: true,
-          giorniAcquistati: true,
-          orarioGiornaliero: true,
           stati: true,
-          dataScadenza: true,
         },
         where: not(arrayContains(packages.stati, ['CHIUSO'])),
         orderBy: [desc(packages.createdAt)],

@@ -52,6 +52,10 @@
               <span class="font-medium text-sm text-slate-800">{{ t.nome }}</span>
               <UBadge color="neutral" variant="outline" size="xs">{{ t.tipo }}</UBadge>
               <UBadge color="info" variant="subtle" size="xs">{{ t.categoria }}</UBadge>
+              <UBadge v-if="t.inUso > 0" color="success" variant="subtle" size="xs" title="Pacchetti creati partendo da questo template">
+                usato da {{ t.inUso }} {{ t.inUso === 1 ? 'pacchetto' : 'pacchetti' }}
+              </UBadge>
+              <UBadge v-else color="neutral" variant="subtle" size="xs">mai usato</UBadge>
             </div>
             <p class="text-xs text-slate-500 mt-0.5">
               {{ t.oreIncluse }} ore
@@ -67,8 +71,50 @@
             color="error"
             size="xs"
             :loading="eliminando === t.id"
-            @click="eliminaTemplate(t.id)"
+            title="Archivia template (i pacchetti già creati non cambiano)"
+            @click="eliminaTemplate(t)"
           />
+        </div>
+      </div>
+
+      <!-- ─── Template archiviati (ripristinabili) ─── -->
+      <div v-if="templatesArchiviati.length > 0" class="mt-4 pt-3 border-t border-slate-100">
+        <button
+          type="button"
+          class="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
+          @click="mostraArchiviati = !mostraArchiviati"
+        >
+          <UIcon name="i-heroicons-chevron-right" class="w-3.5 h-3.5 transition-transform" :class="mostraArchiviati ? 'rotate-90' : ''" />
+          <UIcon name="i-heroicons-archive-box" class="w-3.5 h-3.5" />
+          Template archiviati ({{ templatesArchiviati.length }})
+        </button>
+
+        <div v-if="mostraArchiviati" class="mt-2 divide-y divide-slate-100">
+          <div v-for="t in templatesArchiviati" :key="t.id" class="flex items-center justify-between py-2.5 px-1">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-sm text-slate-500 line-through">{{ t.nome }}</span>
+                <UBadge color="neutral" variant="outline" size="xs">{{ t.tipo }}</UBadge>
+                <UBadge v-if="t.inUso > 0" color="neutral" variant="subtle" size="xs">
+                  usato da {{ t.inUso }} {{ t.inUso === 1 ? 'pacchetto' : 'pacchetti' }}
+                </UBadge>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">
+                {{ t.oreIncluse }} ore · € {{ parseFloat(t.prezzoStandard).toFixed(2) }}
+              </p>
+            </div>
+            <UButton
+              icon="i-heroicons-arrow-uturn-left"
+              variant="ghost"
+              color="primary"
+              size="xs"
+              :loading="ripristinando === t.id"
+              title="Rimetti in elenco"
+              @click="ripristinaTemplate(t)"
+            >
+              Ripristina
+            </UButton>
+          </div>
         </div>
       </div>
     </UCard>
@@ -234,6 +280,12 @@
               <UFormField label="Lezione Maxi (5+)">
                 <UInputNumber v-model="tariffe.MAXI" :min="0" :step="0.5" class="w-full" />
               </UFormField>
+
+              <p class="text-xs text-slate-400">
+                Le nuove tariffe valgono per le lezioni inserite da ora in poi. Le lezioni già registrate
+                mantengono il compenso calcolato quando sono state inserite (cambia solo se ne modifichi
+                il tipo o la durata).
+              </p>
             </div>
             <template #footer>
               <UButton @click="salvaConfigs" :loading="salvandoConfigs">Salva Modifiche</UButton>
@@ -324,22 +376,61 @@
             </div>
           </template>
           <div class="space-y-4">
-            <div class="flex items-end gap-3">
-              <UFormField label="Descrizione spesa" class="flex-1">
-                <UInput v-model="nuovaSpesa.nome" placeholder="Es. Affitto locale" />
+            <p class="text-xs text-slate-500">
+              Le spese fisse (affitto, utenze…) vengono sottratte al margine per calcolare il <strong>break-even</strong> in Contabilità.
+              Le date <strong>Dal</strong> e <strong>Al</strong> sono facoltative: servono a non riscrivere il passato.
+              Se smetti di pagare una spesa usa <strong>“Chiudi da oggi”</strong> — i mesi già passati restano come erano.
+              Il cestino, invece, la cancella anche dallo storico.
+            </p>
+
+            <div class="flex flex-wrap items-end gap-3">
+              <UFormField label="Descrizione spesa" class="flex-1 min-w-[12rem]">
+                <UInput v-model="nuovaSpesa.nome" placeholder="Es. Affitto locale" class="w-full" />
               </UFormField>
               <UFormField label="Importo mensile (€)" class="w-40">
                 <UInputNumber v-model="nuovaSpesa.importo" :min="0" :step="10" :step-snapping="false" />
               </UFormField>
+              <UFormField label="Dal (opzionale)" class="w-44">
+                <UInput v-model="nuovaSpesa.dal" type="date" class="w-full" />
+              </UFormField>
+              <UFormField label="Al (opzionale)" class="w-44">
+                <UInput v-model="nuovaSpesa.al" type="date" class="w-full" />
+              </UFormField>
               <UButton icon="i-heroicons-plus" @click="aggiungiSpesa">Aggiungi</UButton>
             </div>
 
-            <UTable :data="speseFisse" :columns="[{ accessorKey: 'nome', header: 'Spesa' }, { accessorKey: 'importo', header: 'Importo (€)' }, { id: 'azioni', header: '' }]">
+            <UTable :data="speseFisse" :columns="[{ accessorKey: 'nome', header: 'Spesa' }, { accessorKey: 'importo', header: 'Importo (€)' }, { id: 'validita', header: 'Valida dal / al' }, { id: 'stato', header: 'Stato' }, { id: 'azioni', header: '' }]">
               <template #importo-cell="{ row }">
                 <span class="font-medium">€ {{ parseFloat(row.original.importo).toFixed(2) }}</span>
               </template>
+              <template #validita-cell="{ row }">
+                <div class="flex items-center gap-2">
+                  <UInput v-model="speseFisse[row.index].dal" type="date" size="xs" class="w-36" title="Da quando si paga (vuoto = da sempre)" />
+                  <span class="text-slate-300">→</span>
+                  <UInput v-model="speseFisse[row.index].al" type="date" size="xs" class="w-36" title="Fino a quando si è pagata (vuoto = ancora attiva)" />
+                </div>
+              </template>
+              <template #stato-cell="{ row }">
+                <UBadge :color="statoSpesa(row.original).color" variant="subtle" size="xs">{{ statoSpesa(row.original).label }}</UBadge>
+              </template>
               <template #azioni-cell="{ row }">
-                <UButton icon="i-heroicons-trash" variant="ghost" color="error" size="xs" @click="rimuoviSpesa(row.index)" />
+                <div class="flex items-center justify-end gap-1">
+                  <UButton
+                    v-if="!row.original.al"
+                    icon="i-heroicons-flag"
+                    variant="ghost" color="neutral" size="xs"
+                    title="Non la paghi più? Chiudila da oggi: lo storico resta intatto"
+                    @click="chiudiSpesaOggi(row.index)"
+                  >
+                    Chiudi da oggi
+                  </UButton>
+                  <UButton
+                    icon="i-heroicons-trash"
+                    variant="ghost" color="error" size="xs"
+                    title="Elimina dallo storico (cambia anche i conti dei mesi passati)"
+                    @click="rimuoviSpesa(row.index)"
+                  />
+                </div>
               </template>
             </UTable>
           </div>
@@ -358,6 +449,10 @@
             </div>
           </template>
           <div class="space-y-4">
+            <p class="text-xs text-slate-500">
+              Nei giorni di chiusura il centro non è prenotabile e i tutor a fisso mensile non risultano disponibili.
+              Prima di chiudere o riaprire un giorno il gestionale ti dice che cosa c'è già in quella data.
+            </p>
              <div class="flex items-end gap-3">
               <UFormField label="Data" class="w-40">
                 <UInput v-model="nuovaChiusura.date" type="date" />
@@ -374,7 +469,7 @@
                 <span class="font-medium">{{ row.original.date.split('-').reverse().join('/') }}</span>
               </template>
               <template #azioni-cell="{ row }">
-                <UButton icon="i-heroicons-trash" variant="ghost" color="error" size="xs" @click="eliminaChiusura(row.original.id)" />
+                <UButton icon="i-heroicons-trash" variant="ghost" color="error" size="xs" title="Riapri il giorno" @click="eliminaChiusura(row.original)" />
               </template>
             </UTable>
           </div>
@@ -586,32 +681,17 @@ definePageMeta({ middleware: ['admin-only'] })
 
 const toast = useToast()
 
-// ─── ConfirmDialog shared state ───
-const confirmOpen = ref(false)
-const confirmTitle = ref('')
-const confirmDescription = ref('')
-const confirmLabel = ref('Conferma')
-const confirmColor = ref<'primary' | 'error'>('primary')
-const pendingAction = ref<(() => void) | null>(null)
-
-function chiediConferma(config: { title: string; description: string; confirmLabel?: string; confirmColor?: 'primary' | 'error' }, action: () => void) {
-  confirmTitle.value = config.title
-  confirmDescription.value = config.description
-  confirmLabel.value = config.confirmLabel ?? 'Conferma'
-  confirmColor.value = config.confirmColor ?? 'primary'
-  pendingAction.value = action
-  confirmOpen.value = true
-}
-
-function eseguiConferma() {
-  confirmOpen.value = false
-  pendingAction.value?.()
-  pendingAction.value = null
-}
+// ─── ConfirmDialog: stato e logica in app/composables/useConfirm.ts ───
+const { confirmOpen, confirmTitle, confirmDescription, confirmLabel, confirmColor, chiediConferma, eseguiConferma } = useConfirm()
 
 // ─── Fetch templates ───
 const { data: templatesData, pending: pendingTemplates, refresh } = useLazyFetch('/api/standard-packages')
 const templates = computed(() => templatesData.value ?? [])
+
+// Template archiviati (eliminati col cestino): restano recuperabili
+const { data: archiviatiData, refresh: refreshArchiviati } = useLazyFetch('/api/standard-packages?archiviati=1')
+const templatesArchiviati = computed(() => archiviatiData.value ?? [])
+const mostraArchiviati = ref(false)
 
 // ─── Modal crea ───
 const modalCreaAperto = ref(false)
@@ -685,15 +765,26 @@ async function creaTemplate() {
 // ─── Elimina template ───
 const eliminando = ref<string | null>(null)
 
-async function eliminaTemplate(id: string) {
+async function eliminaTemplate(t: any) {
+  const usi = t.inUso ?? 0
+  const quantiUsi = usi === 0
+    ? 'Non è mai stato usato per creare un pacchetto.'
+    : `È servito a creare ${usi} ${usi === 1 ? 'pacchetto' : 'pacchetti'}, che NON verranno toccati.`
+
   chiediConferma(
-    { title: 'Rimuovere questo template?', description: 'Non influenzerà i pacchetti già creati.', confirmLabel: 'Elimina', confirmColor: 'error' },
+    {
+      title: `Archiviare "${t.nome}"?`,
+      description: `${quantiUsi} Sparisce dalle tendine di creazione pacchetti, ma resta in "Template archiviati" e puoi ripristinarlo quando vuoi.`,
+      confirmLabel: 'Archivia',
+      confirmColor: 'error',
+    },
     async () => {
-      eliminando.value = id
+      eliminando.value = t.id
       try {
-        await $fetch(`/api/standard-packages/${id}`, { method: 'DELETE' })
-        toast.add({ title: 'Template rimosso', color: 'success', icon: 'i-heroicons-check-circle' })
+        await $fetch(`/api/standard-packages/${t.id}`, { method: 'DELETE' })
+        toast.add({ title: 'Template archiviato', description: 'Lo trovi in "Template archiviati".', color: 'success', icon: 'i-heroicons-check-circle' })
         refresh()
+        refreshArchiviati()
       } catch (err: any) {
         toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile rimuovere', color: 'error' })
       } finally {
@@ -701,6 +792,23 @@ async function eliminaTemplate(id: string) {
       }
     }
   )
+}
+
+// ─── Ripristina template archiviato ───
+const ripristinando = ref<string | null>(null)
+
+async function ripristinaTemplate(t: any) {
+  ripristinando.value = t.id
+  try {
+    await $fetch(`/api/standard-packages/${t.id}/restore`, { method: 'POST' })
+    toast.add({ title: 'Template ripristinato', description: 'Torna selezionabile nella creazione pacchetti.', color: 'success', icon: 'i-heroicons-check-circle' })
+    refresh()
+    refreshArchiviati()
+  } catch (err: any) {
+    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile ripristinare', color: 'error' })
+  } finally {
+    ripristinando.value = null
+  }
 }
 
 // ─── Fetch Slot Orari ───
@@ -769,7 +877,7 @@ const configs = computed(() => configsData.value ?? {})
 
 const materie = ref<string[]>([])
 const tariffe = ref({ SINGOLA: 5, GRUPPO: 8, MAXI: 8.5 })
-const speseFisse = ref<{nome: string, importo: number}[]>([])
+const speseFisse = ref<{ nome: string; importo: number; dal: string; al: string }[]>([])
 const whatsappNumero = ref('')
 const sconti = ref<{ nome: string; descrizione: string; immagine: string }[]>([])
 const materieSpeciali = ref<string[]>([])
@@ -778,7 +886,16 @@ const giornateSpeciali = ref<Record<string, string[]>>({})
 watchEffect(() => {
   try { materie.value = JSON.parse(configs.value.materie || '[]') } catch(e){}
   try { tariffe.value = JSON.parse(configs.value.tariffe_tutor || 'null') ?? { ...TARIFFE_DEFAULT } } catch(e){}
-  try { speseFisse.value = JSON.parse(configs.value.spese_fisse || '[]') } catch(e){}
+  try {
+    // Le spese salvate prima di agosto 2026 non hanno le date: restano "sempre attive"
+    const raw = JSON.parse(configs.value.spese_fisse || '[]')
+    speseFisse.value = (Array.isArray(raw) ? raw : []).map((s: any) => ({
+      nome:    String(s?.nome ?? ''),
+      importo: Number(s?.importo) || 0,
+      dal:     typeof s?.dal === 'string' ? s.dal : '',
+      al:      typeof s?.al  === 'string' ? s.al  : '',
+    }))
+  } catch(e){}
   try { sconti.value = JSON.parse(configs.value.sconti || '[]') } catch(e){}
   try { materieSpeciali.value = JSON.parse(configs.value.materie_speciali || '[]') } catch(e){}
   try {
@@ -900,7 +1017,19 @@ function aggiungiSconto() {
   fileSconto.value = null
   toast.add({ title: 'Convenzione aggiunta', description: 'Ricordati di premere "Salva Modifiche".', color: 'info' })
 }
-function rimuoviSconto(idx: number) { sconti.value.splice(idx, 1) }
+function rimuoviSconto(idx: number) {
+  const s = sconti.value[idx]
+  if (!s) return
+  chiediConferma(
+    {
+      title: `Togliere la convenzione "${s.nome}"?`,
+      description: 'Sparirà dalla sezione Sconti del portale famiglie, insieme alla sua immagine. Diventa definitivo quando premi "Salva Modifiche".',
+      confirmLabel: 'Togli',
+      confirmColor: 'error',
+    },
+    () => { sconti.value.splice(idx, 1) }
+  )
+}
 
 const nuovaMateria = ref('')
 function aggiungiMateria() {
@@ -910,20 +1039,75 @@ function aggiungiMateria() {
   }
 }
 function rimuoviMateria(idx: number) {
-  const [rimossa] = materie.value.splice(idx, 1)
-  // Se era speciale, togli anche stella e giornate in calendario
-  if (rimossa && materieSpeciali.value.includes(rimossa)) toggleSpeciale(rimossa)
+  const materia = materie.value[idx]
+  if (!materia) return
+
+  const eraSpeciale = materieSpeciali.value.includes(materia)
+  chiediConferma(
+    {
+      title: `Togliere la materia "${materia}"?`,
+      description: `Non sarà più prenotabile dal portale né assegnabile ai tutor.${eraSpeciale ? ' Essendo speciale, perde la stella e tutte le giornate segnate nel calendario.' : ''} Le prenotazioni passate e i tutor che ce l'hanno già non vengono toccati. Diventa definitivo quando premi "Salva Modifiche".`,
+      confirmLabel: 'Togli materia',
+      confirmColor: 'error',
+    },
+    () => {
+      const [rimossa] = materie.value.splice(idx, 1)
+      // Se era speciale, togli anche stella e giornate in calendario
+      if (rimossa && materieSpeciali.value.includes(rimossa)) toggleSpeciale(rimossa)
+    }
+  )
 }
 
-const nuovaSpesa = reactive({ nome: '', importo: 0 })
+const nuovaSpesa = reactive({ nome: '', importo: 0, dal: '', al: '' })
 function aggiungiSpesa() {
   if (nuovaSpesa.nome && nuovaSpesa.importo > 0) {
-    speseFisse.value.push({ nome: nuovaSpesa.nome, importo: nuovaSpesa.importo })
+    speseFisse.value.push({ nome: nuovaSpesa.nome, importo: nuovaSpesa.importo, dal: nuovaSpesa.dal, al: nuovaSpesa.al })
     nuovaSpesa.nome = ''
     nuovaSpesa.importo = 0
+    nuovaSpesa.dal = ''
+    nuovaSpesa.al = ''
   }
 }
-function rimuoviSpesa(idx: number) { speseFisse.value.splice(idx, 1) }
+
+// Modo CORRETTO di far sparire una spesa che non paghi più: la chiudi da oggi.
+// I mesi passati restano com'erano, il break-even di quest'anno non cambia.
+function chiudiSpesaOggi(idx: number) {
+  const s = speseFisse.value[idx]
+  if (!s) return
+  chiediConferma(
+    {
+      title: `Chiudere "${s.nome}" da oggi?`,
+      description: 'La spesa smette di pesare da oggi in poi, ma resta nei conti dei mesi passati. Diventa definitivo quando premi "Salva Modifiche".',
+      confirmLabel: 'Chiudi da oggi',
+    },
+    () => {
+      s.al = oggiISO()
+      toast.add({ title: 'Spesa chiusa da oggi', description: 'Ricordati di premere "Salva Modifiche".', color: 'info' })
+    }
+  )
+}
+
+function rimuoviSpesa(idx: number) {
+  const s = speseFisse.value[idx]
+  if (!s) return
+  chiediConferma(
+    {
+      title: `Eliminare "${s.nome}" dall'elenco?`,
+      description: 'Attenzione: la spesa sparisce anche dai conti dei mesi passati (break-even ricalcolato). Se invece hai solo smesso di pagarla, usa "Chiudi da oggi". Diventa definitivo con "Salva Modifiche".',
+      confirmLabel: 'Elimina',
+      confirmColor: 'error',
+    },
+    () => { speseFisse.value.splice(idx, 1) }
+  )
+}
+
+// Etichetta di stato di una spesa in base alle date di validità
+function statoSpesa(s: { dal: string; al: string }): { label: string; color: 'success' | 'neutral' | 'info' } {
+  const oggi = oggiISO()
+  if (s.al  && s.al  < oggi) return { label: 'chiusa', color: 'neutral' }
+  if (s.dal && s.dal > oggi) return { label: 'futura', color: 'info' }
+  return { label: 'attiva', color: 'success' }
+}
 
 const salvandoConfigs = ref(false)
 async function salvaConfigs() {
@@ -934,7 +1118,12 @@ async function salvaConfigs() {
       body: {
         materie: JSON.stringify(materie.value),
         tariffe_tutor: JSON.stringify(tariffe.value),
-        spese_fisse: JSON.stringify(speseFisse.value),
+        spese_fisse: JSON.stringify(speseFisse.value.map((s) => ({
+          nome: s.nome,
+          importo: s.importo,
+          dal: s.dal || null,
+          al:  s.al  || null,
+        }))),
         whatsapp_numero: whatsappNumero.value,
         sconti: JSON.stringify(sconti.value),
         materie_speciali: JSON.stringify(materieSpeciali.value),
@@ -969,8 +1158,17 @@ function aggiungiCategoria() {
   nuovaCategoria.neutra = false
 }
 function rimuoviCategoria(idx: number) {
-  if (categorie.value[idx]?.sistema) return
-  categorie.value.splice(idx, 1)
+  const c = categorie.value[idx]
+  if (!c || c.sistema) return
+  chiediConferma(
+    {
+      title: `Eliminare la categoria "${c.etichetta}"?`,
+      description: 'Se ha già dei movimenti collegati il salvataggio verrà rifiutato: in quel caso rinominala invece di eliminarla. Diventa definitivo quando premi "Salva categorie".',
+      confirmLabel: 'Elimina',
+      confirmColor: 'error',
+    },
+    () => { categorie.value.splice(idx, 1) }
+  )
 }
 
 const salvandoCategorie = ref(false)
@@ -992,24 +1190,76 @@ const { data: closuresData, pending: pendingClosures, refresh: refreshClosures }
 const closures = computed(() => closuresData.value ?? [])
 
 const nuovaChiusura = reactive({ date: '', description: '' })
-async function aggiungiChiusura() {
-  if (!nuovaChiusura.date) return
+
+// Che cosa c'è già in quella data (lezioni, prenotazioni, disponibilità tutor)
+async function impattoChiusura(date: string) {
   try {
-    await $fetch('/api/settings/closures', { method: 'POST', body: nuovaChiusura })
-    toast.add({ title: 'Chiusura aggiunta', color: 'success' })
-    nuovaChiusura.date = ''
-    nuovaChiusura.description = ''
-    refreshClosures()
-  } catch(e: any) {
-    toast.add({ title: 'Errore', color: 'error' })
+    return await $fetch<{ lezioni: number; prenotazioni: number; disponibilita: number }>(
+      '/api/settings/closures/impact', { query: { date } }
+    )
+  } catch {
+    return null
   }
 }
-async function eliminaChiusura(id: string) {
+
+function descriviImpatto(i: { lezioni: number; prenotazioni: number; disponibilita: number } | null): string {
+  if (!i) return ''
+  const pezzi: string[] = []
+  if (i.lezioni)       pezzi.push(`${i.lezioni} ${i.lezioni === 1 ? 'lezione' : 'lezioni'}`)
+  if (i.prenotazioni)  pezzi.push(`${i.prenotazioni} ${i.prenotazioni === 1 ? 'prenotazione' : 'prenotazioni'}`)
+  if (i.disponibilita) pezzi.push(`${i.disponibilita} ${i.disponibilita === 1 ? 'disponibilità tutor' : 'disponibilità tutor'}`)
+  return pezzi.join(', ')
+}
+
+async function aggiungiChiusura() {
+  if (!nuovaChiusura.date) return
+
+  const salva = async () => {
+    try {
+      await $fetch('/api/settings/closures', { method: 'POST', body: nuovaChiusura })
+      toast.add({ title: 'Chiusura aggiunta', color: 'success' })
+      nuovaChiusura.date = ''
+      nuovaChiusura.description = ''
+      refreshClosures()
+    } catch(e: any) {
+      toast.add({ title: 'Errore', color: 'error' })
+    }
+  }
+
+  const impatto = await impattoChiusura(nuovaChiusura.date)
+  const cosaCe = descriviImpatto(impatto)
+
+  // Se quel giorno è già "vivo", meglio dirlo prima di chiuderlo
+  if (cosaCe) {
+    chiediConferma(
+      {
+        title: 'Quel giorno non è vuoto',
+        description: `Il ${nuovaChiusura.date.split('-').reverse().join('/')} risulta già: ${cosaCe}. Chiudendo il centro il giorno non sarà più prenotabile, ma quello che c'è ora NON viene cancellato: controllalo a mano.`,
+        confirmLabel: 'Chiudi comunque',
+      },
+      salva
+    )
+    return
+  }
+
+  await salva()
+}
+async function eliminaChiusura(c: any) {
+  const giorno = String(c.date).split('-').reverse().join('/')
+  const cosaCe = descriviImpatto(await impattoChiusura(c.date))
+
   chiediConferma(
-    { title: 'Eliminare questa data di chiusura?', description: 'La data verrà rimossa dal calendario.', confirmLabel: 'Elimina', confirmColor: 'error' },
+    {
+      title: `Riaprire il ${giorno}?`,
+      description: cosaCe
+        ? `Il giorno torna prenotabile per famiglie e tutor. In quella data risulta già: ${cosaCe} — controlla che sia coerente.`
+        : 'Il giorno torna prenotabile per famiglie e tutor. Al momento in quella data non c\'è nulla: nessuna lezione, prenotazione o disponibilità.',
+      confirmLabel: 'Riapri il giorno',
+      confirmColor: 'error',
+    },
     async () => {
       try {
-        await $fetch(`/api/settings/closures/${id}`, { method: 'DELETE' })
+        await $fetch(`/api/settings/closures/${c.id}`, { method: 'DELETE' })
         toast.add({ title: 'Chiusura rimossa', color: 'success' })
         refreshClosures()
       } catch(e: any) {
