@@ -11,7 +11,8 @@
     "db:fix-lessons": "tsx server/database/fix-lessons.ts",
     "db:fix-lessons:apply": "tsx server/database/fix-lessons.ts --apply",
     "db:fix-nomi": "tsx server/database/fix-nomi.ts",
-    "db:fix-nomi:apply": "tsx server/database/fix-nomi.ts --apply"
+    "db:fix-nomi:apply": "tsx server/database/fix-nomi.ts --apply",
+    "checkup:db": "tsx server/database/checkup-db.ts"
   },
   "dependencies": {
     "@iconify-json/heroicons": "^1.2.3",
