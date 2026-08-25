@@ -413,11 +413,17 @@ async function importa() {
     })
     emit('imported')
   } catch (err: any) {
+    // I blocchi già inviati sono salvati: non bisogna dire "nessun contatto aggiunto"
+    // se i primi 500 sono andati a buon fine (ricaricando il file verranno saltati come doppioni)
+    const giaSalvati = totale.importati
     toast.add({
       title: err?.data?.statusMessage ?? 'Importazione non riuscita',
-      description: 'Nessun contatto è stato aggiunto. Controlla il file e riprova.',
+      description: giaSalvati > 0
+        ? `${giaSalvati} contatti erano già stati salvati prima dell'errore; il resto non è stato aggiunto. Se ricarichi lo stesso file, quelli già salvati verranno saltati come doppioni.`
+        : 'Nessun contatto è stato aggiunto. Controlla il file e riprova.',
       color: 'error',
     })
+    if (giaSalvati > 0) emit('imported')
   } finally {
     importando.value = false
   }

@@ -6,6 +6,7 @@
 // Una sola fonte = anteprima e salvataggio non possono mai dire cose diverse.
 
 import { normalizzaTelefono } from './phone'
+import { giornoCivileValido } from './giorno-civile'
 import {
   TIPI_CONTATTO,
   CANALI_CONTATTO,
@@ -83,10 +84,11 @@ export function normalizzaGiornoImport(testo: string): { ok: true; valore: strin
   if (!t) return { ok: true, valore: null }
 
   const componi = (anno: string, mese: string, giorno: string) => {
-    const m = Number(mese)
-    const g = Number(giorno)
-    if (m < 1 || m > 12 || g < 1 || g > 31) return { ok: false } as const
-    return { ok: true, valore: `${anno}-${mese.padStart(2, '0')}-${giorno.padStart(2, '0')}` } as const
+    const valore = `${anno}-${mese.padStart(2, '0')}-${giorno.padStart(2, '0')}`
+    // Non basta "mese 1–12, giorno 1–31": 31/04 o 30/02 sono refusi comuni nei CSV
+    // e Postgres li rifiuterebbe al salvataggio, facendo saltare l'intero blocco.
+    if (!giornoCivileValido(valore)) return { ok: false } as const
+    return { ok: true, valore } as const
   }
 
   const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t)

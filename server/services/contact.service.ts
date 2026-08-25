@@ -335,26 +335,37 @@ export async function importContacts(
         continue
       }
 
-      await tx.insert(contacts).values({
-        tipo:               d.tipo,
-        nome:               nomeProprio(d.nome),
-        cognome:            d.cognome ? nomeProprio(d.cognome) : null,
-        telefono:           d.telefono ?? null,
-        email:              d.email ?? null,
-        canaleOrigine:      d.canaleOrigine,
-        stato:              d.stato,
-        prossimoRicontatto: d.prossimoRicontatto ?? null,
-        note:               d.note ?? null,
-        nomeStudente:       d.nomeStudente ?? null,
-        classeScuola:       d.classeScuola ?? null,
-        materie:            d.materie ?? null,
-        azienda:            d.azienda ?? null,
-        servizioInteresse:  d.servizioInteresse ?? null,
-        marketingRuolo:     d.marketingRuolo ?? null,
-        privacyInformata:   d.privacyInformata,
-        createdByUserId:    userId,
-        convertitoAt:       d.stato === 'CONVERTITO' ? new Date() : null,
-      })
+      // Salvataggio in un savepoint: se Postgres rifiuta proprio questa riga (es. un valore
+      // che la validazione non ha previsto) si segnala SOLO lei e il blocco prosegue,
+      // invece di annullare anche le righe buone già scritte.
+      try {
+        await tx.transaction(async (sp) => {
+          await sp.insert(contacts).values({
+            tipo:               d.tipo,
+            nome:               nomeProprio(d.nome),
+            cognome:            d.cognome ? nomeProprio(d.cognome) : null,
+            telefono:           d.telefono ?? null,
+            email:              d.email ?? null,
+            canaleOrigine:      d.canaleOrigine,
+            stato:              d.stato,
+            prossimoRicontatto: d.prossimoRicontatto ?? null,
+            note:               d.note ?? null,
+            nomeStudente:       d.nomeStudente ?? null,
+            classeScuola:       d.classeScuola ?? null,
+            materie:            d.materie ?? null,
+            azienda:            d.azienda ?? null,
+            servizioInteresse:  d.servizioInteresse ?? null,
+            marketingRuolo:     d.marketingRuolo ?? null,
+            privacyInformata:   d.privacyInformata,
+            createdByUserId:    userId,
+            convertitoAt:       d.stato === 'CONVERTITO' ? new Date() : null,
+          })
+        })
+      } catch (err) {
+        const dettaglio = err instanceof Error ? err.message.split('\n')[0] : 'errore sconosciuto'
+        errori.push({ riga: numeroRiga, motivo: `salvataggio rifiutato dal database (${dettaglio})` })
+        continue
+      }
 
       for (const c of chiavi) giaVisti.set(c, numeroRiga)
       importati++

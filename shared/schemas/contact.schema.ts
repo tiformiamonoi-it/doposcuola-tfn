@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { normalizzaTelefono } from '../phone'
+import { giornoCivileValido } from '../giorno-civile'
 import {
   VALORI_TIPO_CONTATTO,
   VALORI_CANALE_CONTATTO,
@@ -56,7 +57,13 @@ const emailOpz = z
 
 /** Giorno civile 'YYYY-MM-DD' (mai timestamptz: la data-giorno non ha fuso orario). */
 const giornoOpz = z
-  .union([z.literal(''), z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data non valida (formato AAAA-MM-GG)')])
+  .union([
+    z.literal(''),
+    z.string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data non valida (formato AAAA-MM-GG)')
+      // "2026-02-30" è ben formato ma non esiste: meglio un 422 chiaro che un 500 dal DB
+      .refine(giornoCivileValido, 'Data inesistente (controlla giorno e mese)'),
+  ])
   .transform((v) => (v.length > 0 ? v : null))
   .nullish()
 
