@@ -13,11 +13,13 @@
 </template>
 
 <script setup lang="ts">
+import type { ConfirmColor } from '~/composables/useConfirm'
+
 const props = defineProps<{
   title: string
   description: string
   confirmLabel?: string
-  confirmColor?: 'primary' | 'error' | 'warning'
+  confirmColor?: ConfirmColor
   loading?: boolean
 }>()
 

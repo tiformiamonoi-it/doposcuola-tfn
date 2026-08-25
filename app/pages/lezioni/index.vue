@@ -26,19 +26,19 @@
           { label: 'Maxi (5+)', value: 'MAXI' },
         ]"
         class="w-52"
-        @change="caricaLezioni"
+        @update:model-value="caricaLezioni"
       />
       <USelect
         v-model="filtroTutor"
         :items="[{ label: 'Tutti i tutor', value: 'all' }, ...tutors.map(t => ({ label: `${t.lastName} ${t.firstName}`, value: t.id }))]"
         class="w-52"
-        @change="caricaLezioni"
+        @update:model-value="caricaLezioni"
       />
       <USelect
         v-model="filtroStudente"
         :items="[{ label: 'Tutti gli alunni', value: 'all' }, ...students.map(s => ({ label: `${s.lastName} ${s.firstName}`, value: s.id }))]"
         class="w-52"
-        @change="caricaLezioni"
+        @update:model-value="caricaLezioni"
       />
     </div>
 
@@ -53,7 +53,7 @@
         <!-- Colonna Data e Ora -->
         <template #data-cell="{ row }">
           <div class="flex flex-col">
-            <span class="font-medium text-slate-800">{{ formatData(row.original.data) }}</span>
+            <span class="font-medium text-slate-800">{{ formatDataConGiorno(row.original.data) }}</span>
             <span class="text-xs text-slate-500" v-if="row.original.timeSlot">
               <UIcon name="i-heroicons-clock" class="w-3 h-3 inline-block mr-0.5 align-text-bottom" />
               {{ row.original.timeSlot.oraInizio.substring(0,5) }} - {{ row.original.timeSlot.oraFine.substring(0,5) }}
@@ -125,7 +125,7 @@
           v-model:page="pagina"
           :total="meta.total"
           :items-per-page="50"
-          @update:page="caricaLezioni"
+          @update:page="cambiaPagina"
         />
       </div>
 
@@ -137,7 +137,7 @@
     </div>
 
     <!-- ─── MODAL DETTAGLIO LEZIONE ─── -->
-    <UModal v-model:open="modalDettaglioAperto" :title="lezioneSelezionata ? `Lezione del ${formatData(lezioneSelezionata.data)}` : ''">
+    <UModal v-model:open="modalDettaglioAperto" :title="lezioneSelezionata ? `Lezione del ${formatDataConGiorno(lezioneSelezionata.data)}` : ''">
       <template v-if="lezioneSelezionata" #body>
         <dl class="space-y-3 text-sm">
           <div class="flex gap-2">
@@ -272,7 +272,10 @@ const { data, pending, refresh } = useLazyFetch('/api/lessons', {
 const lezioni = computed(() => data.value?.data ?? [])
 const meta    = computed(() => data.value?.meta)
 
+// Cambio filtri: si riparte da pagina 1. Cambio pagina: si ricarica e basta
+// (prima il pager richiamava caricaLezioni e ogni click tornava a pagina 1).
 function caricaLezioni() { pagina.value = 1; refresh() }
+function cambiaPagina() { refresh() }
 
 // ─── Colonne ───
 const colonne = [
@@ -285,7 +288,9 @@ const colonne = [
   { id: 'azioni',    header: '' },
 ]
 
-function formatData(d: string | Date | null) {
+// Formato con il giorno della settimana ("lun 24/08/2026"), diverso da formatData()
+// di ~/utils/format (che è auto-importata): nomi distinti per non nasconderla.
+function formatDataConGiorno(d: string | Date | null) {
   if (!d) return '—'
   return new Date(d).toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
 }

@@ -44,10 +44,5 @@ useHead({ title: 'Cronologia Note — Area Tutor' })
 
 const { data: note, pending } = await useFetch<any[]>('/api/notes/me')
 
-function formatDataOra(d: string) {
-  return new Date(d).toLocaleString('it-IT', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  })
-}
+// formatDataOra() arriva da ~/utils/format (auto-importata)
 </script>

@@ -73,7 +73,7 @@
             :items="[{ label: 'Pacchetto ORE', value: 'ORE' }, { label: 'Pacchetto MENSILE', value: 'MENSILE' }, { label: 'Pacchetto A CONSUMO', value: 'A_CONSUMO' }]"
             class="w-full"
             :disabled="!!nuovo.standardPackageId"
-            @change="aggiornaDatiScadenza"
+            @update:model-value="aggiornaDatiScadenza"
           />
         </UFormField>
 
@@ -141,12 +141,7 @@
           <UFormField label="Metodo pagamento" required>
             <USelect
               v-model="nuovo.accontoMetodo"
-              :items="[
-                { label: 'Contanti', value: 'CONTANTI' },
-                { label: 'Bonifico', value: 'BONIFICO' },
-                { label: 'POS', value: 'POS' },
-                { label: 'Assegno', value: 'ASSEGNO' },
-              ]"
+              :items="METODI_PAGAMENTO_ITEMS"
               class="w-full"
             />
           </UFormField>
@@ -178,6 +173,8 @@
 
 <script setup lang="ts">
 import { oggiISO } from '~/utils/format'
+import { METODI_PAGAMENTO_ITEMS } from '~/utils/contabilita'
+import { calcolaDataScadenza, annoScadenzaOre as annoScadenzaOreDa } from '#shared/scadenza-pacchetto'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
 
 const props = defineProps<{
@@ -237,28 +234,7 @@ const studenteSelezionato = ref<string>('')
 const templateSelezionato = ref<string>('')
 const pacchettiAttiviStudente = ref<any[]>([])
 
-const oggi = new Date()
-
-function calcolaDataScadenza(tipo: 'ORE' | 'MENSILE' | 'A_CONSUMO', startStr?: string): string {
-  const baseDate = startStr ? new Date(startStr) : new Date(nuovo?.dataInizio || oggi.toISOString())
-  if (tipo === 'ORE' || tipo === 'A_CONSUMO') {
-    const m = baseDate.getMonth()
-    const d = baseDate.getDate()
-    const anno = (m > 5 || (m === 5 && d > 15)) ? baseDate.getFullYear() + 1 : baseDate.getFullYear()
-    return `${anno}-06-15`
-  } else {
-    const d = new Date(baseDate)
-    d.setDate(d.getDate() + 30)
-    return d.toISOString().slice(0, 10)
-  }
-}
-
-const annoScadenzaOre = computed(() => {
-  const baseDate = nuovo?.dataInizio ? new Date(nuovo.dataInizio) : oggi
-  const m = baseDate.getMonth()
-  const d = baseDate.getDate()
-  return (m > 5 || (m === 5 && d > 15)) ? baseDate.getFullYear() + 1 : baseDate.getFullYear()
-})
+const annoScadenzaOre = computed(() => annoScadenzaOreDa(nuovo?.dataInizio || oggiISO()))
 
 function aggiornaDatiScadenza() {
   nuovo.dataScadenza = calcolaDataScadenza(nuovo.tipo, nuovo.dataInizio)
@@ -415,30 +391,11 @@ function applicaTemplate(val: any) {
   if (t.tipo === 'A_CONSUMO') {
     nuovo.tariffaOraria = parseFloat(t.tariffaOraria)
   }
-  nuovo.dataScadenza = calcolaDataScadenza(t.tipo)
+  nuovo.dataScadenza = calcolaDataScadenza(t.tipo, nuovo.dataInizio || oggiISO())
 }
 
-const confirmOpen = ref(false)
-const confirmTitle = ref('')
-const confirmDescription = ref('')
-const confirmLabel = ref('Conferma')
-const confirmColor = ref<'primary' | 'error'>('primary')
-const pendingAction = ref<(() => void) | null>(null)
-
-function chiediConferma(config: { title: string; description: string; confirmLabel?: string; confirmColor?: 'primary' | 'error' }, action: () => void) {
-  confirmTitle.value = config.title
-  confirmDescription.value = config.description
-  confirmLabel.value = config.confirmLabel ?? 'Conferma'
-  confirmColor.value = config.confirmColor ?? 'primary'
-  pendingAction.value = action
-  confirmOpen.value = true
-}
-
-function eseguiConferma() {
-  confirmOpen.value = false
-  pendingAction.value?.()
-  pendingAction.value = null
-}
+// ─── ConfirmDialog: stato e logica in app/composables/useConfirm.ts ───
+const { confirmOpen, confirmTitle, confirmDescription, confirmLabel, confirmColor, chiediConferma, eseguiConferma } = useConfirm()
 
 async function creaPacchetto() {
   if (!nuovo.studentId) {

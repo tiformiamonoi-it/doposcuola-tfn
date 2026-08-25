@@ -3,6 +3,7 @@ import { accountingEntries, packages, payments, students } from '../database/sch
 import { and, count, desc, eq, sql } from 'drizzle-orm'
 import { computePackageStates } from './package.service'
 import { conFattura, rimuoviSuffissoFattura } from '#shared/fattura'
+import { CAT } from '#shared/accounting-categories'
 import type { CreatePaymentInput, PaymentQuery, UpdatePaymentInput } from '#shared/schemas/payment.schema'
 
 // ─────────────────────────────────────────────
@@ -108,7 +109,7 @@ export async function createPayment(data: CreatePaymentInput) {
         tipo:            'ENTRATA',
         importo:         String(data.importo),
         descrizione:     `Pagamento ${data.tipoPagamento} — ${pkg.studentLastName} ${pkg.studentFirstName} (${pkg.nome})`,
-        categoria:       'pacchetti',
+        categoria:       CAT.PACCHETTI,
         packageId:       data.packageId,
         paymentId:       payment!.id,
         metodoPagamento: data.metodoPagamento,

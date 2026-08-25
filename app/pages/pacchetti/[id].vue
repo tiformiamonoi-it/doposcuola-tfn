@@ -139,10 +139,11 @@
                   <UInput v-model="editForm.importo" type="number" step="0.01" class="w-full" placeholder="Importo" />
                   <UInput v-model="editForm.dataPagamento" type="date" class="w-full" />
                   <div>
-                    <USelectMenu v-model="editForm.tipoPagamento" :items="['ACCONTO', 'SALDO', 'RATA', 'INTEGRAZIONE']" class="w-full" />
+                    <!-- value-key: USelectMenu senza di essa metterebbe nel v-model l'intero oggetto -->
+                    <USelectMenu v-model="editForm.tipoPagamento" :items="TIPI_PAGAMENTO_ITEMS" value-key="value" class="w-full" />
                     <p v-if="editTipoError" class="text-red-500 text-[10px] mt-0.5 leading-tight">{{ editTipoError }}</p>
                   </div>
-                  <USelectMenu v-model="editForm.metodoPagamento" :items="['CONTANTI', 'BONIFICO', 'POS', 'ASSEGNO']" class="w-full" />
+                  <USelectMenu v-model="editForm.metodoPagamento" :items="METODI_PAGAMENTO_ITEMS" value-key="value" class="w-full" />
                 </div>
                 <div class="flex justify-end gap-1 mt-2">
                   <UButton size="xs" variant="ghost" color="neutral" icon="i-heroicons-x-mark" @click="annullaModificaPagamento" />
@@ -227,6 +228,7 @@
 <script setup lang="ts">
 import { riassumiStati } from '~/utils/statiPacchetto'
 import { formatData } from '~/utils/format'
+import { METODI_PAGAMENTO_ITEMS, TIPI_PAGAMENTO_ITEMS } from '~/utils/contabilita'
 
 definePageMeta({ middleware: ['admin-or-super'] })
 

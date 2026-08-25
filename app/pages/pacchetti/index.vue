@@ -12,13 +12,16 @@
 
     <!-- Filtri -->
     <div class="flex flex-wrap gap-3">
+      <!-- value-key: senza, USelectMenu mette nel v-model l'INTERO oggetto {label,value}
+           e il filtro arrivava al server come "[object Object]" (non filtrava nulla). -->
       <USelectMenu
         v-model="filtroStati"
         :items="opzioniStati"
+        value-key="value"
         multiple
         placeholder="Filtra per stato..."
         class="w-72"
-        @change="caricaPacchetti"
+        @update:model-value="caricaPacchetti"
       />
       <USelect
         v-model="filtroTipo"
@@ -28,7 +31,7 @@
           { label: 'Pacchetto MENSILE', value: 'MENSILE' },
         ]"
         class="w-44"
-        @change="caricaPacchetti"
+        @update:model-value="caricaPacchetti"
       />
     </div>
 
@@ -340,6 +343,7 @@ import { h, resolveComponent } from 'vue'
 import { riassumiStati } from '~/utils/statiPacchetto'
 import { inizialiDa, coloreAvatar } from '~/utils/avatar'
 import { oggiISO, formatData  } from '~/utils/format'
+import { calcolaDataScadenza } from '#shared/scadenza-pacchetto'
 
 function pacchettoStatusColor(stati: string[]) {
   if (!stati || stati.length === 0) return 'neutral'
@@ -513,22 +517,6 @@ function apriModalCrea() {
 const modalBulkAperto = ref(false)
 const salvandoBulk = ref(false)
 
-const oggi = new Date()
-
-function calcolaDataScadenza(tipo: 'ORE' | 'MENSILE' | 'A_CONSUMO', startStr?: string): string {
-  const baseDate = startStr ? new Date(startStr) : new Date(datiBulk?.dataInizio || oggi.toISOString())
-  if (tipo === 'ORE' || tipo === 'A_CONSUMO') {
-    const m = baseDate.getMonth()
-    const d = baseDate.getDate()
-    const anno = (m > 5 || (m === 5 && d > 15)) ? baseDate.getFullYear() + 1 : baseDate.getFullYear()
-    return `${anno}-06-15`
-  } else {
-    const d = new Date(baseDate)
-    d.setDate(d.getDate() + 30)
-    return d.toISOString().slice(0, 10)
-  }
-}
-
 const datiBulk = reactive({
   modalita: 'INTELLIGENTE' as 'INTELLIGENTE' | 'TEMPLATE',
   templateSelezionato: '',
@@ -594,7 +582,7 @@ function apriModalBulk() {
   datiBulk.templateSelezionato = ''
   datiBulk.templateScelto = null
   datiBulk.dataInizio = oggiISO()
-  datiBulk.dataScadenza = calcolaDataScadenza('ORE')
+  datiBulk.dataScadenza = calcolaDataScadenza('ORE', datiBulk.dataInizio)
   modalBulkAperto.value = true
 }
 

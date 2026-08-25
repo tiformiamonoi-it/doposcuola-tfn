@@ -472,19 +472,19 @@
     <ModalPagamentoPacchetto
       v-model:open="modalPagamentoAperto"
       :pacchetto="pacchettoSelezionato"
-      @refresh="refreshPacchetti"
+      @refresh="ricaricaDopoPacchetto"
     />
 
     <ModalModificaPacchetto
       v-model:open="modalModificaPacchettoAperto"
       :pacchetto="pacchettoSelezionato"
-      @refresh="refreshPacchetti"
+      @refresh="ricaricaDopoPacchetto"
     />
 
     <ModalRicaricaPacchetto
       v-model:open="modalRicaricaAperto"
       :pacchetto="pacchettoSelezionato"
-      @refresh="refreshPacchetti"
+      @refresh="ricaricaDopoPacchetto"
     />
 
     <ModalLibrettoRicariche
@@ -498,7 +498,7 @@
       :student-id="id"
       :student-name="studente?.lastName + ' ' + studente?.firstName"
       :rinnovo-da="pacchettoDaRinnovare"
-      @refresh="refreshPacchetti"
+      @refresh="ricaricaDopoPacchetto"
     />
 
     <!-- ─── MODAL CREA ACCESSO PORTALE ─── -->
@@ -761,6 +761,13 @@ const { data: datiPacchetti, pending: pendingPacchetti, refresh: refreshPacchett
 })
 const pacchetti = computed(() => datiPacchetti.value?.data ?? [])
 
+// Dopo pagamenti/ricariche/modifiche di un pacchetto va ricaricata anche la scheda
+// dello studente (totali e riepilogo economico), non solo l'elenco dei pacchetti.
+function ricaricaDopoPacchetto() {
+  refreshPacchetti()
+  refresh()
+}
+
 const pacchettoPerRinnovo = computed(() => {
   return (pacchetti.value as any[]).find(pkg => {
     const stati = (pkg.stati as string[]) ?? []
@@ -773,27 +780,8 @@ const pacchettoPerRinnovo = computed(() => {
 // ─── Disattiva studente ───
 const disattivando = ref(false)
 
-const confirmOpen = ref(false)
-const confirmTitle = ref('')
-const confirmDescription = ref('')
-const confirmLabel = ref('Conferma')
-const confirmColor = ref<'primary' | 'error'>('primary')
-const pendingAction = ref<(() => void) | null>(null)
-
-function chiediConferma(config: { title: string; description: string; confirmLabel?: string; confirmColor?: 'primary' | 'error' }, action: () => void) {
-  confirmTitle.value = config.title
-  confirmDescription.value = config.description
-  confirmLabel.value = config.confirmLabel ?? 'Conferma'
-  confirmColor.value = config.confirmColor ?? 'primary'
-  pendingAction.value = action
-  confirmOpen.value = true
-}
-
-function eseguiConferma() {
-  confirmOpen.value = false
-  pendingAction.value?.()
-  pendingAction.value = null
-}
+// ─── ConfirmDialog: stato e logica in app/composables/useConfirm.ts ───
+const { confirmOpen, confirmTitle, confirmDescription, confirmLabel, confirmColor, chiediConferma, eseguiConferma } = useConfirm()
 
 async function disattivaStudente() {
   chiediConferma(

@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
 
   // Controllo ruolo in base alla policy (metodo HTTP incluso: le scritture possono richiedere ruoli più alti)
   const allowed = allowedRolesFor(path, event.method)
-  if (!allowed.includes(user.role as any)) {
+  if (!allowed.includes(user.role)) {
     throw createError({ statusCode: 403, statusMessage: 'Accesso non consentito per il tuo ruolo' })
   }
 

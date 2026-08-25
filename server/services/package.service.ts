@@ -2,6 +2,7 @@ import { db } from '../database/client'
 import { accountingEntries, packages, packageRecharges, payments, students, lessonStudents } from '../database/schema'
 import { and, count, desc, eq, getTableColumns } from 'drizzle-orm'
 import { oggiRomeStr, romeDateStr } from '../utils/tutor-time-window'
+import { CAT } from '#shared/accounting-categories'
 import type { CreatePackageInput, PackageQuery, RechargePackageInput, UpdatePackageInput } from '#shared/schemas/package.schema'
 
 // ─────────────────────────────────────────────
@@ -342,7 +343,7 @@ export async function createPackage(data: CreatePackageInput) {
         tipo:            'ENTRATA',
         importo:         String(pag.importo),
         descrizione:     `Pagamento pacchetto: ${data.nome}`,
-        categoria:       'pacchetti',
+        categoria:       CAT.PACCHETTI,
         packageId:       pkg!.id,
         paymentId:       payment!.id,
         metodoPagamento: pag.metodoPagamento,
@@ -496,7 +497,7 @@ export async function rechargePackage(id: string, data: RechargePackageInput) {
         tipo:            'ENTRATA',
         importo:         String(pag.importo),
         descrizione:     `Ricarica pacchetto: ${pkg!.nome}`,
-        categoria:       'pacchetti',
+        categoria:       CAT.PACCHETTI,
         packageId:       pkg!.id,
         paymentId:       payment!.id,
         metodoPagamento: pag.metodoPagamento,

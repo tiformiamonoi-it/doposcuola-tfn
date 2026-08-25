@@ -40,7 +40,7 @@
           v-model="form.studentId"
           :items="students.map((s: any) => ({ label: `${s.firstName} ${s.lastName}`, value: s.id }))"
           placeholder="Seleziona figlio..."
-          @change="onStudentChange"
+          @update:model-value="onStudentChange"
         />
       </div>
 

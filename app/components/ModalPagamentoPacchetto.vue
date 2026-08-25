@@ -2,9 +2,9 @@
   <UModal v-model:open="isOpen" title="Registra Pagamento">
     <template #body>
       <div class="space-y-4">
-        <UAlert v-if="pacchetto" :color="giaSaldato ? 'success' : 'info'" variant="subtle"
-          :title="`${pacchetto.studentLastName ?? ''} ${pacchetto.studentFirstName ?? ''} — ${pacchetto.nome}`"
-          :description="giaSaldato ? 'Pacchetto già saldato per intero.' : `Residuo da pagare: € ${parseFloat(pacchetto.importoResiduo ?? '0').toFixed(2)}`"
+        <UAlert v-if="pacchettoCorrente" :color="giaSaldato ? 'success' : 'info'" variant="subtle"
+          :title="`${pacchettoCorrente.studentLastName ?? ''} ${pacchettoCorrente.studentFirstName ?? ''} — ${pacchettoCorrente.nome}`"
+          :description="giaSaldato ? 'Pacchetto già saldato per intero.' : `Residuo da pagare: € ${parseFloat(pacchettoCorrente.importoResiduo ?? '0').toFixed(2)}`"
         />
 
         <div class="grid grid-cols-2 gap-4">
@@ -88,13 +88,13 @@
   </UModal>
 
   <ConfirmDialog
-    v-model:open="confirmAperto"
-    :title="confirmConfig.title"
-    :description="confirmConfig.description"
-    :confirm-label="confirmConfig.confirmLabel"
-    :confirm-color="confirmConfig.confirmColor"
+    v-model:open="confirmOpen"
+    :title="confirmTitle"
+    :description="confirmDescription"
+    :confirm-label="confirmLabel"
+    :confirm-color="confirmColor"
     :loading="confirmLoading"
-    @confirm="eseguiAzioneConfermata"
+    @confirm="eseguiConferma"
   />
 </template>
 
@@ -109,7 +109,26 @@ const isOpen = defineModel<boolean>('open', { default: false })
 const toast = useToast()
 const salvandoPagamento = ref(false)
 const storico = ref<any[]>([])
-const giaSaldato = computed(() => !!props.pacchetto?.stati?.includes('PAGATO'))
+
+// Copia locale del pacchetto: la prop è una "fotografia" presa quando si apre la
+// finestra, quindi dopo aver modificato o cancellato un pagamento residuo, avviso
+// e tipo di pagamento restavano fermi ai valori vecchi. Qui la ricarichiamo dal
+// server dopo ogni operazione andata a buon fine.
+const pacchettoCorrente = ref<any | null>(props.pacchetto)
+watch(() => props.pacchetto, (p) => { pacchettoCorrente.value = p })
+
+async function ricaricaPacchetto() {
+  const id = pacchettoCorrente.value?.id
+  if (!id) return
+  try {
+    const res = await $fetch(`/api/packages/${id}`) as any
+    if (res?.data) pacchettoCorrente.value = res.data
+  } catch {
+    // se non riesce, teniamo i dati che abbiamo già
+  }
+}
+
+const giaSaldato = computed(() => !!pacchettoCorrente.value?.stati?.includes('PAGATO'))
 
 import { METODI_PAGAMENTO_ITEMS, TIPI_PAGAMENTO_ITEMS } from '~/utils/contabilita'
 const tipiPagamento = TIPI_PAGAMENTO_ITEMS
@@ -123,13 +142,13 @@ const pagamento = reactive({
   fattura: false,
 })
 
-const residuo = computed(() => parseFloat(props.pacchetto?.importoResiduo || '0'))
+const residuo = computed(() => parseFloat(pacchettoCorrente.value?.importoResiduo || '0'))
 
 function calcolaTipoPagamento(num: number) {
   const isFull = num >= residuo.value - 0.01
-  const giaPagato = parseFloat(props.pacchetto?.importoPagato || '0')
-  const hadSaldo = props.pacchetto?.stati?.includes('PAGATO') || 
-                   giaPagato >= parseFloat(props.pacchetto?.prezzoTotale || '0') ||
+  const giaPagato = parseFloat(pacchettoCorrente.value?.importoPagato || '0')
+  const hadSaldo = pacchettoCorrente.value?.stati?.includes('PAGATO') ||
+                   giaPagato >= parseFloat(pacchettoCorrente.value?.prezzoTotale || '0') ||
                    storico.value.some(p => p.tipoPagamento === 'SALDO' || p.tipoPagamento === 'INTEGRAZIONE')
 
   if (hadSaldo) {
@@ -171,10 +190,10 @@ function iniziaModifica(p: any) {
 }
 
 const editResiduo = computed(() => {
-  if (!editingId.value || !props.pacchetto) return 0
+  if (!editingId.value || !pacchettoCorrente.value) return 0
   const originalPayment = storico.value.find(p => p.id === editingId.value)
   if (!originalPayment) return 0
-  return parseFloat(props.pacchetto.importoResiduo) + parseFloat(originalPayment.importo)
+  return parseFloat(pacchettoCorrente.value.importoResiduo) + parseFloat(originalPayment.importo)
 })
 
 function calcolaEditTipoPagamento(num: number) {
@@ -215,64 +234,77 @@ const editTipoError = computed(() => {
 })
 
 // ─── Conferma (modifica/eliminazione) — niente alert/confirm nativi ───
-const confirmAperto  = ref(false)
-const confirmLoading = ref(false)
-const confirmConfig  = reactive({ title: '', description: '', confirmLabel: 'Conferma', confirmColor: 'primary' as 'primary' | 'error' })
-const azionePendente = ref<{ tipo: 'modifica' | 'elimina'; paymentId: string } | null>(null)
+// attendi: true → la finestra resta aperta con la rotellina finché l'operazione
+// non è finita, e resta aperta se fallisce (l'azione rilancia l'errore).
+const {
+  confirmOpen, confirmTitle, confirmDescription, confirmLabel, confirmColor, confirmLoading,
+  chiediConferma, eseguiConferma,
+} = useConfirm()
+
+// Dopo ogni operazione riuscita: prima il pacchetto (residuo/stati aggiornati),
+// poi lo storico — che ricalcola il tipo di pagamento sul residuo NUOVO.
+async function dopoOperazione() {
+  await ricaricaPacchetto()
+  await caricaStorico()
+  emit('refresh')
+}
+
+function segnalaErrore(err: any): never {
+  toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Operazione non riuscita', color: 'error' })
+  throw err
+}
 
 function chiediModifica(p: any) {
-  azionePendente.value = { tipo: 'modifica', paymentId: p.id }
-  confirmConfig.title = 'Confermi la modifica?'
-  confirmConfig.description = `Il pagamento verrà aggiornato a € ${editForm.importo.toFixed(2)} (${editForm.tipo}, ${editForm.metodo}), e la scrittura in contabilità collegata verrà aggiornata di conseguenza.`
-  confirmConfig.confirmLabel = 'Salva modifica'
-  confirmConfig.confirmColor = 'primary'
-  confirmAperto.value = true
+  chiediConferma(
+    {
+      title: 'Confermi la modifica?',
+      description: `Il pagamento verrà aggiornato a € ${editForm.importo.toFixed(2)} (${editForm.tipo}, ${editForm.metodo}), e la scrittura in contabilità collegata verrà aggiornata di conseguenza.`,
+      confirmLabel: 'Salva modifica',
+      confirmColor: 'primary',
+      attendi: true,
+    },
+    async () => {
+      try {
+        await $fetch(`/api/payments/${p.id}`, {
+          method: 'PUT',
+          body: {
+            importo:         Number(editForm.importo),
+            tipoPagamento:   editForm.tipo,
+            metodoPagamento: editForm.metodo,
+            dataPagamento:   editForm.data,
+          },
+        })
+      } catch (err: any) { segnalaErrore(err) }
+      toast.add({ title: 'Pagamento modificato', color: 'success' })
+      editingId.value = null
+      await dopoOperazione()
+    },
+  )
 }
 
 function chiediEliminazione(p: any) {
-  azionePendente.value = { tipo: 'elimina', paymentId: p.id }
-  confirmConfig.title = 'Confermi l\'eliminazione?'
-  confirmConfig.description = `Il pagamento di € ${parseFloat(p.importo).toFixed(2)} verrà eliminato definitivamente, insieme alla scrittura in contabilità collegata. Il saldo del pacchetto verrà ricalcolato.`
-  confirmConfig.confirmLabel = 'Elimina'
-  confirmConfig.confirmColor = 'error'
-  confirmAperto.value = true
-}
-
-async function eseguiAzioneConfermata() {
-  if (!azionePendente.value) return
-  const { tipo, paymentId } = azionePendente.value
-  confirmLoading.value = true
-  try {
-    if (tipo === 'elimina') {
-      await $fetch(`/api/payments/${paymentId}`, { method: 'DELETE' })
+  chiediConferma(
+    {
+      title: 'Confermi l\'eliminazione?',
+      description: `Il pagamento di € ${parseFloat(p.importo).toFixed(2)} verrà eliminato definitivamente, insieme alla scrittura in contabilità collegata. Il saldo del pacchetto verrà ricalcolato.`,
+      confirmLabel: 'Elimina',
+      confirmColor: 'error',
+      attendi: true,
+    },
+    async () => {
+      try {
+        await $fetch(`/api/payments/${p.id}`, { method: 'DELETE' })
+      } catch (err: any) { segnalaErrore(err) }
       toast.add({ title: 'Pagamento eliminato', color: 'success' })
-    } else {
-      await $fetch(`/api/payments/${paymentId}`, {
-        method: 'PUT',
-        body: {
-          importo:         Number(editForm.importo),
-          tipoPagamento:   editForm.tipo,
-          metodoPagamento: editForm.metodo,
-          dataPagamento:   editForm.data,
-        },
-      })
-      toast.add({ title: 'Pagamento modificato', color: 'success' })
-      editingId.value = null
-    }
-    confirmAperto.value = false
-    await caricaStorico()
-    emit('refresh')
-  } catch (err: any) {
-    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Operazione non riuscita', color: 'error' })
-  } finally {
-    confirmLoading.value = false
-  }
+      await dopoOperazione()
+    },
+  )
 }
 
 async function caricaStorico() {
-  if (!props.pacchetto) { storico.value = []; return }
+  if (!pacchettoCorrente.value) { storico.value = []; return }
   try {
-    const res = await $fetch('/api/payments', { query: { packageId: props.pacchetto.id, limit: 100 } }) as any
+    const res = await $fetch('/api/payments', { query: { packageId: pacchettoCorrente.value.id, limit: 100 } }) as any
     storico.value = res?.data ?? []
     calcolaTipoPagamento(Number(pagamento.importo))
   } catch {
@@ -282,6 +314,8 @@ async function caricaStorico() {
 
 watch(isOpen, (val) => {
   if (val && props.pacchetto) {
+    // Riapertura: si riparte sempre dalla fotografia fresca passata dalla pagina
+    pacchettoCorrente.value = props.pacchetto
     pagamento.importo = parseFloat(props.pacchetto.importoResiduo) || 0
     pagamento.data    = oggiISO()
     pagamento.tipo    = 'SALDO'
@@ -293,13 +327,13 @@ watch(isOpen, (val) => {
 })
 
 async function salvaPagamento() {
-  if (!props.pacchetto) return
+  if (!pacchettoCorrente.value) return
   salvandoPagamento.value = true
   try {
     await $fetch('/api/payments', {
       method: 'POST',
       body: {
-        packageId:       props.pacchetto.id,
+        packageId:       pacchettoCorrente.value.id,
         importo:         Number(pagamento.importo),
         tipoPagamento:   pagamento.tipo,
         metodoPagamento: pagamento.metodo,

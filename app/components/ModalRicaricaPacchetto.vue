@@ -23,12 +23,7 @@
           <UFormField label="Metodo pagamento" required>
             <USelect
               v-model="ricarica.metodoPagamento"
-              :items="[
-                { label: 'Contanti', value: 'CONTANTI' },
-                { label: 'Bonifico', value: 'BONIFICO' },
-                { label: 'POS', value: 'POS' },
-                { label: 'Assegno', value: 'ASSEGNO' },
-              ]"
+              :items="METODI_PAGAMENTO_ITEMS"
               class="w-full"
             />
           </UFormField>
@@ -51,6 +46,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import { METODI_PAGAMENTO_ITEMS } from '~/utils/contabilita'
 
 const props = defineProps<{ pacchetto: any | null }>()
 const emit = defineEmits<{ refresh: [] }>()

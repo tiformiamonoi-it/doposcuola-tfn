@@ -108,18 +108,18 @@
   </UModal>
 
   <ConfirmDialog
-    v-model:open="confirmAperto"
-    :title="confirmConfig.title"
-    :description="confirmConfig.description"
-    :confirm-label="confirmConfig.confirmLabel"
-    :confirm-color="confirmConfig.confirmColor"
+    v-model:open="confirmOpen"
+    :title="confirmTitle"
+    :description="confirmDescription"
+    :confirm-label="confirmLabel"
+    :confirm-color="confirmColor"
     :loading="confirmLoading"
-    @confirm="eseguiEliminazione"
+    @confirm="eseguiConferma"
   />
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, reactive } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import ModalSelezionaStudenti from '~/components/calendario/ModalSelezionaStudenti.vue'
@@ -155,14 +155,11 @@ const mezzaLezioneGlobale = ref(false)
 const note = ref('')
 const pickerAperto = ref(false)
 
-const confirmAperto = ref(false)
-const confirmLoading = ref(false)
-const confirmConfig = reactive({
-  title: 'Conferma eliminazione',
-  description: '',
-  confirmLabel: 'Elimina',
-  confirmColor: 'error' as 'primary' | 'error' | 'warning',
-})
+// ─── ConfirmDialog: stato e logica in app/composables/useConfirm.ts ───
+const {
+  confirmOpen, confirmTitle, confirmDescription, confirmLabel, confirmColor, confirmLoading,
+  chiediConferma, eseguiConferma,
+} = useConfirm()
 
 const canSave = computed(() => {
   if (students.value.length === 0) return false
@@ -358,29 +355,29 @@ async function saveLesson() {
 }
 
 function chiediEliminazione() {
-  confirmConfig.title = 'Conferma eliminazione'
-  confirmConfig.description = 'Sei sicuro di voler eliminare tutte le lezioni di questo slot? Verranno ripristinate le ore.'
-  confirmConfig.confirmLabel = 'Elimina'
-  confirmConfig.confirmColor = 'error'
-  confirmAperto.value = true
-}
-
-async function eseguiEliminazione() {
-  confirmLoading.value = true
-  try {
-    for (const l of props.existingLessonsInSlot) {
-      await $fetch(`/api/lessons/${l.id}`, { method: 'DELETE' })
-    }
-    toast.add({ title: 'Lezione eliminata', color: 'success' })
-    confirmAperto.value = false
-    isOpen.value = false
-    emit('refresh')
-  } catch (err) {
-    console.error(err)
-    toast.add({ title: 'Errore', color: 'error' })
-  } finally {
-    confirmLoading.value = false
-  }
+  chiediConferma(
+    {
+      title: 'Conferma eliminazione',
+      description: 'Sei sicuro di voler eliminare tutte le lezioni di questo slot? Verranno ripristinate le ore.',
+      confirmLabel: 'Elimina',
+      confirmColor: 'error',
+      attendi: true,
+    },
+    async () => {
+      try {
+        for (const l of props.existingLessonsInSlot) {
+          await $fetch(`/api/lessons/${l.id}`, { method: 'DELETE' })
+        }
+      } catch (err) {
+        console.error(err)
+        toast.add({ title: 'Errore', color: 'error' })
+        throw err // la finestra di conferma resta aperta per riprovare
+      }
+      toast.add({ title: 'Lezione eliminata', color: 'success' })
+      isOpen.value = false
+      emit('refresh')
+    },
+  )
 }
 
 async function deleteLesson() {

@@ -56,7 +56,7 @@
               <UFormField label="Metodo">
                 <USelect
                   v-model="form.pagamentoIntegrazione.metodoPagamento"
-                  :items="['CONTANTI', 'BONIFICO', 'POS', 'ASSEGNO']"
+                  :items="METODI_PAGAMENTO_ITEMS"
                   class="w-full"
                 />
               </UFormField>
@@ -79,6 +79,7 @@
 
 <script setup lang="ts">
 import { oggiISO } from '~/utils/format'
+import { METODI_PAGAMENTO_ITEMS } from '~/utils/contabilita'
 import { ref, reactive, watch, computed } from 'vue'
 
 const props = defineProps<{ pacchetto: any | null }>()

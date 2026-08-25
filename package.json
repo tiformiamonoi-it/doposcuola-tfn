@@ -4,6 +4,7 @@
     "build": "nuxt build",
     "preview": "nuxt preview",
     "prepare": "nuxt prepare",
+    "typecheck": "nuxt typecheck",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed-import": "tsx server/database/seed-import.ts",
@@ -26,8 +27,11 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@iconify-json/lucide": "1.2.126",
     "@types/node": "^25.9.3",
     "drizzle-kit": "^0.31.10",
-    "tsx": "^4.22.4"
+    "tsx": "^4.22.4",
+    "typescript": "6.0.3",
+    "vue-tsc": "3.3.11"
   }
 }

@@ -36,6 +36,19 @@ export const CATEGORIE_DEFAULT: Categoria[] = [
   { chiave: 'varie',          etichetta: 'Varie',               neutra: false, sistema: false },
 ]
 
+// Chiavi delle categorie usate dal codice: si scrivono qui una volta sola, invece di
+// ripetere la stringa in ogni servizio (un refuso lì passava inosservato).
+export const CAT = {
+  PACCHETTI:               'pacchetti',
+  COMPENSO_TUTOR:          'compenso_tutor',
+  RIMBORSO_TUTOR:          'rimborso_tutor',
+  RETTIFICA:               'rettifica',
+  PROVENTI_DIVERSI:        'proventi_diversi',
+  COSTI_PROVENTI_DIVERSI:  'costi_proventi_diversi',
+  MARKETING:               'marketing',
+  SPESE_GENERALI:          'spese_generali',
+} as const
+
 /** Mappa chiave → etichetta, con fallback alla chiave grezza per categorie non in elenco. */
 export function mappaEtichette(categorie: Categoria[]): Record<string, string> {
   const m: Record<string, string> = {}

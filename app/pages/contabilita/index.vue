@@ -133,13 +133,13 @@
               <div class="flex items-start justify-between">
                 <div>
                   <p class="text-xs text-slate-500 font-medium uppercase tracking-wide flex items-center gap-1">Costi fissi mensili
-                    <StatHelp text="Le spese fisse impostate in Impostazioni (affitto, utenze…). Qui vedi il valore mensile e il totale sul periodo scelto." />
+                    <StatHelp text="Le spese fisse impostate in Impostazioni (affitto, utenze…). Il valore mensile è quello in vigore a fine periodo; il totale conta ogni spesa solo per i mesi in cui era davvero attiva (date Dal/Al)." />
                   </p>
                   <p class="text-2xl font-bold text-slate-700 mt-1">
                     € {{ fmt(dash.costiFissi.mensili) }}
                   </p>
                   <p class="text-[11px] text-slate-400 mt-1">
-                    € {{ fmt(dash.costiFissi.periodo) }} in {{ dash.costiFissi.mesi }} mesi
+                    € {{ fmt(dash.costiFissi.periodo) }} sul periodo ({{ dash.costiFissi.mesi }} mesi)
                   </p>
                 </div>
                 <UIcon name="i-heroicons-building-office" class="w-6 h-6 text-slate-400" />
@@ -431,7 +431,7 @@
             <UIcon name="i-heroicons-list-bullet" class="w-5 h-5 text-slate-500" />
             <span class="font-medium text-slate-800">Tutti i Movimenti</span>
             <UTooltip text="Scarica i movimenti filtrati in un file apribile con Excel (da girare al commercialista)">
-              <UButton icon="i-heroicons-arrow-down-tray" variant="outline" color="neutral" size="xs" class="ml-auto" :loading="scaricandoCsv" @click="scaricaCsv">
+              <UButton icon="i-heroicons-arrow-down-tray" variant="outline" color="neutral" size="xs" class="ml-auto" :loading="scaricandoCsv" @click="esportaCsv">
                 Scarica CSV
               </UButton>
             </UTooltip>
@@ -637,7 +637,7 @@
               <UInputNumber v-model="nuovoMovimento.importo" :min="0.01" :step="0.01" class="w-full" />
             </UFormField>
             <UFormField name="metodoPagamento" label="Metodo">
-              <USelect v-model="nuovoMovimento.metodoPagamento" :items="['CONTANTI', 'BONIFICO', 'POS', 'ASSEGNO', 'ALTRO']" class="w-full" />
+              <USelect v-model="nuovoMovimento.metodoPagamento" :items="METODI_MOVIMENTO_ITEMS" class="w-full" />
             </UFormField>
           </div>
 
@@ -739,7 +739,7 @@
               <UInputNumber v-model="modificaMovimento.importo" :min="0.01" :step="0.01" class="w-full" />
             </UFormField>
             <UFormField label="Metodo">
-              <USelect v-model="modificaMovimento.metodoPagamento" :items="['CONTANTI', 'BONIFICO', 'POS', 'ASSEGNO', 'ALTRO']" class="w-full" />
+              <USelect v-model="modificaMovimento.metodoPagamento" :items="METODI_MOVIMENTO_ITEMS" class="w-full" />
             </UFormField>
           </div>
           <UFormField label="Categoria">
@@ -828,7 +828,7 @@
               <UInput type="date" v-model="datiIncasso.data" class="w-full" />
             </UFormField>
             <UFormField label="Metodo">
-              <USelect v-model="datiIncasso.metodo" :items="['CONTANTI', 'BONIFICO', 'POS', 'ASSEGNO', 'ALTRO']" class="w-full" />
+              <USelect v-model="datiIncasso.metodo" :items="METODI_MOVIMENTO_ITEMS" class="w-full" />
             </UFormField>
           </div>
         </div>
@@ -848,8 +848,8 @@
 
 <script setup lang="ts">
 import { z } from 'zod'
-import { labelMetodo, labelTipo } from '~/utils/contabilita'
-import { mappaEtichette } from '#shared/accounting-categories'
+import { labelMetodo, labelTipo, METODI_MOVIMENTO_ITEMS } from '~/utils/contabilita'
+import { CAT, mappaEtichette } from '#shared/accounting-categories'
 
 definePageMeta({ middleware: ['admin-only'] })
 
@@ -910,9 +910,7 @@ const opzioniTipoMovimento = computed(() => [
 ])
 
 // E5 — Debiti tutor
-const { data: debitiTutor, refresh: refreshDebitiTutor } = useLazyFetch('/api/tutors/debiti-summary', {
-  watch: false,
-})
+const { data: debitiTutor, refresh: refreshDebitiTutor } = useLazyFetch('/api/tutors/debiti-summary')
 const tutorDebitiTotale = computed(() => debitiTutor.value?.totale ?? 0)
 const tutorDebitiCount  = computed(() => debitiTutor.value?.tutorsConDebiti ?? 0)
 
@@ -966,7 +964,7 @@ function caricaEntries() {
 // ─── Export CSV (movimenti filtrati, tutte le pagine) ───
 const scaricandoCsv = ref(false)
 
-async function scaricaCsv() {
+async function esportaCsv() {
   scaricandoCsv.value = true
   try {
     const res = await $fetch<{ data: any[] }>('/api/accounting/entries', {
@@ -982,8 +980,7 @@ async function scaricaCsv() {
     })
     const righe = res.data ?? []
 
-    // Separatore ';' e BOM UTF-8: è quello che Excel italiano si aspetta
-    const escapeCsv = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    // Separatore ';' e BOM UTF-8 (app/utils/csv.ts): è quello che Excel italiano si aspetta
     const intestazione = ['Data', 'Tipo', 'Categoria', 'Descrizione', 'Metodo', 'Importo', 'Fattura richiesta', 'Fattura emessa']
     const corpo = righe.map((r) => [
       formatData(r.data),
@@ -995,17 +992,9 @@ async function scaricaCsv() {
       String(parseFloat(r.importo ?? '0').toFixed(2)).replace('.', ','),
       r.richiedeFattura ? 'Sì' : 'No',
       r.fatturaEmessa ? 'Sì' : 'No',
-    ].map(escapeCsv).join(';'))
+    ])
 
-    // ﻿ = BOM: senza, Excel mostra le lettere accentate sbagliate
-    const csv = '﻿' + [intestazione.map(escapeCsv).join(';'), ...corpo].join('\r\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `movimenti_${periodo.dataInizio}_${periodo.dataFine}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    scaricaCsv(`movimenti_${periodo.dataInizio}_${periodo.dataFine}.csv`, righeInCsv(intestazione, corpo))
   } catch {
     toast.add({ title: 'Errore durante l\'esportazione', color: 'error' })
   } finally {
@@ -1212,7 +1201,7 @@ const nuovoMovimento = reactive({
   tipo: 'USCITA' as 'ENTRATA' | 'USCITA' | 'CREDITO' | 'DEBITO' | 'PROVENTI_DIVERSI',
   importo: 0,
   descrizione: '',
-  categoria: 'spese_generali',
+  categoria: CAT.SPESE_GENERALI as string,
   metodoPagamento: 'BONIFICO',
   data: oggiISO(),
   richiedeFattura: false,

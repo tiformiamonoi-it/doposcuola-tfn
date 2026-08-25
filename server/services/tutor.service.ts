@@ -8,6 +8,7 @@ import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql } from 'drizzle-o
 import bcrypt from 'bcryptjs'
 import { sendEmail, emailBenvenutoCredenziali } from '../utils/email'
 import { nomeProprio } from '../utils/nomi'
+import { CAT } from '#shared/accounting-categories'
 import type {
   CreateTutorInput, UpdateTutorInput, TutorQuery,
   PayTutorInput, CreateReimbursementInput, PayReimbursementInput,
@@ -449,7 +450,7 @@ export async function payTutor(tutorId: string, data: PayTutorInput) {
         tipo:            'USCITA',
         importo:         importo.toFixed(2),
         descrizione:     `Compenso tutor — ${meseDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}`,
-        categoria:       'compenso_tutor',
+        categoria:       CAT.COMPENSO_TUTOR,
         metodoPagamento: data.metodo,
         tutorPaymentId:  payment.id,
         note:            `tutorPaymentId:${payment.id} tutorId:${tutorId}`,
@@ -658,7 +659,7 @@ export async function payReimbursement(reimbursementId: string, data: PayReimbur
       tipo:            'USCITA',
       importo:         nuovoPagamento.toFixed(2),
       descrizione:     `Rimborso spese: ${current.descrizione}`,
-      categoria:       'rimborso_tutor',
+      categoria:       CAT.RIMBORSO_TUTOR,
       metodoPagamento: data.metodo,
       reimbursementId: reimbursementId,
       note:            `rimborsoId:${reimbursementId} tutorId:${current.tutor_id}`,

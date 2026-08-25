@@ -1,4 +1,5 @@
 import { UpgradePackageSchema } from '#shared/schemas/package.schema'
+import { CAT } from '#shared/accounting-categories'
 import { getPackageById } from '../../../services/package.service'
 import { db } from '../../../database/client'
 import { packages, payments, accountingEntries, lessonStudents, lessons } from '../../../database/schema'
@@ -162,7 +163,7 @@ export default defineEventHandler(async (event) => {
           tipo: 'ENTRATA',
           importo: String(pag.importo),
           descrizione: `Integrazione pacchetto: ${existing.nome}`,
-          categoria: 'pacchetti',
+          categoria: CAT.PACCHETTI,
           packageId: id as string,
           paymentId: paymentId,
           metodoPagamento: pag.metodoPagamento as 'CONTANTI' | 'BONIFICO' | 'POS' | 'ASSEGNO',

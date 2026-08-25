@@ -37,6 +37,11 @@ export const METODI_PAGAMENTO_ITEMS = [
   { label: 'Assegno',  value: 'ASSEGNO' },
 ]
 
+// Metodi ammessi sui MOVIMENTI di contabilità: come i pagamenti, più "Altro"
+// (che sui pagamenti dei pacchetti non esiste). Etichette da METODO_LABELS.
+export const METODI_MOVIMENTO_ITEMS: { label: string; value: string }[] =
+  ['CONTANTI', 'BONIFICO', 'POS', 'ASSEGNO', 'ALTRO'].map((value) => ({ label: METODO_LABELS[value] ?? value, value }))
+
 export const TIPI_PAGAMENTO_ITEMS = [
   { label: 'Acconto',      value: 'ACCONTO' },
   { label: 'Saldo',        value: 'SALDO' },
