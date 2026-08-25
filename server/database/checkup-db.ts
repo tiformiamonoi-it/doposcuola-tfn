@@ -38,6 +38,8 @@ const ESCLUSE = [
   'show transaction_read_only', 'supabase_', 'auth.', 'storage.', 'realtime.', 'net.', 'cron.',
   'pg_roles', 'pg_constraint', 'pg_type', 'pg_namespace', 'pg_class', 'pg_proc', 'pg_attribute',
   'set_config', 'select $1', 'begin', 'commit', 'rollback', 'deallocate',
+  // pannello Supabase (spazio occupato), drizzle-kit (timeout durante le migrazioni), driver
+  'pg_database', 'alter role', 'pg_config',
 ]
 
 function testoQuery(q: string, max = 95): string {
