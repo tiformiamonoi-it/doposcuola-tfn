@@ -117,6 +117,15 @@ export const CreateContactSchema = ContactFieldsSchema.extend({
   canaleOrigine:    z.enum(VALORI_CANALE_CONTATTO, { message: 'Fonte non valida' }).default('ALTRO'),
   stato:            z.enum(VALORI_STATO_CONTATTO, { message: 'Stato non valido' }).default('NUOVO'),
   privacyInformata: z.boolean().default(false),
+
+  // Primo contatto annotato insieme alla creazione: diventa la prima riga del diario
+  primaInterazione: z.object({
+    data:      z.string().datetime({ offset: true, message: 'Data non valida' }),
+    tipo:      z.enum(VALORI_TIPO_INTERAZIONE).default('MESSAGGIO'),
+    direzione: z.enum(VALORI_DIREZIONE_INTERAZIONE).default('RICEVUTA'),
+    canale:    z.enum(VALORI_CANALE_CONTATTO).nullish(),   // null = usa la fonte del contatto
+    note:      testoOpz(2000, 'Le note non possono superare 2000 caratteri'),
+  }).nullish(),
 }).refine(
   (d) => Boolean(d.telefono) || Boolean(d.email) || Boolean(d.socialLink),
   { message: 'Inserisci almeno un recapito: telefono, email o profilo social', path: ['telefono'] },

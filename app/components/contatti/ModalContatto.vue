@@ -122,6 +122,53 @@
           <UTextarea v-model="form.note" :rows="3" class="w-full" placeholder="Cosa ci ha chiesto, orari preferiti…" />
         </UFormField>
 
+        <!-- Quando ci si è sentiti la prima volta: solo alla creazione.
+             In modifica il diario si aggiorna dalla scheda, riga per riga. -->
+        <div v-if="!inModifica" class="rounded-xl border border-slate-200 p-3 space-y-3">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Primo contatto (facoltativo)</p>
+          <p class="text-xs text-slate-500">
+            Quando vi siete sentiti la prima volta: finisce nel diario e riempie «Ultimo contatto».
+            Puoi anche farlo dopo dalla scheda con «Annota chiamata/messaggio».
+          </p>
+
+          <UFormField label="Quando" name="primaData" :error="errorePrimoContatto">
+            <div class="flex items-center gap-2">
+              <UInput v-model="primo.quando" type="datetime-local" class="w-full" />
+              <UButton
+                size="xs" variant="soft" color="neutral" class="shrink-0"
+                @click="() => { primo.quando = adessoPerInput() }"
+              >
+                Adesso
+              </UButton>
+            </div>
+          </UFormField>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <UFormField label="Chi ha contattato chi" name="primaDirezione">
+              <USelect v-model="primo.direzione" :items="DIREZIONI_ITEMS" class="w-full" />
+            </UFormField>
+            <UFormField label="Come" name="primaTipo">
+              <USelect v-model="primo.tipo" :items="TIPI_INTERAZIONE_ITEMS" class="w-full" />
+            </UFormField>
+            <UFormField label="Canale" name="primaCanale">
+              <USelect
+                v-model="primo.canale"
+                :items="CANALI_ITEMS"
+                class="w-full"
+                @update:model-value="() => { canaleScelto = true }"
+              />
+            </UFormField>
+          </div>
+
+          <UFormField label="Cosa vi siete detti" name="primaNote">
+            <UTextarea v-model="primo.note" :rows="2" class="w-full" placeholder="Ci ha scritto per chiedere informazioni…" />
+          </UFormField>
+        </div>
+
+        <p v-else class="text-xs text-slate-500">
+          Per registrare chiamate e messaggi (anche con date passate) usa «Annota chiamata/messaggio» nella scheda.
+        </p>
+
         <UCheckbox v-model="form.privacyInformata" label="Informativa privacy comunicata" />
 
         <p v-if="erroreGenerale" class="text-sm text-red-600">{{ erroreGenerale }}</p>
@@ -144,7 +191,10 @@
 // I campi cambiano a seconda della tab (Doposcuola o Marketing).
 import { labelTipo, labelStato } from '#shared/contatti'
 import type { TipoContatto } from '#shared/contatti'
-import { CANALI_ITEMS, STATI_ITEMS, RUOLI_MARKETING_OPZIONALI_ITEMS, NON_SPECIFICATO, nomeContatto } from '~/utils/contatti'
+import {
+  CANALI_ITEMS, STATI_ITEMS, RUOLI_MARKETING_OPZIONALI_ITEMS, NON_SPECIFICATO, nomeContatto,
+  TIPI_INTERAZIONE_ITEMS, DIREZIONI_ITEMS, adessoPerInput, inputInIso,
+} from '~/utils/contatti'
 import type { Contatto } from '~/utils/contatti'
 
 const props = defineProps<{
@@ -186,10 +236,33 @@ function formVuoto() {
 
 const form = reactive(formVuoto())
 
+// ─── Riquadro "Primo contatto" (solo in creazione) ───
+// "Quando" vuoto = non si annota niente: il contatto nasce senza diario.
+function primoVuoto() {
+  return {
+    quando:    '',
+    direzione: 'RICEVUTA',
+    tipo:      'MESSAGGIO',
+    canale:    'ALTRO',
+    note:      '',
+  }
+}
+
+const primo = reactive(primoVuoto())
+// Finché il canale non viene scelto a mano, segue la Fonte del contatto
+const canaleScelto = ref(false)
+
+watch(() => form.canaleOrigine, (nuovo) => {
+  if (!canaleScelto.value) primo.canale = nuovo
+})
+
 // Ogni apertura riparte pulita: in modifica coi dati del contatto, altrimenti vuota
 watch(aperto, (adessoAperto) => {
   if (!adessoAperto) return
   Object.assign(form, formVuoto())
+  Object.assign(primo, primoVuoto())
+  canaleScelto.value = false
+  errorePrimoContatto.value = ''
   erroriServer.value = {}
   erroreGenerale.value = ''
   avvisiDoppioni.value = []
@@ -220,6 +293,8 @@ watch(aperto, (adessoAperto) => {
 // ─── Errori ───────────────────────────────────
 const erroriServer   = ref<Record<string, string>>({})
 const erroreGenerale = ref('')
+// Errore del campo "Quando" del riquadro Primo contatto
+const errorePrimoContatto = ref('')
 
 const erroreDi = (campo: string) => erroriServer.value[campo]
 
@@ -300,12 +375,41 @@ function corpoDaInviare() {
         marketingRuolo:    form.marketingRuolo === NON_SPECIFICATO ? null : form.marketingRuolo,
       }
 
-  return { tipo: tipoForm.value, ...comuni, ...specifici }
+  const base = { tipo: tipoForm.value, ...comuni, ...specifici }
+
+  // Il primo contatto si annota solo alla creazione e solo se c'è la data
+  const quando = inModifica.value ? null : inputInIso(primo.quando.trim())
+  if (!quando) return base
+
+  return {
+    ...base,
+    primaInterazione: {
+      data:      quando,
+      tipo:      primo.tipo,
+      direzione: primo.direzione,
+      canale:    primo.canale,
+      note:      vuotoNull(primo.note),
+    },
+  }
 }
 
 async function salva() {
   erroriServer.value = {}
   erroreGenerale.value = ''
+  errorePrimoContatto.value = ''
+
+  // Nota scritta senza data: senza il "quando" non si può annotare niente
+  if (!inModifica.value) {
+    const quando = primo.quando.trim()
+    if (!quando && primo.note.trim()) {
+      errorePrimoContatto.value = 'Indica quando vi siete sentiti'
+      return
+    }
+    if (quando && !inputInIso(quando)) {
+      errorePrimoContatto.value = 'Data non valida'
+      return
+    }
+  }
 
   if (!form.nome.trim()) {
     erroriServer.value = { nome: 'Il nome è obbligatorio' }

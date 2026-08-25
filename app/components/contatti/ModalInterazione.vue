@@ -25,7 +25,7 @@
           </UFormField>
         </div>
 
-        <UFormField label="Data e ora" name="data">
+        <UFormField label="Data e ora (puoi indicare un momento passato)" name="data">
           <UInput v-model="form.data" type="datetime-local" class="w-full" />
         </UFormField>
 

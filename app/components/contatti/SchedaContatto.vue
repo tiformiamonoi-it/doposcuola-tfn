@@ -96,9 +96,22 @@
             :value="contatto.prossimoRicontatto ? formatGiorno(contatto.prossimoRicontatto) : 'Nessun promemoria'"
             :highlight="ricontattoScaduto(contatto)"
           />
-          <InfoRow label="Ultimo contatto" :value="formatQuando(contatto.ultimoContattoAt)" />
+          <InfoRow label="Primo contatto" :value="primoContatto" />
+          <InfoRow
+            label="Ultimo contatto"
+            :value="contatto.ultimoContattoAt ? formatQuando(contatto.ultimoContattoAt) : 'Nessuna interazione annotata'"
+          />
           <InfoRow label="Privacy" :value="contatto.privacyInformata ? 'Informativa comunicata' : 'Informativa NON comunicata'" />
         </dl>
+
+        <!-- Diario ancora vuoto: scorciatoia per segnare quando ci si è sentiti la prima volta -->
+        <UButton
+          v-if="contatto.interazioni.length === 0 && !contatto.anonimizzatoAt"
+          icon="i-heroicons-clock" size="xs" variant="soft"
+          @click="() => { modalInterazioneAperta = true }"
+        >
+          Annota il primo contatto
+        </UButton>
 
         <!-- Note (testo libero, va a capo come è stato scritto) -->
         <div v-if="contatto.note" class="bg-slate-50 rounded-xl p-3">
@@ -157,8 +170,11 @@
 
         <!-- ─── DIARIO ─── -->
         <div class="border-t border-slate-200 pt-4">
-          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">
             Diario ({{ contatto.interazioni.length }})
+          </p>
+          <p class="text-[11px] text-slate-400 mb-3">
+            Primo e ultimo contatto si calcolano da qui: per una data passata, cambia «Data e ora» nell'annotazione.
           </p>
 
           <div v-if="contatto.interazioni.length === 0" class="py-8 text-center">
@@ -309,6 +325,14 @@ watch(() => props.contactId, () => { if (aperto.value) carica() })
 const indirizzoSocial = computed(() => {
   const c = contatto.value
   return c ? linkSocial(c.socialLink, c.canaleOrigine) ?? undefined : undefined
+})
+
+// La prima volta che ci si è sentiti: il diario arriva dal più recente al più
+// vecchio, quindi la prima interazione è l'ultima della lista. Diario vuoto = riga nascosta.
+const primoContatto = computed(() => {
+  const righe = contatto.value?.interazioni ?? []
+  const prima = righe[righe.length - 1]
+  return prima ? formatQuando(prima.data) : null
 })
 
 const inserito = computed(() => {

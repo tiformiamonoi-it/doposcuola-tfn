@@ -231,7 +231,7 @@ export async function getContact(id: string) {
 // ─────────────────────────────────────────────
 
 export async function createContact(data: CreateContactInput, userId: string) {
-  const [creato] = await db.insert(contacts).values({
+  const valori: typeof contacts.$inferInsert = {
     tipo:               data.tipo,
     nome:               nomeProprio(data.nome),
     cognome:            data.cognome ? nomeProprio(data.cognome) : null,
@@ -252,9 +252,40 @@ export async function createContact(data: CreateContactInput, userId: string) {
     createdByUserId:    userId,
     // Se nasce già "Convertito" (import/casi particolari) segniamo subito la data
     convertitoAt:       data.stato === 'CONVERTITO' ? new Date() : null,
-  }).returning()
+  }
 
-  return creato
+  const prima = data.primaInterazione
+
+  // Caso normale: si scrive solo la rubrica, esattamente come prima
+  if (!prima) {
+    const [creato] = await db.insert(contacts).values(valori).returning()
+    return creato
+  }
+
+  // È stato indicato quando ci si è sentiti la prima volta: rubrica e prima riga
+  // del diario nella stessa operazione (o tutte e due, o nessuna delle due).
+  const quando = new Date(prima.data)
+
+  return await db.transaction(async (tx) => {
+    const [creato] = await tx.insert(contacts)
+      .values({ ...valori, ultimoContattoAt: quando })
+      .returning()
+
+    if (!creato) throw new Error('Creazione del contatto non riuscita')
+
+    await tx.insert(contactInteractions).values({
+      contactId:       creato.id,
+      tipo:            prima.tipo,
+      direzione:       prima.direzione,
+      // Canale non scelto a mano: vale la fonte del contatto
+      canale:          prima.canale ?? data.canaleOrigine,
+      note:            prima.note ?? null,
+      data:            quando,
+      createdByUserId: userId,
+    })
+
+    return creato
+  })
 }
 
 export async function updateContact(id: string, data: UpdateContactInput) {
