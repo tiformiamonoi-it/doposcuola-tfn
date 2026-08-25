@@ -1,21 +1,5 @@
-/**
- * Normalizza un numero di telefono italiano nel formato +39XXXXXXXXXX
- * Accetta qualsiasi formato di input (spazi, trattini, parentesi, prefissi vari)
- */
-export function normalizzaTelefono(tel: string): string {
-  if (!tel || !tel.trim()) return ''
-
-  // Rimuovi spazi, trattini, punti, parentesi
-  let t = tel.replace(/[\s\-\.\(\)]/g, '')
-
-  // Rimuovi prefisso internazionale esistente
-  if (t.startsWith('+39')) t = t.substring(3)
-  else if (t.startsWith('0039')) t = t.substring(4)
-
-  // Rimuovi eventuali caratteri non numerici rimasti
-  t = t.replace(/\D/g, '')
-
-  if (!t) return ''
-
-  return '+39' + t
-}
+// Le funzioni vivono in shared/phone.ts (così le usa anche il server).
+// Qui restano solo ri-esportate per nome: è la forma che l'auto-import di Nuxt
+// riconosce, quindi nei template si continua a scrivere normalizzaTelefono(...)
+// senza import espliciti, esattamente come prima.
+export { normalizzaTelefono, sembraTelefono, sembraEmail } from '#shared/phone'

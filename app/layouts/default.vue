@@ -53,6 +53,15 @@
           >
             {{ notePendingCount }}
           </span>
+          <!-- Badge contatti da ricontattare oggi (ADMIN/SUPER_TUTOR) -->
+          <span
+            v-if="item.route === '/contatti' && contattiPendingCount > 0"
+            class="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center"
+            :class="collapsed ? 'absolute -top-0.5 -right-0.5' : 'ml-auto'"
+            :title="`${contattiPendingCount} contatti da ricontattare oggi`"
+          >
+            {{ contattiPendingCount }}
+          </span>
           <!-- Tooltip sidebar collassata -->
           <span
             v-if="collapsed"
@@ -201,7 +210,16 @@
             class="flex flex-col items-center gap-1.5 p-3 rounded-xl text-center transition-colors"
             :class="isActive(item.route) ? 'bg-tfn-50 text-tfn-600' : 'text-slate-600 hover:bg-slate-100'"
           >
-            <UIcon :name="item.icon" class="w-6 h-6" />
+            <span class="relative">
+              <UIcon :name="item.icon" class="w-6 h-6" />
+              <!-- Contatti da ricontattare oggi: pallino rosso anche nel menu del telefono -->
+              <span
+                v-if="item.route === '/contatti' && contattiPendingCount > 0"
+                class="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center"
+              >
+                {{ contattiPendingCount }}
+              </span>
+            </span>
             <span class="text-xs font-medium leading-tight">{{ item.label }}</span>
           </NuxtLink>
         </div>
@@ -295,6 +313,16 @@ const notePendingCount = useState<number>('note-pending-count', () => 0)
 const { data: notePendingRes } = useLazyFetch('/api/notes/pending-count', { server: false })
 watchEffect(() => { notePendingCount.value = notePendingRes.value?.count ?? 0 })
 
+// Badge "contatti da ricontattare oggi": stesso meccanismo delle note.
+// La pagina Contatti aggiorna questo useState dopo ogni salvataggio.
+// I contatti sono riservati ad ADMIN/SUPER_TUTOR: per i tutor non chiediamo nulla.
+const contattiPendingCount = useState<number>('contatti-pending-count', () => 0)
+const { data: contattiPendingRes } = useLazyFetch('/api/contacts/pending-count', {
+  server: false,
+  immediate: isAdminOrSuperTutor.value,
+})
+watchEffect(() => { contattiPendingCount.value = contattiPendingRes.value?.count ?? 0 })
+
 const navItems = computed(() => {
   if (user.value?.role === 'TUTOR') {
     return [
@@ -310,6 +338,7 @@ const navItems = computed(() => {
     { icon: 'i-heroicons-cube',          label: 'Pacchetti',    route: '/pacchetti' },
     { icon: 'i-heroicons-list-bullet',   label: 'Lezioni',      route: '/lezioni' },
     { icon: 'i-heroicons-academic-cap',  label: 'Tutor',        route: '/tutor' },
+    { icon: 'i-heroicons-phone-arrow-down-left', label: 'Contatti', route: '/contatti' },
     { icon: 'i-heroicons-banknotes',     label: 'Contabilità',  route: '/contabilita' },
     { icon: 'i-heroicons-document-check',label: 'Matching',     route: '/matching' },
     { icon: 'i-heroicons-user',          label: 'Area Tutor',   route: '/area-tutor' },

@@ -1,10 +1,12 @@
 // Diritti GDPR dell'interessato:
-// - anonymizeStudent  → art. 17 (cancellazione): svuota i dati identificativi ma
+// - anonymizeStudent      → art. 17 (cancellazione): svuota i dati identificativi ma
 //   conserva pacchetti/pagamenti/contabilità (obbligo fiscale 10 anni, art. 2220 c.c.)
-// - exportStudentData → art. 15/20 (accesso/portabilità): dump JSON dei dati dello studente
+// - exportStudentData     → art. 15/20 (accesso/portabilità): dump JSON dei dati dello studente
+// - anonymizeLostContacts → art. 5.1.e (limitazione della conservazione): pulizia
+//   automatica dei contatti "Persi" da oltre 12 mesi, lanciata dal cron giornaliero
 import { db } from '../database/client'
-import { students, studentNotes, bookings, users, packages, payments, packageRecharges, lessons, lessonStudents } from '../database/schema'
-import { and, eq, ne, inArray } from 'drizzle-orm'
+import { students, studentNotes, bookings, users, packages, payments, packageRecharges, lessons, lessonStudents, contacts, contactInteractions } from '../database/schema'
+import { and, eq, ne, inArray, isNull, lt, sql } from 'drizzle-orm'
 
 export async function anonymizeStudent(id: string) {
   const [student] = await db.select().from(students).where(eq(students.id, id)).limit(1)
@@ -72,6 +74,48 @@ export async function anonymizeStudent(id: string) {
       prenotazioniAnonimizzate: prenotazioni.length,
       accountGenitoreAnonimizzato,
     }
+  })
+}
+
+// Contatti "Persi" fermi da più di `mesi`: si cancellano i dati personali e si
+// archiviano, ma le righe restano (contatti e diario) perché servono ai conteggi
+// "quanti contatti persi", "da quale fonte". Nessuno può più risalire alla persona.
+export async function anonymizeLostContacts(mesi = 12) {
+  const limite = new Date()
+  limite.setMonth(limite.getMonth() - mesi)
+
+  return db.transaction(async (tx) => {
+    const daPulire = await tx.select({ id: contacts.id })
+      .from(contacts)
+      .where(and(
+        eq(contacts.stato, 'PERSO'),
+        isNull(contacts.anonimizzatoAt),
+        lt(contacts.updatedAt, limite),
+      ))
+
+    if (daPulire.length === 0) return 0
+
+    const ids = daPulire.map((c) => c.id)
+    const adesso = new Date()
+
+    // Il diario resta (serve alle statistiche) ma senza il testo di ciò che si è detto
+    await tx.update(contactInteractions)
+      .set({ note: null })
+      .where(inArray(contactInteractions.contactId, ids))
+
+    await tx.update(contacts).set({
+      nome:    'Contatto',
+      cognome: 'anonimizzato',
+      telefono: null, email: null, note: null,
+      nomeStudente: null, classeScuola: null, materie: null,
+      azienda: null, servizioInteresse: null,
+      // Se era ancora in lista, sparisce anche da lì (chi è già archiviato resta com'è)
+      archiviatoAt:   sql`COALESCE(${contacts.archiviatoAt}, now())`,
+      anonimizzatoAt: adesso,
+      updatedAt:      adesso,
+    }).where(inArray(contacts.id, ids))
+
+    return ids.length
   })
 }
 

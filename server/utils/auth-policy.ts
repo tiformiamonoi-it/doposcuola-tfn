@@ -34,6 +34,10 @@ export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: 
   { prefix: '/api/tutors/today-pool',       roles: STAFF },
   { prefix: '/api/tutor-payments',          roles: ADMIN_SUPER },
   { prefix: '/api/notes',                   roles: STAFF },
+  // Contatti (mini-CRM): dati personali di persone esterne → niente TUTOR,
+  // né in lettura né in scrittura. NB: '/api/contact' (form pubblico del sito)
+  // è un percorso diverso e resta pubblico, vedi isPublicApi().
+  { prefix: '/api/contacts',                roles: ADMIN_SUPER },
   // Lettura studenti aperta allo STAFF (i dati dei genitori vengono rimossi per i TUTOR
   // nei handler GET); scritture (crea/modifica/disattiva/anonimizza) solo ADMIN/SUPER.
   { prefix: '/api/students',                roles: STAFF, mutationRoles: ADMIN_SUPER },
@@ -60,9 +64,14 @@ const DEFAULT_ROLES: Role[] = STAFF
 // - /api/_cron/     → job schedulati, self-protetti con CRON_SECRET
 const INTERNAL_PUBLIC_PREFIXES = ['/api/_auth/', '/api/_nuxt_icon', '/api/_cron/']
 
-export function isPublicApi(path: string): boolean {
+export function isPublicApi(rawPath: string): boolean {
+  // event.path contiene anche la query string: confrontiamo solo il percorso
+  const path = rawPath.split('?')[0] ?? rawPath
   if (INTERNAL_PUBLIC_PREFIXES.some((p) => path.startsWith(p))) return true
-  return PUBLIC_API_PREFIXES.some((p) => path.startsWith(p))
+  // Confronto per percorso INTERO (o suo sotto-percorso), non per semplice "inizia con":
+  // altrimenti il prefisso pubblico '/api/contact' (form del sito) renderebbe pubblica
+  // anche '/api/contacts' — la rubrica del mini-CRM, piena di dati personali.
+  return PUBLIC_API_PREFIXES.some((p) => path === p || path.startsWith(p + '/'))
 }
 
 const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])

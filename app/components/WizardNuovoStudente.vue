@@ -152,12 +152,7 @@
           </UFormField>
           <div v-if="dati.pacchetto.accontoImporto > 0" class="grid grid-cols-2 gap-4">
             <UFormField label="Metodo pagamento" required>
-              <USelect v-model="dati.pacchetto.accontoMetodo" :items="[
-                { label: 'Contanti', value: 'CONTANTI' },
-                { label: 'Bonifico', value: 'BONIFICO' },
-                { label: 'POS', value: 'POS' },
-                { label: 'Assegno', value: 'ASSEGNO' },
-              ]" class="w-full" />
+              <USelect v-model="dati.pacchetto.accontoMetodo" :items="METODI_PAGAMENTO_ITEMS" class="w-full" />
             </UFormField>
             <div class="flex items-center gap-2 mt-6">
               <UCheckbox v-model="dati.pacchetto.accontoFattura" label="Richiede fattura" />
@@ -279,11 +274,30 @@
 
 <script setup lang="ts">
 import { oggiISO } from '~/utils/format'
+import { METODI_PAGAMENTO_ITEMS } from '~/utils/contabilita'
 import { z } from 'zod'
 import { normalizzaTelefono } from '~/utils/phone'
 
-const props = defineProps<{ open: boolean }>()
-const emit = defineEmits<{ (e: 'update:open', val: boolean): void; (e: 'refresh'): void }>()
+// `prefill` = dati già noti (es. presi da un contatto del mini-CRM): all'apertura
+// il wizard parte con quei campi già scritti. Senza `prefill` non cambia nulla.
+interface PrefillStudente {
+  firstName?: string
+  lastName?: string
+  classe?: string
+  scuola?: string
+  parentName?: string
+  parentPhone?: string
+  parentEmail?: string
+  note?: string
+}
+
+const props = defineProps<{ open: boolean; prefill?: PrefillStudente | null }>()
+const emit = defineEmits<{
+  (e: 'update:open', val: boolean): void
+  (e: 'refresh'): void
+  /** Id dello studente appena creato (serve a chi ha aperto il wizard per collegarlo) */
+  (e: 'created', studentId: string): void
+}>()
 
 const isOpen = computed({
   get: () => props.open,
@@ -363,6 +377,30 @@ const dati = reactive({
 
 const form1 = ref()
 const form2 = ref()
+
+// ─── Precompilazione (solo se arriva `prefill`) ───
+// Si riparte sempre dallo step 1 così l'utente vede subito cosa è già scritto e
+// può correggerlo. Senza `prefill` questo blocco non fa assolutamente nulla.
+watch(() => props.open, (apertoAdesso) => {
+  const p = props.prefill
+  if (!apertoAdesso || !p) return
+
+  step.value = 1
+  Object.assign(dati.studente, {
+    firstName: p.firstName ?? '',
+    lastName:  p.lastName ?? '',
+    classe:    p.classe ?? '',
+    scuola:    p.scuola ?? '',
+  })
+  Object.assign(dati.genitore, {
+    parentName:  p.parentName ?? '',
+    parentPhone: p.parentPhone ?? '',
+    parentEmail: p.parentEmail ?? '',
+    note:        p.note ?? '',
+  })
+  // Se la scuola scritta non è nell'elenco, si passa da soli alla scrittura libera
+  altreScuola.value = Boolean(p.scuola) && !SCUOLE_TRAPANI.includes(p.scuola as string)
+}, { immediate: true })
 
 // ─── Template pacchetti standard (stesso comportamento di ModalCreaPacchetto) ───
 const { data: templatesData } = useLazyFetch('/api/standard-packages')
@@ -501,6 +539,9 @@ async function salvaTutto() {
     if (!studenteId) throw new Error('Creazione studente fallita')
 
     risultato.studentId = studenteId
+    // Lo studente esiste: avvisiamo subito chi ha aperto il wizard (es. la scheda
+    // contatto, che lo collega e segna il contatto come "Convertito").
+    emit('created', studenteId)
 
     // 2. Crea pacchetto (se richiesto)
     if (dati.pacchetto.crea) {

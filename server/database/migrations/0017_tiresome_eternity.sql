@@ -1,0 +1,1 @@
+ALTER TABLE "contacts" ADD COLUMN "anonimizzato_at" timestamp with time zone;

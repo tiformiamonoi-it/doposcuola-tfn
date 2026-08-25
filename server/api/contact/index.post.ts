@@ -2,6 +2,7 @@ import { PublicContactSchema } from '#shared/schemas/contact.schema'
 import { db } from '../../database/client'
 import { contactRequests } from '../../database/schema'
 import { rateLimitExceeded } from '../../utils/rate-limit'
+import { upsertFromPublicRequest } from '../../services/contact.service'
 
 // POST /api/contact
 // Endpoint pubblico per la ricezione dei contatti dal form /prenota
@@ -43,6 +44,25 @@ export default defineEventHandler(async (event) => {
     message: messageStr,
     status: 'PENDING',
   }).returning()
+
+  // La richiesta entra anche nella rubrica Contatti (tab Doposcuola, fonte "Sito web"):
+  // se quel recapito è già noto viene aggiunta solo una riga di diario, niente doppioni.
+  // Se qualcosa va storto NON si rompe la risposta al visitatore: il registro grezzo
+  // (contact_requests) è già salvato, quindi la richiesta non va comunque persa.
+  if (newRequest) {
+    try {
+      await upsertFromPublicRequest({
+        requestId:    newRequest.id,
+        nomeStudente,
+        classeScuola: classeScuola ?? null,
+        materie,
+        contatto,
+        note:         note ?? null,
+      })
+    } catch (err) {
+      console.error('Contatto dal sito non inserito in rubrica:', err)
+    }
+  }
 
   // Se è necessario, qui si può integrare l'invio email tramite Resend/Postmark ecc.
   // ...

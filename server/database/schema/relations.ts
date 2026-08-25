@@ -6,6 +6,8 @@ import { lessons, lessonStudents, timeSlots } from './lessons'
 import { accountingEntries, tutorPayments, tutorReimbursements } from './accounting'
 import { bookings, bookingSubjects } from './bookings'
 import { studentNotes } from './notes'
+import { contacts, contactInteractions } from './contacts'
+import { contactRequests } from './system'
 
 export const usersRelations = relations(users, ({ one, many }) => ({
   tutorProfile:    one(tutorProfiles, { fields: [users.id], references: [tutorProfiles.userId] }),
@@ -79,4 +81,17 @@ export const bookingSubjectsRelations = relations(bookingSubjects, ({ one }) => 
 
 export const tutorAvailabilitiesRelations = relations(tutorAvailabilities, ({ one }) => ({
   user: one(users, { fields: [tutorAvailabilities.userId], references: [users.id] }),
+}))
+
+// Sezione Contatti: la rubrica e il suo diario
+export const contactsRelations = relations(contacts, ({ one, many }) => ({
+  interazioni:    many(contactInteractions),
+  student:        one(students, { fields: [contacts.studentId], references: [students.id] }),
+  contactRequest: one(contactRequests, { fields: [contacts.contactRequestId], references: [contactRequests.id] }),
+  createdBy:      one(users, { fields: [contacts.createdByUserId], references: [users.id] }),
+}))
+
+export const contactInteractionsRelations = relations(contactInteractions, ({ one }) => ({
+  contact:   one(contacts, { fields: [contactInteractions.contactId], references: [contacts.id] }),
+  createdBy: one(users, { fields: [contactInteractions.createdByUserId], references: [users.id] }),
 }))
