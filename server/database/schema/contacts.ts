@@ -25,6 +25,8 @@ export const contacts = pgTable('contacts', {
   // Telefono sempre normalizzato +39… (shared/phone.ts) per non creare doppioni
   telefono: varchar('telefono', { length: 20 }),
   email:    varchar('email', { length: 255 }),
+  // link al profilo o @nomeutente: per chi scrive solo in chat social
+  socialLink: varchar('social_link', { length: 300 }),
 
   canaleOrigine: contactCanaleEnum('canale_origine').notNull().default('ALTRO'),
   stato:         contactStatoEnum('stato').notNull().default('NUOVO'),

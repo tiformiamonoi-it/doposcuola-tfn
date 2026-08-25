@@ -55,6 +55,14 @@ const emailOpz = z
   .transform((v) => (v.length > 0 ? v : null))
   .nullish()
 
+/** Profilo o chat social: link al profilo oppure @nomeutente. Vale come recapito. */
+const socialOpz = z
+  .string()
+  .trim()
+  .max(300, 'Il profilo social non può superare 300 caratteri')
+  .transform((v) => (v.length > 0 ? v : null))
+  .nullish()
+
 /** Giorno civile 'YYYY-MM-DD' (mai timestamptz: la data-giorno non ha fuso orario). */
 const giornoOpz = z
   .union([
@@ -78,6 +86,8 @@ const ContactFieldsSchema = z.object({
 
   telefono: telefonoOpz,
   email:    emailOpz,
+  // Chi ci scrive da Instagram/Facebook spesso non lascia né telefono né email
+  socialLink: socialOpz,
 
   // ATTENZIONE: qui NIENTE .default() — in Zod 4 il default resta attivo anche dopo
   // .partial(), e una modifica parziale finirebbe per riscrivere fonte/stato/privacy
@@ -102,14 +112,14 @@ const ContactFieldsSchema = z.object({
 })
 
 // POST /api/contacts — i default si applicano solo qui; almeno un recapito
-// (telefono o email) è obbligatorio.
+// (telefono, email o profilo social) è obbligatorio.
 export const CreateContactSchema = ContactFieldsSchema.extend({
   canaleOrigine:    z.enum(VALORI_CANALE_CONTATTO, { message: 'Fonte non valida' }).default('ALTRO'),
   stato:            z.enum(VALORI_STATO_CONTATTO, { message: 'Stato non valido' }).default('NUOVO'),
   privacyInformata: z.boolean().default(false),
 }).refine(
-  (d) => Boolean(d.telefono) || Boolean(d.email),
-  { message: 'Inserisci almeno un telefono o una email', path: ['telefono'] },
+  (d) => Boolean(d.telefono) || Boolean(d.email) || Boolean(d.socialLink),
+  { message: 'Inserisci almeno un recapito: telefono, email o profilo social', path: ['telefono'] },
 )
 
 // PUT /api/contacts/:id — tutti i campi facoltativi (si aggiorna solo ciò che arriva)
@@ -186,6 +196,7 @@ export const ImportContactsSchema = z.object({
       cognome:             cellaImport,
       telefono:            cellaImport,
       email:               cellaImport,
+      social:              cellaImport,
       fonte:               cellaImport,
       stato:               cellaImport,
       prossimo_ricontatto: cellaImport,
@@ -202,10 +213,11 @@ export const ImportContactsSchema = z.object({
     .max(500, 'Massimo 500 righe per volta'),
 })
 
-// GET /api/contacts/duplicati?telefono=&email=
+// GET /api/contacts/duplicati?telefono=&email=&social=
 export const DuplicatiQuerySchema = z.object({
   telefono: z.string().trim().max(30).optional(),
   email:    z.string().trim().max(255).optional(),
+  social:   z.string().trim().max(300).optional(),
 })
 
 // ─────────────────────────────────────────────

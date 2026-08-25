@@ -2,7 +2,7 @@ import { DuplicatiQuerySchema } from '#shared/schemas/contact.schema'
 import { findDuplicates } from '../../services/contact.service'
 import { toHttpError } from '../../utils/http-error'
 
-// GET /api/contacts/duplicati?telefono=&email=
+// GET /api/contacts/duplicati?telefono=&email=&social=
 // Avvisa se quel recapito è già in rubrica o appartiene a una famiglia già cliente
 export default defineEventHandler(async (event) => {
   await requireUserSession(event)

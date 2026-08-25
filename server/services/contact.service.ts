@@ -48,6 +48,18 @@ function escapeLike(testo: string) {
   return testo.replace(/[\\%_]/g, (c) => `\\${c}`)
 }
 
+// Vero se il testo "sembra" un profilo o una chat social: un link a uno dei
+// social più usati oppure un @nomeutente. Serve al form pubblico del sito, dove
+// c'è un campo unico "contatto".
+const SITI_SOCIAL = ['instagram.com', 'facebook.com', 'tiktok.com', 't.me', 'wa.me']
+
+function sembraSocial(valore: string): boolean {
+  const v = (valore ?? '').trim().toLowerCase()
+  if (!v) return false
+  if (v.startsWith('@')) return true
+  return SITI_SOCIAL.some((sito) => v.includes(sito))
+}
+
 // Regola unica per convertitoAt: si valorizza entrando in CONVERTITO, si azzera uscendone
 function aggiornaConvertitoAt(changes: ContactChanges, nuovoStato: string | null | undefined, convertitoAtAttuale: Date | null) {
   if (!nuovoStato) return
@@ -86,6 +98,7 @@ export async function listContacts(q: ListContactsQuery) {
       ilike(contacts.cognome, testo),
       ilike(contacts.telefono, testo),
       ilike(contacts.email, testo),
+      ilike(contacts.socialLink, testo),
       ilike(contacts.nomeStudente, testo),
       ilike(contacts.azienda, testo),
     ]
@@ -224,6 +237,7 @@ export async function createContact(data: CreateContactInput, userId: string) {
     cognome:            data.cognome ? nomeProprio(data.cognome) : null,
     telefono:           data.telefono ?? null,
     email:              data.email ?? null,
+    socialLink:         data.socialLink ?? null,
     canaleOrigine:      data.canaleOrigine,
     stato:              data.stato,
     prossimoRicontatto: data.prossimoRicontatto ?? null,
@@ -255,13 +269,16 @@ export async function updateContact(id: string, data: UpdateContactInput) {
   // Stessa garanzia della creazione: non si può restare senza NESSUN recapito.
   // Si controlla il risultato finale (modifiche unite ai dati già salvati), così
   // non si svuota l'ultimo recapito rimasto con una modifica parziale.
-  // Il controllo scatta solo se la richiesta tocca davvero telefono o email:
-  // le richieste del sito possono creare contatti senza recapiti riconosciuti
-  // (es. "scrivetemi su Instagram") e devono restare modificabili nel resto.
-  if (changes.telefono !== undefined || changes.email !== undefined) {
-    const telefonoFinale = changes.telefono !== undefined ? changes.telefono : esistente.telefono
-    const emailFinale    = changes.email    !== undefined ? changes.email    : esistente.email
-    if (!telefonoFinale && !emailFinale) throw new Error('Inserisci almeno un telefono o una email')
+  // Il controllo scatta solo se la richiesta tocca davvero telefono, email o
+  // profilo social: le richieste del sito possono creare contatti senza recapiti
+  // riconosciuti e devono restare modificabili nel resto.
+  if (changes.telefono !== undefined || changes.email !== undefined || changes.socialLink !== undefined) {
+    const telefonoFinale = changes.telefono   !== undefined ? changes.telefono   : esistente.telefono
+    const emailFinale    = changes.email      !== undefined ? changes.email      : esistente.email
+    const socialFinale   = changes.socialLink !== undefined ? changes.socialLink : esistente.socialLink
+    if (!telefonoFinale && !emailFinale && !socialFinale) {
+      throw new Error('Inserisci almeno un recapito: telefono, email o profilo social')
+    }
   }
 
   // Nomi sempre in formato "Nome Proprio" (mai tutto maiuscolo/minuscolo)
@@ -305,9 +322,11 @@ export async function importContacts(
       }
 
       const d = esito.dati
+      const social = d.socialLink ? d.socialLink.toLowerCase() : null
       const chiavi = [
         d.telefono ? `tel:${d.telefono}` : null,
         d.email ? `mail:${d.email}` : null,
+        social ? `social:${social}` : null,
       ].filter((c): c is string => c !== null)
 
       // 1) doppione di una riga precedente dello stesso file
@@ -325,6 +344,7 @@ export async function importContacts(
           or(
             d.telefono ? eq(contacts.telefono, d.telefono) : undefined,
             d.email ? sql`lower(${contacts.email}) = ${d.email}` : undefined,
+            social ? sql`lower(${contacts.socialLink}) = ${social}` : undefined,
           ),
         ))
         .limit(1)
@@ -346,6 +366,7 @@ export async function importContacts(
             cognome:            d.cognome ? nomeProprio(d.cognome) : null,
             telefono:           d.telefono ?? null,
             email:              d.email ?? null,
+            socialLink:         d.socialLink ?? null,
             canaleOrigine:      d.canaleOrigine,
             stato:              d.stato,
             prossimoRicontatto: d.prossimoRicontatto ?? null,
@@ -471,10 +492,12 @@ export async function deleteInteraction(contactId: string, interactionId: string
 // DOPPIONI — cerca sia tra i contatti sia tra gli studenti già clienti
 // ─────────────────────────────────────────────
 
-export async function findDuplicates(params: { telefono?: string | null; email?: string | null }) {
+export async function findDuplicates(params: { telefono?: string | null; email?: string | null; social?: string | null }) {
   const telefono = params.telefono ? normalizzaTelefono(params.telefono) : ''
   const email = params.email ? params.email.trim().toLowerCase() : ''
-  if (!telefono && !email) return { contatti: [], studenti: [] }
+  // Il profilo social si confronta senza distinzione fra maiuscole e minuscole
+  const social = params.social ? params.social.trim().toLowerCase() : ''
+  if (!telefono && !email && !social) return { contatti: [], studenti: [] }
 
   // Ultime 8 cifre: nel DB studenti i numeri sono in formati liberi ("333 12 34 567"),
   // quindi filtriamo in SQL sulle sole cifre e confermiamo lato applicazione.
@@ -483,13 +506,14 @@ export async function findDuplicates(params: { telefono?: string | null; email?:
 
   const [contattiTrovati, studentiCandidati] = await Promise.all([
     db.select({
-      id:       contacts.id,
-      nome:     contacts.nome,
-      cognome:  contacts.cognome,
-      tipo:     contacts.tipo,
-      stato:    contacts.stato,
-      telefono: contacts.telefono,
-      email:    contacts.email,
+      id:         contacts.id,
+      nome:       contacts.nome,
+      cognome:    contacts.cognome,
+      tipo:       contacts.tipo,
+      stato:      contacts.stato,
+      telefono:   contacts.telefono,
+      email:      contacts.email,
+      socialLink: contacts.socialLink,
     })
       .from(contacts)
       .where(and(
@@ -497,6 +521,7 @@ export async function findDuplicates(params: { telefono?: string | null; email?:
         or(
           telefono ? eq(contacts.telefono, telefono) : undefined,
           email ? sql`lower(${contacts.email}) = ${email}` : undefined,
+          social ? sql`lower(${contacts.socialLink}) = ${social}` : undefined,
         ),
       ))
       .orderBy(asc(contacts.nome))
@@ -515,6 +540,9 @@ export async function findDuplicates(params: { telefono?: string | null; email?:
       .from(students)
       .where(and(
         eq(students.active, true),
+        // Cercando solo per profilo social non c'è niente da confrontare fra gli
+        // studenti (là ci sono solo telefoni ed email): la query si ferma subito.
+        (coda || email) ? undefined : sql`false`,
         or(
           coda ? sql`${soloCifre(students.parentPhone)} LIKE ${'%' + coda}` : undefined,
           coda ? sql`${soloCifre(students.studentPhone)} LIKE ${'%' + coda}` : undefined,
@@ -560,26 +588,31 @@ export async function upsertFromPublicRequest(input: {
   }
   const email = !telefono && sembraEmail(grezzo) ? grezzo.toLowerCase().slice(0, 255) : null
 
+  // Né telefono né email: se sembra un profilo social lo salviamo come recapito,
+  // così il contatto non resta senza nessun modo per essere richiamato.
+  const socialLink = !telefono && !email && sembraSocial(grezzo) ? grezzo.slice(0, 300) : null
+
   const testoDiario = [
     'Messaggio ricevuto dal sito.',
     `Studente: ${input.nomeStudente}`,
     input.classeScuola ? `Classe/Scuola: ${input.classeScuola}` : null,
     `Materie: ${input.materie}`,
     input.note ? `Note: ${input.note}` : null,
-    !telefono && !email ? `Recapito indicato: ${grezzo}` : null,
+    !telefono && !email && !socialLink ? `Recapito indicato: ${grezzo}` : null,
   ].filter(Boolean).join('\n')
 
   return await db.transaction(async (tx) => {
     const adesso = new Date()
 
     let esistente: typeof contacts.$inferSelect | null = null
-    if (telefono || email) {
+    if (telefono || email || socialLink) {
       const [trovato] = await tx.select().from(contacts)
         .where(and(
           isNull(contacts.archiviatoAt),
           or(
             telefono ? eq(contacts.telefono, telefono) : undefined,
             email ? sql`lower(${contacts.email}) = ${email}` : undefined,
+            socialLink ? sql`lower(${contacts.socialLink}) = ${socialLink.toLowerCase()}` : undefined,
           ),
         ))
         .orderBy(desc(contacts.createdAt))
@@ -606,6 +639,7 @@ export async function upsertFromPublicRequest(input: {
         nome:             nomeProprio(input.nomeStudente).slice(0, 100),
         telefono,
         email,
+        socialLink,
         canaleOrigine:    'SITO_WEB',
         stato:            'NUOVO',
         nomeStudente:     input.nomeStudente.slice(0, 200),

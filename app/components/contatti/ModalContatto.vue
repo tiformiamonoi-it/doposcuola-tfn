@@ -20,7 +20,7 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <UFormField
             label="Telefono" name="telefono"
-            hint="Basta uno tra telefono ed email"
+            hint="Basta uno fra telefono, email e profilo social"
             :error="erroreDi('telefono')"
           >
             <UInput
@@ -41,6 +41,20 @@
             />
           </UFormField>
         </div>
+
+        <!-- Chi scrive da Instagram/Facebook spesso non lascia telefono né email -->
+        <UFormField
+          label="Profilo / chat social" name="socialLink"
+          hint="Per chi scrive solo su Instagram/Facebook/TikTok"
+          :error="erroreDi('socialLink')"
+        >
+          <UInput
+            v-model="form.socialLink"
+            placeholder="Link al profilo o @nomeutente"
+            class="w-full"
+            @blur="cercaDoppioni"
+          />
+        </UFormField>
 
         <!-- Avviso doppioni: informa, non blocca mai il salvataggio -->
         <UAlert
@@ -155,6 +169,7 @@ function formVuoto() {
     cognome:            '',
     telefono:           '',
     email:              '',
+    socialLink:         '',
     canaleOrigine:      'ALTRO',
     stato:              'NUOVO',
     prossimoRicontatto: '',
@@ -186,6 +201,7 @@ watch(aperto, (adessoAperto) => {
       cognome:            c.cognome ?? '',
       telefono:           c.telefono ?? '',
       email:              c.email ?? '',
+      socialLink:         c.socialLink ?? '',
       canaleOrigine:      c.canaleOrigine ?? 'ALTRO',
       stato:              c.stato ?? 'NUOVO',
       prossimoRicontatto: c.prossimoRicontatto ?? '',
@@ -219,11 +235,12 @@ type RispostaDoppioni = {
 async function cercaDoppioni() {
   const telefono = form.telefono.trim()
   const email    = form.email.trim()
-  if (!telefono && !email) { avvisiDoppioni.value = []; return }
+  const social   = form.socialLink.trim()
+  if (!telefono && !email && !social) { avvisiDoppioni.value = []; return }
 
   try {
     const res = await $fetch<RispostaDoppioni>('/api/contacts/duplicati', {
-      query: { telefono: telefono || undefined, email: email || undefined },
+      query: { telefono: telefono || undefined, email: email || undefined, social: social || undefined },
     })
     const messaggi: string[] = []
 
@@ -243,7 +260,7 @@ async function cercaDoppioni() {
 }
 
 // Mentre si digita, si aspettano 400 ms dall'ultimo tasto (niente chiamata a ogni lettera)
-watch([() => form.telefono, () => form.email], () => {
+watch([() => form.telefono, () => form.email, () => form.socialLink], () => {
   if (timerDoppioni) clearTimeout(timerDoppioni)
   timerDoppioni = setTimeout(cercaDoppioni, 400)
 })
@@ -262,6 +279,7 @@ function corpoDaInviare() {
     cognome:            vuotoNull(form.cognome),
     telefono:           vuotoNull(form.telefono),
     email:              vuotoNull(form.email),
+    socialLink:         vuotoNull(form.socialLink),
     canaleOrigine:      form.canaleOrigine,
     stato:              form.stato,
     prossimoRicontatto: vuotoNull(form.prossimoRicontatto),
@@ -293,8 +311,8 @@ async function salva() {
     erroriServer.value = { nome: 'Il nome è obbligatorio' }
     return
   }
-  if (!form.telefono.trim() && !form.email.trim()) {
-    erroreGenerale.value = 'Inserisci almeno un telefono o una email: servono per ricontattare la persona.'
+  if (!form.telefono.trim() && !form.email.trim() && !form.socialLink.trim()) {
+    erroreGenerale.value = 'Inserisci almeno un recapito: telefono, email o profilo social. Serve per ricontattare la persona.'
     erroriServer.value = { telefono: 'Manca un recapito' }
     return
   }

@@ -106,7 +106,7 @@ export async function anonymizeLostContacts(mesi = 12) {
     await tx.update(contacts).set({
       nome:    'Contatto',
       cognome: 'anonimizzato',
-      telefono: null, email: null, note: null,
+      telefono: null, email: null, socialLink: null, note: null,
       nomeStudente: null, classeScuola: null, materie: null,
       azienda: null, servizioInteresse: null,
       // Se era ancora in lista, sparisce anche da lì (chi è già archiviato resta com'è)

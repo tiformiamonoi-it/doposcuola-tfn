@@ -88,7 +88,7 @@
                     <td class="px-3 py-2 font-medium text-slate-800">
                       {{ [r.dati.cognome, r.dati.nome].filter(Boolean).join(' ') }}
                     </td>
-                    <td class="px-3 py-2 text-slate-600">{{ r.dati.telefono || r.dati.email }}</td>
+                    <td class="px-3 py-2 text-slate-600">{{ r.dati.telefono || r.dati.email || r.dati.socialLink }}</td>
                     <td class="px-3 py-2">{{ labelCanale(r.dati.canaleOrigine) }}</td>
                     <td class="px-3 py-2">{{ labelStato(r.dati.stato) }}</td>
                     <td class="px-3 py-2">{{ r.dati.prossimoRicontatto ? formatGiorno(r.dati.prossimoRicontatto) : '—' }}</td>
@@ -117,7 +117,7 @@
             v-if="righeValide.length === 0"
             color="warning" variant="subtle" icon="i-heroicons-exclamation-triangle"
             title="Non c'è nessuna riga da importare"
-            description="Controlla che il file abbia le colonne del template e almeno un telefono o una email per riga."
+            description="Controlla che il file abbia le colonne del template e almeno un recapito per riga: telefono, email o profilo social."
           />
         </template>
 

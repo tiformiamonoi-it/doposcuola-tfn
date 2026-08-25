@@ -1,0 +1,1 @@
+ALTER TABLE "contacts" ADD COLUMN "social_link" varchar(300);

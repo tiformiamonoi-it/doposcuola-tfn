@@ -38,6 +38,8 @@ export interface Contatto {
   cognome: string | null
   telefono: string | null
   email: string | null
+  /** Link al profilo o @nomeutente: per chi scrive solo in chat social */
+  socialLink: string | null
   canaleOrigine: CanaleContatto
   stato: StatoContatto
   prossimoRicontatto: string | null
@@ -232,3 +234,40 @@ export const linkWhatsapp = (tel: string | null | undefined): string =>
   `https://wa.me/${normalizzaTelefono(tel ?? '').replace('+', '')}`
 
 export const linkEmail = (email: string | null | undefined): string => `mailto:${email ?? ''}`
+
+/**
+ * Indirizzo da aprire per il profilo/chat social.
+ * Un link scritto per esteso si usa così com'è; un @nomeutente diventa un
+ * indirizzo solo se sappiamo di quale social si tratta (la fonte del contatto).
+ * Se non si può capire, restituisce null: resta un testo da leggere.
+ */
+export function linkSocial(
+  valore: string | null | undefined,
+  canale?: CanaleContatto | null,
+): string | null {
+  const v = (valore ?? '').trim()
+  if (!v) return null
+
+  if (v.startsWith('http')) return v
+
+  if (v.startsWith('@')) {
+    const nome = v.slice(1)
+    if (!nome) return null
+    if (canale === 'INSTAGRAM') return `https://instagram.com/${nome}`
+    if (canale === 'TIKTOK')    return `https://tiktok.com/@${nome}`
+    if (canale === 'FACEBOOK')  return `https://facebook.com/${nome}`
+    return null
+  }
+
+  // Scritto senza "https://" davanti (es. "instagram.com/mariarossi")
+  if (v.includes('.')) return `https://${v}`
+
+  return null
+}
+
+/** Testo corto da mostrare in lista: senza "https://" e al massimo 32 caratteri. */
+export function etichettaSocial(valore: string | null | undefined): string {
+  const v = (valore ?? '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '')
+  if (!v) return ''
+  return v.length > 32 ? `${v.slice(0, 31)}…` : v
+}

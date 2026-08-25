@@ -25,6 +25,8 @@ export interface RigaImportContatto {
   cognome?: string
   telefono?: string
   email?: string
+  /** Link al profilo o @nomeutente: vale come recapito */
+  social?: string
   fonte?: string
   stato?: string
   prossimo_ricontatto?: string
@@ -43,7 +45,7 @@ export type EsitoRigaImport =
 
 /** Le colonne del template, nell'ordine in cui compaiono nel file. */
 export const COLONNE_IMPORT = [
-  'tipo', 'nome', 'cognome', 'telefono', 'email', 'fonte', 'stato',
+  'tipo', 'nome', 'cognome', 'telefono', 'email', 'social', 'fonte', 'stato',
   'prossimo_ricontatto', 'nome_studente', 'classe_scuola', 'materie',
   'azienda', 'servizio_interesse', 'ruolo_marketing', 'note',
 ] as const
@@ -157,7 +159,12 @@ export function normalizzaRigaImport(
     }
   }
 
-  if (!telefono && !email) errori.push('Serve almeno un telefono o una email')
+  // Chi ci scrive solo in chat social non lascia né telefono né email: basta il profilo
+  const socialLink = testo('Profilo social', riga.social, 300)
+
+  if (!telefono && !email && !socialLink) {
+    errori.push('Serve almeno un recapito: telefono, email o profilo social')
+  }
 
   // Fonte (da dove ci ha conosciuto): vuoto = "Altro"
   let canaleOrigine: CreateContactInput['canaleOrigine'] = 'ALTRO'
@@ -211,6 +218,7 @@ export function normalizzaRigaImport(
       cognome,
       telefono,
       email,
+      socialLink,
       canaleOrigine,
       stato,
       prossimoRicontatto,

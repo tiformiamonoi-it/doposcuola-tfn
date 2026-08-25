@@ -61,7 +61,7 @@
       <UInput
         v-model="ricerca"
         icon="i-heroicons-magnifying-glass"
-        placeholder="Cerca nome, telefono, email, studente, azienda…"
+        placeholder="Cerca nome, telefono, email, profilo social, studente, azienda…"
         class="w-full sm:w-80"
         aria-label="Cerca fra i contatti"
       />
@@ -111,6 +111,11 @@
                 Richiamare il {{ formatGiorno(c.prossimoRicontatto) }}
               </span>
             </div>
+            <!-- Chi ci scrive solo in chat social: il profilo è il suo recapito -->
+            <p v-if="c.socialLink" class="flex items-center gap-1 mt-2 text-xs text-slate-500 min-w-0">
+              <UIcon name="i-heroicons-at-symbol" class="w-3.5 h-3.5 shrink-0" />
+              <span class="truncate">{{ etichettaSocial(c.socialLink) }}</span>
+            </p>
           </button>
 
           <div class="flex items-center gap-2 pt-1">
@@ -125,6 +130,12 @@
             <UButton
               v-if="c.email" icon="i-heroicons-envelope" size="sm" variant="soft" color="neutral"
               :to="linkEmail(c.email)" title="Email" aria-label="Manda una email"
+            />
+            <UButton
+              v-if="linkSocial(c.socialLink, c.canaleOrigine)"
+              icon="i-heroicons-at-symbol" size="sm" variant="soft" color="neutral"
+              :to="linkSocial(c.socialLink, c.canaleOrigine) ?? undefined" target="_blank"
+              title="Apri la chat/profilo" aria-label="Apri la chat o il profilo social"
             />
             <UButton
               icon="i-heroicons-pencil-square" size="sm" variant="ghost" color="neutral" class="ml-auto"
@@ -170,8 +181,17 @@
           <template #contatti-cell="{ row }">
             <div class="flex items-center gap-1">
               <div class="text-sm flex-1 min-w-0">
-                <div class="text-slate-700">{{ row.original.telefono ?? '—' }}</div>
+                <!-- Il trattino serve solo se non c'è proprio nessun recapito -->
+                <div v-if="row.original.telefono" class="text-slate-700">{{ row.original.telefono }}</div>
+                <div v-else-if="!row.original.socialLink" class="text-slate-700">—</div>
                 <div class="text-slate-400 text-xs truncate max-w-[12rem]">{{ row.original.email ?? '' }}</div>
+                <div
+                  v-if="row.original.socialLink"
+                  class="text-slate-500 text-xs flex items-center gap-1 min-w-0 max-w-[12rem]"
+                >
+                  <UIcon name="i-heroicons-at-symbol" class="w-3.5 h-3.5 shrink-0" />
+                  <span class="truncate">{{ etichettaSocial(row.original.socialLink) }}</span>
+                </div>
               </div>
               <UButton
                 v-if="row.original.telefono" icon="i-heroicons-phone" size="xs" variant="ghost" color="neutral"
@@ -184,6 +204,12 @@
               <UButton
                 v-if="row.original.email" icon="i-heroicons-envelope" size="xs" variant="ghost" color="neutral"
                 :to="linkEmail(row.original.email)" title="Email" aria-label="Manda una email"
+              />
+              <UButton
+                v-if="linkSocial(row.original.socialLink, row.original.canaleOrigine)"
+                icon="i-heroicons-at-symbol" size="xs" variant="ghost" color="neutral"
+                :to="linkSocial(row.original.socialLink, row.original.canaleOrigine) ?? undefined" target="_blank"
+                title="Apri la chat/profilo" aria-label="Apri la chat o il profilo social"
               />
             </div>
           </template>
@@ -303,6 +329,7 @@ import {
   STATI_FILTRO_ITEMS, CANALI_FILTRO_ITEMS, NESSUN_FILTRO,
   nomeContatto, sottotitoloContatto, formatGiorno, formatQuando,
   ricontattoScaduto, coloreStato, linkTelefono, linkWhatsapp, linkEmail,
+  linkSocial, etichettaSocial,
 } from '~/utils/contatti'
 import type { Contatto, KpiContatti } from '~/utils/contatti'
 
@@ -524,7 +551,7 @@ async function esportaCsv() {
     } while (page <= totalPages)
 
     const intestazione = [
-      'Tipo', 'Nome', 'Cognome', 'Telefono', 'Email', 'Fonte', 'Stato',
+      'Tipo', 'Nome', 'Cognome', 'Telefono', 'Email', 'Profilo social', 'Fonte', 'Stato',
       'Prossimo ricontatto', 'Ultimo contatto', 'Nome studente', 'Classe/Scuola',
       'Materie', 'Attività/Azienda', 'Servizio', 'Ruolo', 'Privacy informata',
       'Note', 'Inserito il',
@@ -536,6 +563,7 @@ async function esportaCsv() {
       c.cognome ?? '',
       c.telefono ?? '',
       c.email ?? '',
+      c.socialLink ?? '',
       labelCanale(c.canaleOrigine),
       labelStato(c.stato),
       perGiorno(c.prossimoRicontatto),

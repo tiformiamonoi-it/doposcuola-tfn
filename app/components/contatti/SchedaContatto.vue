@@ -62,6 +62,12 @@
                 :to="linkEmail(contatto.email)"
                 title="Manda una email" aria-label="Manda una email"
               />
+              <UButton
+                v-if="indirizzoSocial"
+                icon="i-heroicons-at-symbol" color="neutral" variant="soft"
+                :to="indirizzoSocial" target="_blank"
+                title="Apri la chat/profilo" aria-label="Apri la chat o il profilo social"
+              />
             </div>
           </div>
         </div>
@@ -72,6 +78,7 @@
           <InfoRow label="Inserito il" :value="inserito" />
           <InfoRow label="Telefono" :value="contatto.telefono" />
           <InfoRow label="Email" :value="contatto.email" />
+          <InfoRow label="Profilo social" :value="contatto.socialLink" />
 
           <template v-if="contatto.tipo === 'DOPOSCUOLA'">
             <InfoRow label="Studente" :value="contatto.nomeStudente" />
@@ -259,7 +266,7 @@
 import { labelTipo, labelStato, labelCanale, labelRuoloMarketing, labelTipoInterazione, labelEsito } from '#shared/contatti'
 import {
   STATI_ITEMS, nomeContatto, formatGiorno, formatQuando, iconaInterazione,
-  ricontattoScaduto, linkTelefono, linkWhatsapp, linkEmail, coloreStato, coloreEsito,
+  ricontattoScaduto, linkTelefono, linkWhatsapp, linkEmail, linkSocial, coloreStato, coloreEsito,
 } from '~/utils/contatti'
 import type { ContattoDettaglio, Interazione } from '~/utils/contatti'
 
@@ -296,6 +303,13 @@ watch(aperto, (v) => {
   }
 })
 watch(() => props.contactId, () => { if (aperto.value) carica() })
+
+// Indirizzo da aprire per la chat/profilo social: se non si può ricavare
+// (es. solo "@nomeutente" senza sapere quale social) il bottone non compare.
+const indirizzoSocial = computed(() => {
+  const c = contatto.value
+  return c ? linkSocial(c.socialLink, c.canaleOrigine) ?? undefined : undefined
+})
 
 const inserito = computed(() => {
   const c = contatto.value
