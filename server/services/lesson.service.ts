@@ -597,15 +597,24 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
     const [slot] = await tx.select().from(timeSlots).where(eq(timeSlots.id, lesson.timeSlotId)).limit(1)
     if (!slot) throw new Error('Slot orario non trovato')
     const mezzaLezioneFinal = data.mezzaLezione ?? lesson.mezzaLezione
-    const tariffe       = await getTariffeTutor()
-    const compensoTutor = calcCompenso(tariffe, tipo, mezzaLezioneFinal, slot.oraInizio, slot.oraFine)
+
+    // Le tariffe nuove valgono per le lezioni nuove: una modifica che non cambia tipo/durata
+    // non ristampa lo scontrino (altrimenti i mesi già liquidati mostrerebbero arretrati fantasma).
+    // Nota: updateLesson non può cambiare slot né data (vedi UpdateLessonSchema), quindi la durata è invariata.
+    const compensoDaRicalcolare =
+      tipo !== lesson.tipo ||
+      mezzaLezioneFinal !== lesson.mezzaLezione ||
+      lesson.compensoTutor === null
+    const compensoTutor = compensoDaRicalcolare
+      ? calcCompenso(await getTariffeTutor(), tipo, mezzaLezioneFinal, slot.oraInizio, slot.oraFine).toFixed(2)
+      : lesson.compensoTutor
 
     const [updated] = await tx
       .update(lessons)
       .set({
         tipo,
         mezzaLezione:  mezzaLezioneFinal,
-        compensoTutor: compensoTutor.toFixed(2),
+        compensoTutor,
         forzaGruppo:   forzaGruppoFinal,
         note:          data.note !== undefined ? data.note : lesson.note,
         updatedAt:     new Date(),
@@ -941,7 +950,9 @@ export type RicalcoloLezioneChange = {
   compensoNuovo: string
 }
 
-export async function ricalcolaTipiECompensiLezioni(apply = false) {
+// `daData` ('YYYY-MM-DD', opzionale): limita il ricalcolo alle lezioni da quella data in poi.
+// Serve per non riscrivere con le tariffe di oggi i mesi già liquidati.
+export async function ricalcolaTipiECompensiLezioni(apply = false, daData?: string) {
   // Lezioni + slot (per la durata) in un colpo solo
   const allLessons = await db
     .select({
@@ -955,6 +966,7 @@ export async function ricalcolaTipiECompensiLezioni(apply = false) {
     })
     .from(lessons)
     .innerJoin(timeSlots, eq(lessons.timeSlotId, timeSlots.id))
+    .where(daData ? gte(lessons.data, daData) : undefined)
 
   // Numero di studenti per lezione
   const counts = await db
@@ -963,13 +975,14 @@ export async function ricalcolaTipiECompensiLezioni(apply = false) {
     .groupBy(lessonStudents.lessonId)
   const countMap = new Map(counts.map(c => [c.lessonId, Number(c.n)]))
 
+  const tariffe = await getTariffeTutor() // una sola lettura per tutto il ciclo
+
   const changes: RicalcoloLezioneChange[] = []
   for (const l of allLessons) {
     const n = countMap.get(l.id) ?? 0
     if (n === 0) continue // lezione senza studenti: non la tocco
 
     const tipoNuovo     = determineLessonType(n, l.forzaGruppo)
-    const tariffe = await getTariffeTutor()
     const compensoNuovo = calcCompenso(tariffe, tipoNuovo, l.mezzaLezione, l.oraInizio, l.oraFine).toFixed(2)
 
     if (tipoNuovo !== l.tipo || compensoNuovo !== l.compenso) {
@@ -999,6 +1012,7 @@ export async function ricalcolaTipiECompensiLezioni(apply = false) {
     totaleLezioni: allLessons.length,
     daCorreggere:  changes.length,
     applied:       apply,
+    daData:        daData ?? null,
     changes,
   }
 }

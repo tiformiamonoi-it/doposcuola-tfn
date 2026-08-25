@@ -72,9 +72,10 @@ export default defineNuxtConfig({
 
   css: ['~/assets/css/main.css'], // ~ risolve a app/ con compatibilityVersion: 4
 
+  // Pre-compilazione delle dipendenze: evita i ricaricamenti di pagina in sviluppo
   vite: {
     optimizeDeps: {
-      include: ['@vue/devtools-core', '@vue/devtools-kit'],
+      include: ['@vue/devtools-core', '@vue/devtools-kit', 'zod'],
     },
   },
 })
