@@ -84,7 +84,7 @@
                 <tbody>
                   <tr v-for="r in righeValide.slice(0, 5)" :key="r.numeroRiga" class="border-t border-slate-100">
                     <td class="px-3 py-2 text-slate-400">{{ r.numeroRiga }}</td>
-                    <td class="px-3 py-2">{{ labelTipo(r.dati.tipo) }}</td>
+                    <td class="px-3 py-2">{{ schedaRiga(r.dati) }}</td>
                     <td class="px-3 py-2 font-medium text-slate-800">
                       {{ [r.dati.cognome, r.dati.nome].filter(Boolean).join(' ') }}
                     </td>
@@ -207,6 +207,12 @@ const emit = defineEmits<{ imported: [] }>()
 const aperto = defineModel<boolean>('open', { default: false })
 
 const toast = useToast()
+
+// Nell'anteprima un candidato tutor si riconosce a colpo d'occhio dalla famiglia
+const schedaRiga = (d: CreateContactInput): string =>
+  d.tipo === 'DOPOSCUOLA' && d.doposcuolaRuolo === 'TUTOR'
+    ? `${labelTipo(d.tipo)} · tutor`
+    : labelTipo(d.tipo)
 
 // Oltre questa soglia il file è quasi sicuramente sbagliato (o troppo grosso)
 const MAX_RIGHE = 5000

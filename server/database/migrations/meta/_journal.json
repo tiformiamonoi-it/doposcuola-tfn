@@ -134,6 +134,13 @@
       "when": 1787645887419,
       "tag": "0018_lush_king_bedlam",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787777983092,
+      "tag": "0019_unique_gorgon",
+      "breakpoints": true
     }
   ]
 }

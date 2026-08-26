@@ -6,6 +6,7 @@ import {
   VALORI_CANALE_CONTATTO,
   VALORI_STATO_CONTATTO,
   VALORI_RUOLO_MARKETING,
+  VALORI_RUOLO_DOPOSCUOLA,
   VALORI_TIPO_INTERAZIONE,
   VALORI_DIREZIONE_INTERAZIONE,
   VALORI_ESITO_INTERAZIONE,
@@ -102,6 +103,9 @@ const ContactFieldsSchema = z.object({
   nomeStudente: testoOpz(200, 'Il nome dello studente non può superare 200 caratteri'),
   classeScuola: testoOpz(200, 'Classe/scuola non può superare 200 caratteri'),
   materie:      testoOpz(500, 'Le materie non possono superare 500 caratteri'),
+  // Chi è: famiglia interessata (STUDENTE) o candidato tutor (TUTOR)
+  // (.optional e non .nullish: la colonna è NOT NULL, un null deve fermarsi qui con un 422)
+  doposcuolaRuolo: z.enum(VALORI_RUOLO_DOPOSCUOLA, { message: 'Ruolo non valido' }).optional(),
 
   // Solo Marketing
   azienda:           testoOpz(200, "L'attività/azienda non può superare 200 caratteri"),
@@ -117,6 +121,8 @@ export const CreateContactSchema = ContactFieldsSchema.extend({
   canaleOrigine:    z.enum(VALORI_CANALE_CONTATTO, { message: 'Fonte non valida' }).default('ALTRO'),
   stato:            z.enum(VALORI_STATO_CONTATTO, { message: 'Stato non valido' }).default('NUOVO'),
   privacyInformata: z.boolean().default(false),
+  // Chi non lo indica è una famiglia interessata: è il caso di gran lunga più comune
+  doposcuolaRuolo:  z.enum(VALORI_RUOLO_DOPOSCUOLA).default('STUDENTE'),
 
   // Primo contatto annotato insieme alla creazione: diventa la prima riga del diario
   primaInterazione: z.object({
@@ -170,6 +176,8 @@ export const ListContactsQuerySchema = z.object({
   tipo:   z.enum(VALORI_TIPO_CONTATTO, { message: 'Tipo di contatto non valido' }).default('DOPOSCUOLA'),
   stato:  z.enum(VALORI_STATO_CONTATTO, { message: 'Stato non valido' }).optional(),
   canale: z.enum(VALORI_CANALE_CONTATTO, { message: 'Fonte non valida' }).optional(),
+  // "Chi è": vale solo per la tab Doposcuola, altrove viene ignorato
+  ruolo:  z.enum(VALORI_RUOLO_DOPOSCUOLA, { message: 'Ruolo non valido' }).optional(),
   search: z.string().trim().max(100).optional(),
 
   daRicontattare:    flagQuery,
@@ -215,6 +223,7 @@ export const ImportContactsSchema = z.object({
       azienda:             cellaImport,
       servizio_interesse:  cellaImport,
       ruolo_marketing:     cellaImport,
+      ruolo_doposcuola:    cellaImport,
       note:                cellaImport,
     }),
   )

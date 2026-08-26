@@ -43,6 +43,7 @@ export const contactCanaleEnum = pgEnum('contact_canale', [
 ])
 export const contactStatoEnum = pgEnum('contact_stato', ['NUOVO', 'DA_RICONTATTARE', 'IN_TRATTATIVA', 'CONVERTITO', 'PERSO'])
 export const contactMarketingRuoloEnum = pgEnum('contact_marketing_ruolo', ['CLIENTE', 'PARTNER'])
+export const contactDoposcuolaRuoloEnum = pgEnum('contact_doposcuola_ruolo', ['STUDENTE', 'TUTOR'])
 export const interactionTipoEnum = pgEnum('interaction_tipo', ['CHIAMATA', 'MESSAGGIO', 'EMAIL', 'INCONTRO', 'ALTRO'])
 export const interactionDirezioneEnum = pgEnum('interaction_direzione', ['RICEVUTA', 'EFFETTUATA'])
 export const interactionEsitoEnum = pgEnum('interaction_esito', ['RISPOSTO', 'NESSUNA_RISPOSTA', 'DA_RICHIAMARE'])

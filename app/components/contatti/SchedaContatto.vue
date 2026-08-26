@@ -81,9 +81,12 @@
           <InfoRow label="Profilo social" :value="contatto.socialLink" />
 
           <template v-if="contatto.tipo === 'DOPOSCUOLA'">
-            <InfoRow label="Studente" :value="contatto.nomeStudente" />
-            <InfoRow label="Classe / Scuola" :value="contatto.classeScuola" />
-            <InfoRow label="Materie" :value="contatto.materie" />
+            <InfoRow label="Chi è" :value="labelRuoloDoposcuola(contatto.doposcuolaRuolo)" />
+            <template v-if="!candidatoTutor">
+              <InfoRow label="Studente" :value="contatto.nomeStudente" />
+              <InfoRow label="Classe / Scuola" :value="contatto.classeScuola" />
+            </template>
+            <InfoRow :label="candidatoTutor ? 'Materie che insegna' : 'Materie'" :value="contatto.materie" />
           </template>
           <template v-else>
             <InfoRow label="Ruolo" :value="contatto.marketingRuolo ? labelRuoloMarketing(contatto.marketingRuolo) : null" />
@@ -279,7 +282,10 @@
 
 <script setup lang="ts">
 // Pannello laterale con tutti i dati di una persona e lo storico dei contatti.
-import { labelTipo, labelStato, labelCanale, labelRuoloMarketing, labelTipoInterazione, labelEsito } from '#shared/contatti'
+import {
+  labelTipo, labelStato, labelCanale, labelRuoloMarketing, labelRuoloDoposcuola,
+  labelTipoInterazione, labelEsito,
+} from '#shared/contatti'
 import {
   STATI_ITEMS, nomeContatto, formatGiorno, formatQuando, iconaInterazione,
   ricontattoScaduto, linkTelefono, linkWhatsapp, linkEmail, linkSocial, coloreStato, coloreEsito,
@@ -325,6 +331,12 @@ watch(() => props.contactId, () => { if (aperto.value) carica() })
 const indirizzoSocial = computed(() => {
   const c = contatto.value
   return c ? linkSocial(c.socialLink, c.canaleOrigine) ?? undefined : undefined
+})
+
+// Candidato tutor: niente studente né classe, e le materie sono quelle che insegna
+const candidatoTutor = computed(() => {
+  const c = contatto.value
+  return Boolean(c && c.tipo === 'DOPOSCUOLA' && c.doposcuolaRuolo === 'TUTOR')
 })
 
 // La prima volta che ci si è sentiti: il diario arriva dal più recente al più
@@ -377,7 +389,11 @@ function apriWizardStudente() {
 
 const puoCreareStudente = computed(() => {
   const c = contatto.value
-  return Boolean(c && c.tipo === 'DOPOSCUOLA' && !c.archiviatoAt && !c.anonimizzatoAt && !c.studentId)
+  // Un candidato tutor non diventa uno studente: il bottone non ha senso per lui
+  return Boolean(
+    c && c.tipo === 'DOPOSCUOLA' && c.doposcuolaRuolo === 'STUDENTE'
+    && !c.archiviatoAt && !c.anonimizzatoAt && !c.studentId,
+  )
 })
 
 // Traduce i dati del contatto nei campi del modulo "Nuovo studente".

@@ -89,17 +89,31 @@
         </div>
 
         <!-- Campi della tab Doposcuola -->
-        <div v-if="tipoForm === 'DOPOSCUOLA'" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <UFormField label="Nome studente" name="nomeStudente" :error="erroreDi('nomeStudente')">
-            <UInput v-model="form.nomeStudente" placeholder="Luca" class="w-full" />
+        <template v-if="tipoForm === 'DOPOSCUOLA'">
+          <!-- Nella stessa scheda arrivano famiglie interessate e candidati tutor -->
+          <UFormField label="Chi è" name="doposcuolaRuolo" :error="erroreDi('doposcuolaRuolo')">
+            <USelect v-model="form.doposcuolaRuolo" :items="RUOLI_DOPOSCUOLA_ITEMS" class="w-full sm:w-64" />
           </UFormField>
-          <UFormField label="Classe / Scuola" name="classeScuola" :error="erroreDi('classeScuola')">
-            <UInput v-model="form.classeScuola" placeholder="2ª media" class="w-full" />
-          </UFormField>
-          <UFormField label="Materie" name="materie" :error="erroreDi('materie')">
-            <UInput v-model="form.materie" placeholder="Matematica, Inglese" class="w-full" />
-          </UFormField>
-        </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <UFormField v-if="!candidatoTutor" label="Nome studente" name="nomeStudente" :error="erroreDi('nomeStudente')">
+              <UInput v-model="form.nomeStudente" placeholder="Luca" class="w-full" />
+            </UFormField>
+            <UFormField v-if="!candidatoTutor" label="Classe / Scuola" name="classeScuola" :error="erroreDi('classeScuola')">
+              <UInput v-model="form.classeScuola" placeholder="2ª media" class="w-full" />
+            </UFormField>
+            <UFormField
+              :label="candidatoTutor ? 'Materie che insegna' : 'Materie'"
+              name="materie" :error="erroreDi('materie')"
+            >
+              <UInput
+                v-model="form.materie"
+                :placeholder="candidatoTutor ? 'Matematica, Fisica' : 'Matematica, Inglese'"
+                class="w-full"
+              />
+            </UFormField>
+          </div>
+        </template>
 
         <!-- Campi della tab Marketing -->
         <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -192,7 +206,8 @@
 import { labelTipo, labelStato } from '#shared/contatti'
 import type { TipoContatto } from '#shared/contatti'
 import {
-  CANALI_ITEMS, STATI_ITEMS, RUOLI_MARKETING_OPZIONALI_ITEMS, NON_SPECIFICATO, nomeContatto,
+  CANALI_ITEMS, STATI_ITEMS, RUOLI_MARKETING_OPZIONALI_ITEMS, RUOLI_DOPOSCUOLA_ITEMS,
+  NON_SPECIFICATO, nomeContatto,
   TIPI_INTERAZIONE_ITEMS, DIREZIONI_ITEMS, adessoPerInput, inputInIso,
 } from '~/utils/contatti'
 import type { Contatto } from '~/utils/contatti'
@@ -223,6 +238,7 @@ function formVuoto() {
     canaleOrigine:      'ALTRO',
     stato:              'NUOVO',
     prossimoRicontatto: '',
+    doposcuolaRuolo:    'STUDENTE',
     nomeStudente:       '',
     classeScuola:       '',
     materie:            '',
@@ -235,6 +251,9 @@ function formVuoto() {
 }
 
 const form = reactive(formVuoto())
+
+// Con "Possibile tutor" i campi dello studente non servono e le materie cambiano senso
+const candidatoTutor = computed(() => tipoForm.value === 'DOPOSCUOLA' && form.doposcuolaRuolo === 'TUTOR')
 
 // ─── Riquadro "Primo contatto" (solo in creazione) ───
 // "Quando" vuoto = non si annota niente: il contatto nasce senza diario.
@@ -278,6 +297,7 @@ watch(aperto, (adessoAperto) => {
       canaleOrigine:      c.canaleOrigine ?? 'ALTRO',
       stato:              c.stato ?? 'NUOVO',
       prossimoRicontatto: c.prossimoRicontatto ?? '',
+      doposcuolaRuolo:    c.doposcuolaRuolo ?? 'STUDENTE',
       nomeStudente:       c.nomeStudente ?? '',
       classeScuola:       c.classeScuola ?? '',
       materie:            c.materie ?? '',
@@ -365,8 +385,10 @@ function corpoDaInviare() {
   // Si inviano solo i campi della tab giusta: quelli dell'altra restano com'erano
   const specifici = tipoForm.value === 'DOPOSCUOLA'
     ? {
-        nomeStudente: vuotoNull(form.nomeStudente),
-        classeScuola: vuotoNull(form.classeScuola),
+        doposcuolaRuolo: form.doposcuolaRuolo,
+        // Un candidato tutor non ha uno studente né una classe: si svuotano
+        nomeStudente: candidatoTutor.value ? null : vuotoNull(form.nomeStudente),
+        classeScuola: candidatoTutor.value ? null : vuotoNull(form.classeScuola),
         materie:      vuotoNull(form.materie),
       }
     : {

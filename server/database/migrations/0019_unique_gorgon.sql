@@ -1,0 +1,2 @@
+CREATE TYPE "public"."contact_doposcuola_ruolo" AS ENUM('STUDENTE', 'TUTOR');--> statement-breakpoint
+ALTER TABLE "contacts" ADD COLUMN "doposcuola_ruolo" "contact_doposcuola_ruolo" DEFAULT 'STUDENTE' NOT NULL;

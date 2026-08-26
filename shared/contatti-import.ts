@@ -12,6 +12,7 @@ import {
   CANALI_CONTATTO,
   STATI_CONTATTO,
   RUOLI_MARKETING,
+  RUOLI_DOPOSCUOLA,
 } from './contatti'
 import type { TipoContatto } from './contatti'
 import type { CreateContactInput } from './schemas/contact.schema'
@@ -36,6 +37,8 @@ export interface RigaImportContatto {
   azienda?: string
   servizio_interesse?: string
   ruolo_marketing?: string
+  /** Solo Doposcuola: "Possibile studente" o "Possibile tutor" (vuoto = studente) */
+  ruolo_doposcuola?: string
   note?: string
 }
 
@@ -47,7 +50,7 @@ export type EsitoRigaImport =
 export const COLONNE_IMPORT = [
   'tipo', 'nome', 'cognome', 'telefono', 'email', 'social', 'fonte', 'stato',
   'prossimo_ricontatto', 'nome_studente', 'classe_scuola', 'materie',
-  'azienda', 'servizio_interesse', 'ruolo_marketing', 'note',
+  'azienda', 'servizio_interesse', 'ruolo_marketing', 'ruolo_doposcuola', 'note',
 ] as const
 
 // ─────────────────────────────────────────────
@@ -193,6 +196,15 @@ export function normalizzaRigaImport(
     else marketingRuolo = trovato
   }
 
+  // Chi è (solo Doposcuola): vuoto = famiglia interessata
+  let doposcuolaRuolo: CreateContactInput['doposcuolaRuolo'] = 'STUDENTE'
+  const ruoloDoposcuolaScritto = (riga.ruolo_doposcuola ?? '').trim()
+  if (ruoloDoposcuolaScritto) {
+    const trovato = trovaVoce(RUOLI_DOPOSCUOLA, ruoloDoposcuolaScritto)
+    if (!trovato) errori.push(`Ruolo non riconosciuto: «${ruoloDoposcuolaScritto}» (scrivi Possibile studente o Possibile tutor)`)
+    else doposcuolaRuolo = trovato
+  }
+
   // Promemoria "richiamare il…"
   let prossimoRicontatto: string | null = null
   const dataScritta = (riga.prossimo_ricontatto ?? '').trim()
@@ -229,6 +241,7 @@ export function normalizzaRigaImport(
       azienda,
       servizioInteresse,
       marketingRuolo,
+      doposcuolaRuolo,
       // Chi importa una lista non ha (ancora) comunicato l'informativa privacy:
       // la spunta si mette a mano, contatto per contatto.
       privacyInformata: false,

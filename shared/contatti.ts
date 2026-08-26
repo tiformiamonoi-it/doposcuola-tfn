@@ -61,6 +61,18 @@ export const RUOLI_MARKETING = [
 export type RuoloMarketing = (typeof RUOLI_MARKETING)[number]['value']
 
 // ─────────────────────────────────────────────
+// CHI È (solo tab Doposcuola)
+// Nella stessa tab arrivano famiglie interessate e candidati che vogliono
+// lavorare come tutor: questo campo li tiene distinti.
+// ─────────────────────────────────────────────
+export const RUOLI_DOPOSCUOLA = [
+  { value: 'STUDENTE', label: 'Possibile studente' },
+  { value: 'TUTOR',    label: 'Possibile tutor' },
+] as const satisfies ReadonlyArray<Voce<string>>
+
+export type RuoloDoposcuola = (typeof RUOLI_DOPOSCUOLA)[number]['value']
+
+// ─────────────────────────────────────────────
 // INTERAZIONI (il diario)
 // ─────────────────────────────────────────────
 export const TIPI_INTERAZIONE = [
@@ -99,6 +111,7 @@ export const VALORI_TIPO_CONTATTO       = valori(TIPI_CONTATTO)
 export const VALORI_CANALE_CONTATTO     = valori(CANALI_CONTATTO)
 export const VALORI_STATO_CONTATTO      = valori(STATI_CONTATTO)
 export const VALORI_RUOLO_MARKETING     = valori(RUOLI_MARKETING)
+export const VALORI_RUOLO_DOPOSCUOLA    = valori(RUOLI_DOPOSCUOLA)
 export const VALORI_TIPO_INTERAZIONE    = valori(TIPI_INTERAZIONE)
 export const VALORI_DIREZIONE_INTERAZIONE = valori(DIREZIONI_INTERAZIONE)
 export const VALORI_ESITO_INTERAZIONE   = valori(ESITI_INTERAZIONE)
@@ -114,6 +127,7 @@ export const labelTipo            = (v: string | null | undefined) => etichetta(
 export const labelCanale          = (v: string | null | undefined) => etichetta(CANALI_CONTATTO, v)
 export const labelStato           = (v: string | null | undefined) => etichetta(STATI_CONTATTO, v)
 export const labelRuoloMarketing  = (v: string | null | undefined) => etichetta(RUOLI_MARKETING, v)
+export const labelRuoloDoposcuola = (v: string | null | undefined) => etichetta(RUOLI_DOPOSCUOLA, v)
 export const labelTipoInterazione = (v: string | null | undefined) => etichetta(TIPI_INTERAZIONE, v)
 export const labelDirezione       = (v: string | null | undefined) => etichetta(DIREZIONI_INTERAZIONE, v)
 export const labelEsito           = (v: string | null | undefined) => etichetta(ESITI_INTERAZIONE, v)

@@ -67,6 +67,14 @@
       />
       <USelect v-model="filtroStato" :items="STATI_FILTRO_ITEMS" class="w-full sm:w-48" aria-label="Filtra per stato" />
       <USelect v-model="filtroCanale" :items="CANALI_FILTRO_ITEMS" class="w-full sm:w-48" aria-label="Filtra per fonte" />
+      <!-- "Chi è" esiste solo nel cassetto Doposcuola -->
+      <USelect
+        v-if="tab === 'DOPOSCUOLA'"
+        v-model="filtroRuolo"
+        :items="RUOLI_DOPOSCUOLA_FILTRO_ITEMS"
+        class="w-full sm:w-48"
+        aria-label="Filtra per chi è: possibili studenti o possibili tutor"
+      />
       <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
         <USwitch v-model="soloDaRicontattare" aria-label="Mostra solo i contatti da ricontattare" />
         Solo da ricontattare
@@ -96,7 +104,10 @@
           <button type="button" class="w-full text-left" @click="apriScheda(c.id)">
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
-                <p class="font-semibold text-slate-900 truncate">{{ nomeContatto(c) }}</p>
+                <p class="font-semibold text-slate-900 truncate">
+                  {{ nomeContatto(c) }}
+                  <UBadge v-if="c.doposcuolaRuolo === 'TUTOR'" color="info" variant="subtle" size="xs">Tutor</UBadge>
+                </p>
                 <p v-if="sottotitoloContatto(c)" class="text-xs text-slate-400 truncate">
                   ↳ {{ sottotitoloContatto(c) }}
                 </p>
@@ -168,7 +179,10 @@
         >
           <template #nome-cell="{ row }">
             <div :class="row.original.archiviatoAt ? 'opacity-60' : ''">
-              <p class="font-semibold text-slate-900">{{ nomeContatto(row.original) }}</p>
+              <p class="font-semibold text-slate-900">
+                {{ nomeContatto(row.original) }}
+                <UBadge v-if="row.original.doposcuolaRuolo === 'TUTOR'" color="info" variant="subtle" size="xs">Tutor</UBadge>
+              </p>
               <p v-if="sottotitoloContatto(row.original)" class="text-xs text-slate-400 truncate max-w-[16rem]">
                 ↳ {{ sottotitoloContatto(row.original) }}
               </p>
@@ -323,10 +337,10 @@
 // Pagina Contatti (mini-CRM): due cassetti (Doposcuola / Marketing), le card di
 // riepilogo cliccabili, i filtri e la lista. Tutto arriva da UNA sola chiamata
 // a /api/contacts, che porta con sé anche i numeri delle card.
-import { labelStato, labelCanale, labelTipo, labelRuoloMarketing } from '#shared/contatti'
+import { labelStato, labelCanale, labelTipo, labelRuoloMarketing, labelRuoloDoposcuola } from '#shared/contatti'
 import type { TipoContatto } from '#shared/contatti'
 import {
-  STATI_FILTRO_ITEMS, CANALI_FILTRO_ITEMS, NESSUN_FILTRO,
+  STATI_FILTRO_ITEMS, CANALI_FILTRO_ITEMS, RUOLI_DOPOSCUOLA_FILTRO_ITEMS, NESSUN_FILTRO,
   nomeContatto, sottotitoloContatto, formatGiorno, formatQuando,
   ricontattoScaduto, coloreStato, linkTelefono, linkWhatsapp, linkEmail,
   linkSocial, etichettaSocial,
@@ -352,6 +366,8 @@ const ricerca            = ref('')
 const ricercaApplicata   = ref('')
 const filtroStato        = ref<string>(NESSUN_FILTRO)
 const filtroCanale       = ref<string>(NESSUN_FILTRO)
+// "Chi è": possibili studenti / possibili tutor (solo cassetto Doposcuola)
+const filtroRuolo        = ref<string>(NESSUN_FILTRO)
 const soloDaRicontattare = ref(false)
 const soloConvertitiMese = ref(false)
 const mostraArchiviati   = ref(false)
@@ -372,6 +388,8 @@ onBeforeUnmount(() => { if (timerRicerca) clearTimeout(timerRicerca) })
 watch(tab, (nuovo) => {
   pagina.value = 1
   filtroStato.value = NESSUN_FILTRO
+  // "Chi è" vale solo per il Doposcuola: cambiando cassetto si azzera
+  filtroRuolo.value = NESSUN_FILTRO
   soloConvertitiMese.value = false
   const query = { ...route.query }
   if (nuovo === 'MARKETING') query.tab = 'marketing'
@@ -386,7 +404,7 @@ watch(() => route.query.tab, (valore) => {
 })
 
 // Tornando a filtri più larghi la pagina 1 evita di finire su una pagina vuota
-watch([filtroStato, filtroCanale, soloDaRicontattare, soloConvertitiMese, mostraArchiviati], () => { pagina.value = 1 })
+watch([filtroStato, filtroCanale, filtroRuolo, soloDaRicontattare, soloConvertitiMese, mostraArchiviati], () => { pagina.value = 1 })
 
 // "Convertiti nel mese" non può convivere con un altro stato o con "solo da
 // ricontattare" (darebbe sempre una lista vuota): scegliendo quelli, si spegne.
@@ -399,6 +417,7 @@ const filtriAttivi = computed(() => ({
   tipo:              tab.value,
   stato:             filtroStato.value === NESSUN_FILTRO ? undefined : filtroStato.value,
   canale:            filtroCanale.value === NESSUN_FILTRO ? undefined : filtroCanale.value,
+  ruolo:             (tab.value === 'DOPOSCUOLA' && filtroRuolo.value !== NESSUN_FILTRO) ? filtroRuolo.value : undefined,
   search:            ricercaApplicata.value || undefined,
   daRicontattare:    soloDaRicontattare.value ? '1' : undefined,
   convertitiMese:    soloConvertitiMese.value ? '1' : undefined,
@@ -417,7 +436,7 @@ const { data, pending, refresh } = useLazyFetch('/api/contacts', {
 
 const KPI_VUOTI: KpiContatti = {
   nuovi: 0, daRicontattareOggi: 0, inTrattativa: 0, convertitiMese: 0,
-  totaleDoposcuola: 0, totaleMarketing: 0,
+  totaleDoposcuola: 0, totaleMarketing: 0, totaleTutorDoposcuola: 0,
 }
 
 const contatti = computed<Contatto[]>(() => (data.value?.items ?? []) as Contatto[])
@@ -429,6 +448,7 @@ const conFiltri = computed(() => Boolean(
   ricercaApplicata.value
   || filtroStato.value !== NESSUN_FILTRO
   || filtroCanale.value !== NESSUN_FILTRO
+  || filtroRuolo.value !== NESSUN_FILTRO
   || soloDaRicontattare.value
   || soloConvertitiMese.value,
 ))
@@ -531,8 +551,14 @@ const esportando = ref(false)
 // Nel file scriviamo le etichette in italiano, non i codici del database
 const perGiorno = (v: string | null) => (v ? formatGiorno(v) : '')
 const perQuando = (v: string | null) => (v ? formatQuando(v) : '')
-// Nel file basta "Cliente"/"Partner": la spiegazione fra parentesi serve solo a schermo
-const perRuolo  = (v: string | null) => (v ? labelRuoloMarketing(v).replace(/\s*\(.*$/, '') : '')
+// La colonna "Ruolo" dice due cose diverse nei due cassetti: "Possibile studente"/
+// "Possibile tutor" nel Doposcuola, "Cliente"/"Partner" nel Marketing.
+// Nel file basta la parola secca: la spiegazione fra parentesi serve solo a schermo.
+const perRuolo = (c: Contatto) => (
+  c.tipo === 'DOPOSCUOLA'
+    ? labelRuoloDoposcuola(c.doposcuolaRuolo)
+    : (c.marketingRuolo ? labelRuoloMarketing(c.marketingRuolo).replace(/\s*\(.*$/, '') : '')
+)
 
 async function esportaCsv() {
   esportando.value = true
@@ -573,7 +599,7 @@ async function esportaCsv() {
       c.materie ?? '',
       c.azienda ?? '',
       c.servizioInteresse ?? '',
-      perRuolo(c.marketingRuolo),
+      perRuolo(c),
       c.privacyInformata ? 'Sì' : 'No',
       c.note ?? '',
       perQuando(c.createdAt),

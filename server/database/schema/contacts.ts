@@ -5,6 +5,7 @@ import {
   contactCanaleEnum,
   contactStatoEnum,
   contactMarketingRuoloEnum,
+  contactDoposcuolaRuoloEnum,
   interactionTipoEnum,
   interactionDirezioneEnum,
   interactionEsitoEnum,
@@ -48,6 +49,9 @@ export const contacts = pgTable('contacts', {
   azienda:           varchar('azienda', { length: 200 }),
   servizioInteresse: varchar('servizio_interesse', { length: 200 }),
   marketingRuolo:    contactMarketingRuoloEnum('marketing_ruolo'),
+
+  // Solo Doposcuola: famiglia interessata (STUDENTE) o candidato tutor (TUTOR)
+  doposcuolaRuolo:   contactDoposcuolaRuoloEnum('doposcuola_ruolo').notNull().default('STUDENTE'),
 
   // GDPR: spunta "informativa privacy comunicata"
   privacyInformata: boolean('privacy_informata').notNull().default(false),

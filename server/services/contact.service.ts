@@ -84,6 +84,8 @@ export async function listContacts(q: ListContactsQuery) {
     q.includiArchiviati ? undefined : isNull(contacts.archiviatoAt),
     q.stato ? eq(contacts.stato, q.stato) : undefined,
     q.canale ? eq(contacts.canaleOrigine, q.canale) : undefined,
+    // "Chi è" esiste solo nel cassetto Doposcuola: altrove il filtro non si applica
+    (q.tipo === 'DOPOSCUOLA' && q.ruolo) ? eq(contacts.doposcuolaRuolo, q.ruolo) : undefined,
     q.daRicontattare ? daRicontattareEntro(oggi) : undefined,
     // Stessa espressione del numero mostrato sulla card, così lista e numero coincidono
     q.convertitiMese ? convertitiNelMese(meseCorrente) : undefined,
@@ -141,6 +143,11 @@ export async function listContacts(q: ListContactsQuery) {
       convertitiMese:     conta(and(soloTipo, convertitiNelMese(meseCorrente)) as SQL),
       totaleDoposcuola:   conta(eq(contacts.tipo, 'DOPOSCUOLA')),
       totaleMarketing:    conta(eq(contacts.tipo, 'MARKETING')),
+      // Quanti, fra i Doposcuola, sono candidati tutor: serve al filtro "Chi è"
+      totaleTutorDoposcuola: conta(and(
+        eq(contacts.tipo, 'DOPOSCUOLA'),
+        eq(contacts.doposcuolaRuolo, 'TUTOR'),
+      ) as SQL),
     }).from(contacts).where(isNull(contacts.archiviatoAt)),
   ])
 
@@ -161,6 +168,7 @@ export async function listContacts(q: ListContactsQuery) {
       convertitiMese:     Number(kpiRow?.convertitiMese ?? 0),
       totaleDoposcuola:   Number(kpiRow?.totaleDoposcuola ?? 0),
       totaleMarketing:    Number(kpiRow?.totaleMarketing ?? 0),
+      totaleTutorDoposcuola: Number(kpiRow?.totaleTutorDoposcuola ?? 0),
     },
   }
 }
@@ -248,6 +256,7 @@ export async function createContact(data: CreateContactInput, userId: string) {
     azienda:            data.azienda ?? null,
     servizioInteresse:  data.servizioInteresse ?? null,
     marketingRuolo:     data.marketingRuolo ?? null,
+    doposcuolaRuolo:    data.doposcuolaRuolo ?? 'STUDENTE',
     privacyInformata:   data.privacyInformata,
     createdByUserId:    userId,
     // Se nasce già "Convertito" (import/casi particolari) segniamo subito la data
@@ -408,6 +417,7 @@ export async function importContacts(
             azienda:            d.azienda ?? null,
             servizioInteresse:  d.servizioInteresse ?? null,
             marketingRuolo:     d.marketingRuolo ?? null,
+            doposcuolaRuolo:    d.doposcuolaRuolo ?? 'STUDENTE',
             privacyInformata:   d.privacyInformata,
             createdByUserId:    userId,
             convertitoAt:       d.stato === 'CONVERTITO' ? new Date() : null,

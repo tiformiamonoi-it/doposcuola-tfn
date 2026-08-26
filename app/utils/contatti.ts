@@ -7,6 +7,7 @@ import {
   STATI_CONTATTO,
   CANALI_CONTATTO,
   RUOLI_MARKETING,
+  RUOLI_DOPOSCUOLA,
   TIPI_INTERAZIONE,
   DIREZIONI_INTERAZIONE,
   ESITI_INTERAZIONE,
@@ -19,6 +20,7 @@ import type {
   CanaleContatto,
   StatoContatto,
   RuoloMarketing,
+  RuoloDoposcuola,
   TipoInterazione,
   DirezioneInterazione,
   EsitoInterazione,
@@ -51,6 +53,8 @@ export interface Contatto {
   azienda: string | null
   servizioInteresse: string | null
   marketingRuolo: RuoloMarketing | null
+  /** Solo Doposcuola: famiglia interessata o candidato tutor */
+  doposcuolaRuolo: RuoloDoposcuola
   privacyInformata: boolean
   studentId: string | null
   contactRequestId: string | null
@@ -89,6 +93,8 @@ export interface KpiContatti {
   convertitiMese: number
   totaleDoposcuola: number
   totaleMarketing: number
+  /** Quanti Doposcuola sono candidati tutor (non archiviati) */
+  totaleTutorDoposcuola: number
 }
 
 // ─────────────────────────────────────────────
@@ -103,6 +109,7 @@ const aItems = (lista: ReadonlyArray<{ value: string; label: string }>): Voce[] 
 export const STATI_ITEMS      = aItems(STATI_CONTATTO)
 export const CANALI_ITEMS     = aItems(CANALI_CONTATTO)
 export const RUOLI_MARKETING_ITEMS   = aItems(RUOLI_MARKETING)
+export const RUOLI_DOPOSCUOLA_ITEMS  = aItems(RUOLI_DOPOSCUOLA)
 export const TIPI_INTERAZIONE_ITEMS  = aItems(TIPI_INTERAZIONE)
 export const DIREZIONI_ITEMS         = aItems(DIREZIONI_INTERAZIONE)
 export const ESITI_ITEMS             = aItems(ESITI_INTERAZIONE)
@@ -114,6 +121,12 @@ export const NON_SPECIFICATO = 'NESSUNO'
 
 export const STATI_FILTRO_ITEMS  = [{ label: 'Stato: tutti', value: NESSUN_FILTRO }, ...STATI_ITEMS]
 export const CANALI_FILTRO_ITEMS = [{ label: 'Fonte: tutte', value: NESSUN_FILTRO }, ...CANALI_ITEMS]
+// Nel filtro le voci vanno al plurale: si sceglie un gruppo, non una singola persona
+export const RUOLI_DOPOSCUOLA_FILTRO_ITEMS = [
+  { label: 'Chi è: tutti',       value: NESSUN_FILTRO },
+  { label: 'Possibili studenti', value: 'STUDENTE' },
+  { label: 'Possibili tutor',    value: 'TUTOR' },
+]
 export const ESITI_OPZIONALI_ITEMS = [{ label: 'Non indicato', value: NON_SPECIFICATO }, ...ESITI_ITEMS]
 export const RUOLI_MARKETING_OPZIONALI_ITEMS = [{ label: 'Non specificato', value: NON_SPECIFICATO }, ...RUOLI_MARKETING_ITEMS]
 
@@ -217,8 +230,11 @@ export const nomeContatto = (c: Pick<Contatto, 'nome' | 'cognome'> | null | unde
 
 /** Riga piccola sotto il nome: cambia a seconda della tab. */
 export function sottotitoloContatto(c: Contatto): string {
+  // Un candidato tutor non ha uno studente né una classe: contano le materie che insegna
   const pezzi = c.tipo === 'DOPOSCUOLA'
-    ? [c.nomeStudente, c.classeScuola, c.materie]
+    ? (c.doposcuolaRuolo === 'TUTOR'
+        ? ['Candidato tutor', c.materie]
+        : [c.nomeStudente, c.classeScuola, c.materie])
     : [c.azienda, c.marketingRuolo === 'CLIENTE' ? 'Cliente' : c.marketingRuolo === 'PARTNER' ? 'Partner' : null]
   return pezzi.filter(Boolean).join(' · ')
 }
