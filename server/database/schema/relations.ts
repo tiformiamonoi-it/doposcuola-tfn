@@ -7,6 +7,7 @@ import { accountingEntries, tutorPayments, tutorReimbursements } from './account
 import { bookings, bookingSubjects } from './bookings'
 import { studentNotes } from './notes'
 import { contacts, contactInteractions } from './contacts'
+import { studentConfirmations } from './confirmations'
 import { contactRequests } from './system'
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -33,6 +34,7 @@ export const studentsRelations = relations(students, ({ one, many }) => ({
   parents:     many(studentParents),
   studentUser: one(users, { fields: [students.studentUserId], references: [users.id], relationName: 'studentUser' }),
   notes:       many(studentNotes),
+  confirmations: many(studentConfirmations),
 }))
 
 export const packagesRelations = relations(packages, ({ one, many }) => ({
@@ -94,6 +96,12 @@ export const contactsRelations = relations(contacts, ({ one, many }) => ({
 export const contactInteractionsRelations = relations(contactInteractions, ({ one }) => ({
   contact:   one(contacts, { fields: [contactInteractions.contactId], references: [contacts.id] }),
   createdBy: one(users, { fields: [contactInteractions.createdByUserId], references: [users.id] }),
+}))
+
+// Sezione Rientri: il quaderno dell'appello di inizio anno
+export const studentConfirmationsRelations = relations(studentConfirmations, ({ one }) => ({
+  student:     one(students, { fields: [studentConfirmations.studentId], references: [students.id] }),
+  aggiornatoDa: one(users, { fields: [studentConfirmations.aggiornatoDaUserId], references: [users.id] }),
 }))
 
 // Ponte alunno ↔ genitori con accesso al portale famiglie

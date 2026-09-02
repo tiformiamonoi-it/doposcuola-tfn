@@ -47,3 +47,7 @@ export const contactDoposcuolaRuoloEnum = pgEnum('contact_doposcuola_ruolo', ['S
 export const interactionTipoEnum = pgEnum('interaction_tipo', ['CHIAMATA', 'MESSAGGIO', 'EMAIL', 'INCONTRO', 'ALTRO'])
 export const interactionDirezioneEnum = pgEnum('interaction_direzione', ['RICEVUTA', 'EFFETTUATA'])
 export const interactionEsitoEnum = pgEnum('interaction_esito', ['RISPOSTO', 'NESSUNA_RISPOSTA', 'DA_RICHIAMARE'])
+
+// Sezione Rientri (conferme di inizio anno scolastico): lista fissa condivisa
+// anche da shared/rientri.ts
+export const confirmationStatusEnum = pgEnum('confirmation_status', ['DA_SENTIRE', 'CONFERMATO', 'IN_FORSE', 'NON_TORNA'])

@@ -4,6 +4,9 @@ import { db } from '../database/client'
 import { contacts, contactInteractions, students, users } from '../database/schema'
 import { nomeProprio } from '../utils/nomi'
 import { oggiRomeStr } from '../utils/tutor-time-window'
+// Il ponte con i Rientri (l'import va in questo verso soltanto: confirmation.service
+// non conosce i contatti, così non si creano import circolari)
+import { getAnnoCorrente, setRientro } from './confirmation.service'
 import { normalizzaTelefono, sembraTelefono, sembraEmail } from '#shared/phone'
 import { STATI_CHIUSI } from '#shared/contatti'
 import type { TipoContatto } from '#shared/contatti'
@@ -297,7 +300,28 @@ export async function createContact(data: CreateContactInput, userId: string) {
   })
 }
 
-export async function updateContact(id: string, data: UpdateContactInput) {
+/**
+ * Il contatto appena diventato alunno entra nell'appello dei Rientri già
+ * "Confermato": si è appena iscritto, è ovvio che viene (regola d'oro §2 del
+ * piano: nessuno sta insieme nei Contatti e nei Rientri).
+ * Se qualcosa qui va storto NON si annulla la conversione: il contatto è già
+ * diventato studente, ed è quello che conta.
+ */
+async function segnaRientroConfermato(studentId: string, userId: string) {
+  try {
+    const { anno } = await getAnnoCorrente()
+    await setRientro(
+      studentId,
+      anno,
+      { stato: 'CONFERMATO', dataRisposta: oggiRomeStr(), note: 'Nuovo iscritto arrivato dai Contatti' },
+      userId,
+    )
+  } catch (err) {
+    console.error('[contatti] conversione riuscita ma rientro non segnato:', err)
+  }
+}
+
+export async function updateContact(id: string, data: UpdateContactInput, userId: string) {
   const [esistente] = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1)
   if (!esistente) throw new Error('Contatto non trovato')
 
@@ -328,6 +352,19 @@ export async function updateContact(id: string, data: UpdateContactInput) {
   aggiornaConvertitoAt(changes, data.stato, esistente.convertitoAt)
 
   const [aggiornato] = await db.update(contacts).set(changes).where(eq(contacts.id, id)).returning()
+
+  // È questa la modifica che lo trasforma in alunno ("Crea studente")? Solo
+  // allora si apre la riga nei Rientri: le modifiche successive non la toccano.
+  const appenaConvertito = Boolean(
+    aggiornato
+    && aggiornato.stato === 'CONVERTITO'
+    && aggiornato.studentId
+    && (esistente.stato !== 'CONVERTITO' || !esistente.studentId),
+  )
+  if (appenaConvertito && aggiornato?.studentId) {
+    await segnaRientroConfermato(aggiornato.studentId, userId)
+  }
+
   return aggiornato ?? null
 }
 

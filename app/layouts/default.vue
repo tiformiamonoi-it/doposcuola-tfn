@@ -62,6 +62,15 @@
           >
             {{ contattiPendingCount }}
           </span>
+          <!-- Badge alunni ancora da sentire per i Rientri (ADMIN/SUPER_TUTOR) -->
+          <span
+            v-if="item.route === '/rientri' && rientriPendingCount > 0"
+            class="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center"
+            :class="collapsed ? 'absolute -top-0.5 -right-0.5' : 'ml-auto'"
+            :title="`${rientriPendingCount} alunni ancora da sentire`"
+          >
+            {{ rientriPendingCount }}
+          </span>
           <!-- Tooltip sidebar collassata -->
           <span
             v-if="collapsed"
@@ -173,6 +182,12 @@
           >
             {{ notePendingCount }}
           </span>
+          <span
+            v-if="item.route === '/rientri' && rientriPendingCount > 0"
+            class="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center"
+          >
+            {{ rientriPendingCount }}
+          </span>
         </span>
         <span class="text-[11px] font-medium">{{ item.label }}</span>
       </NuxtLink>
@@ -218,6 +233,13 @@
                 class="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center"
               >
                 {{ contattiPendingCount }}
+              </span>
+              <!-- Rientri: alunni ancora da sentire, anche nel menu del telefono -->
+              <span
+                v-if="item.route === '/rientri' && rientriPendingCount > 0"
+                class="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center"
+              >
+                {{ rientriPendingCount }}
               </span>
             </span>
             <span class="text-xs font-medium leading-tight">{{ item.label }}</span>
@@ -323,6 +345,15 @@ const { data: contattiPendingRes } = useLazyFetch('/api/contacts/pending-count',
 })
 watchEffect(() => { contattiPendingCount.value = contattiPendingRes.value?.count ?? 0 })
 
+// Badge "alunni ancora da sentire" per i Rientri: stesso meccanismo dei Contatti.
+// La pagina Rientri aggiorna questo useState a ogni risposta segnata.
+const rientriPendingCount = useState<number>('rientri-pending-count', () => 0)
+const { data: rientriPendingRes } = useLazyFetch('/api/confirmations/pending-count', {
+  server: false,
+  immediate: isAdminOrSuperTutor.value,
+})
+watchEffect(() => { rientriPendingCount.value = rientriPendingRes.value?.count ?? 0 })
+
 const navItems = computed(() => {
   if (user.value?.role === 'TUTOR') {
     return [
@@ -336,6 +367,9 @@ const navItems = computed(() => {
     { icon: 'i-heroicons-calendar',      label: 'Calendario',   route: '/calendario' },
     { icon: 'i-heroicons-users',         label: 'Studenti',     route: '/studenti' },
     { icon: 'i-heroicons-cube',          label: 'Pacchetti',    route: '/pacchetti' },
+    // Rientri sta in quinta: le prime 4 voci sono anche la barra in basso del
+    // telefono, e Pacchetti serve tutto l'anno mentre l'appello dura due mesi.
+    { icon: 'i-heroicons-clipboard-document-check', label: 'Rientri', route: '/rientri' },
     { icon: 'i-heroicons-list-bullet',   label: 'Lezioni',      route: '/lezioni' },
     { icon: 'i-heroicons-academic-cap',  label: 'Tutor',        route: '/tutor' },
     { icon: 'i-heroicons-phone-arrow-down-left', label: 'Contatti', route: '/contatti' },

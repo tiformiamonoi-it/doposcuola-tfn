@@ -5,7 +5,7 @@ import { toHttpError } from '../../utils/http-error'
 // PUT /api/contacts/:id
 // Modifica parziale: si aggiornano solo i campi effettivamente inviati
 export default defineEventHandler(async (event) => {
-  await requireUserSession(event)
+  const { user } = await requireUserSession(event)
 
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'ID contatto mancante' })
@@ -22,7 +22,8 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    return { data: await updateContact(id, parsed.data) }
+    // L'utente serve a firmare la conferma nei Rientri quando il contatto diventa alunno
+    return { data: await updateContact(id, parsed.data, user.id) }
   } catch (err: any) {
     if (err.statusCode) throw err
     throw toHttpError(err, err.message?.includes('non trovat') ? 404 : 400)

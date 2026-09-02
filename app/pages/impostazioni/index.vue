@@ -312,6 +312,30 @@
               <UButton @click="salvaConfigs" :loading="salvandoConfigs">Salva Modifiche</UButton>
             </template>
           </UCard>
+
+          <!-- CARD ANNO SCOLASTICO -->
+          <UCard>
+            <template #header>
+              <div class="flex items-center gap-2">
+                <UIcon name="i-heroicons-clipboard-document-check" class="w-4 h-4 text-tfn-500" />
+                <span class="font-medium text-slate-800">Anno scolastico</span>
+              </div>
+            </template>
+            <div class="space-y-3">
+              <UFormField label="Anno">
+                <UInput v-model="annoScolastico" placeholder="Es. 2026/2027" class="w-full" />
+              </UFormField>
+              <UFormField label="Primo giorno di lezione">
+                <UInput v-model="inizioAnnoScolastico" type="date" class="w-full" />
+              </UFormField>
+              <p class="text-xs text-slate-400">
+                Si usa nella sezione Rientri per sapere di quale anno stai segnando le conferme.
+              </p>
+            </div>
+            <template #footer>
+              <UButton @click="salvaConfigs" :loading="salvandoConfigs">Salva Modifiche</UButton>
+            </template>
+          </UCard>
         </div>
       </template>
 
@@ -674,6 +698,7 @@
 <script setup lang="ts">
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
 import { SUPPLEMENTO_SPECIALE, TARIFFE_DEFAULT } from '#shared/tariffe'
+import { annoScolasticoDa, inizioAnnoProposto } from '#shared/rientri'
 import { addMonths, format, getDay, getDaysInMonth, setDate, startOfMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
 
@@ -882,6 +907,10 @@ const whatsappNumero = ref('')
 const sconti = ref<{ nome: string; descrizione: string; immagine: string }[]>([])
 const materieSpeciali = ref<string[]>([])
 const giornateSpeciali = ref<Record<string, string[]>>({})
+// Anno scolastico dei Rientri: se non è mai stato salvato, la pagina propone
+// l'anno di oggi e il lunedì della settimana del 15 settembre.
+const annoScolastico       = ref('')
+const inizioAnnoScolastico = ref('')
 
 watchEffect(() => {
   try { materie.value = JSON.parse(configs.value.materie || '[]') } catch(e){}
@@ -908,6 +937,8 @@ watchEffect(() => {
     giornateSpeciali.value = out
   } catch(e){}
   whatsappNumero.value = configs.value.whatsapp_numero || ''
+  annoScolastico.value = configs.value.anno_scolastico_corrente || annoScolasticoDa(oggiISO())
+  inizioAnnoScolastico.value = configs.value.anno_scolastico_inizio || inizioAnnoProposto(annoScolastico.value)
 })
 
 function materieDelGiorno(dateStr: string): string[] {
@@ -1128,6 +1159,8 @@ async function salvaConfigs() {
         sconti: JSON.stringify(sconti.value),
         materie_speciali: JSON.stringify(materieSpeciali.value),
         giornate_speciali: JSON.stringify(giornateSpeciali.value),
+        anno_scolastico_corrente: annoScolastico.value.trim(),
+        anno_scolastico_inizio:   inizioAnnoScolastico.value.trim(),
       }
     })
     toast.add({ title: 'Impostazioni salvate', color: 'success' })

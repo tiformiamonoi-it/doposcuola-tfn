@@ -38,6 +38,9 @@ export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: 
   // né in lettura né in scrittura. NB: '/api/contact' (form pubblico del sito)
   // è un percorso diverso e resta pubblico, vedi isPublicApi().
   { prefix: '/api/contacts',                roles: ADMIN_SUPER },
+  // Rientri (conferme di inizio anno): stessa riservatezza dei Contatti,
+  // niente TUTOR né in lettura né in scrittura.
+  { prefix: '/api/confirmations',           roles: ADMIN_SUPER },
   // Lettura studenti aperta allo STAFF (i dati dei genitori vengono rimossi per i TUTOR
   // nei handler GET); scritture (crea/modifica/disattiva/anonimizza) solo ADMIN/SUPER.
   { prefix: '/api/students',                roles: STAFF, mutationRoles: ADMIN_SUPER },

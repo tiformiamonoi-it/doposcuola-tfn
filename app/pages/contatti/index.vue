@@ -364,7 +364,12 @@ const tab = ref<TipoContatto>(route.query.tab === 'marketing' ? 'MARKETING' : 'D
 // ─── Filtri ───────────────────────────────────
 const ricerca            = ref('')
 const ricercaApplicata   = ref('')
-const filtroStato        = ref<string>(NESSUN_FILTRO)
+// Si può arrivare da un link già filtrato (es. dai Rientri: ?stato=IN_TRATTATIVA);
+// un valore non riconosciuto viene ignorato invece di svuotare la lista.
+const statoDaUrl = STATI_FILTRO_ITEMS.some((s) => s.value === route.query.stato)
+  ? String(route.query.stato)
+  : NESSUN_FILTRO
+const filtroStato        = ref<string>(statoDaUrl)
 const filtroCanale       = ref<string>(NESSUN_FILTRO)
 // "Chi è": possibili studenti / possibili tutor (solo cassetto Doposcuola)
 const filtroRuolo        = ref<string>(NESSUN_FILTRO)
