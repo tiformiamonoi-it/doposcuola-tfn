@@ -3,7 +3,7 @@ import { students, packages, lessons, lessonStudents } from '../database/schema'
 import { and, asc, count, desc, eq, gt, gte, ilike, isNull, or, inArray, exists, notExists, sql, arrayContains } from 'drizzle-orm'
 import { nomeProprio } from '../utils/nomi'
 import { computePackageStates } from './package.service'
-import { confiniGiornoOggiRome } from '../utils/tutor-time-window'
+import { confiniGiornoOggiRome, oggiRomeStr, romeDateStr } from '../utils/tutor-time-window'
 import type { CreateStudentInput, StudentQuery, UpdateStudentInput } from '#shared/schemas/student.schema'
 
 // Mappa i valori sortBy (dalla query) alle colonne Drizzle
@@ -109,6 +109,7 @@ export async function listStudents(query: StudentQuery) {
   let studentPackages: {
     id: string, nome: string, studentId: string, stati: string[], createdAt: Date, oreResiduo: string | null, tipo: string | null,
     oreAcquistate: string, importoResiduo: string, dataScadenza: Date | null, giorniResiduo: number | null, sospeso: boolean | null,
+    dataInizio: Date,
   }[] = []
   if (studentIds.length > 0) {
     studentPackages = await db.select({
@@ -124,6 +125,7 @@ export async function listStudents(query: StudentQuery) {
       dataScadenza: packages.dataScadenza,
       giorniResiduo: packages.giorniResiduo,
       sospeso: packages.sospeso,
+      dataInizio: packages.dataInizio,
     }).from(packages).where(inArray(packages.studentId, studentIds))
   }
 
@@ -146,6 +148,9 @@ export async function listStudents(query: StudentQuery) {
       for (const r of lezioniQuelGiorno) pacchettiConLezioneNellaData.add(r.packageId)
     }
   }
+
+  // Giorno civile italiano di oggi: calcolato UNA volta sola, non dentro il ciclo
+  const oggiStr = oggiRomeStr()
 
   const dataWithStatus = rows.map(student => {
     // Ricalcola gli stati al volo (la colonna salvata può essere obsoleta, es. scadenza
@@ -173,13 +178,24 @@ export async function listStudents(query: StudentQuery) {
        if (pkgs.length > 0) {
          pkgs.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
 
-         const hasDaPagare = pkgs.some(p => p.stati.includes('DA_PAGARE'))
+         // Priorità di PRESENTAZIONE del badge: nel database il pacchetto resta DA_PAGARE
+         // (contabilità, filtri e conteggi non cambiano), ma un saldo aperto su un pacchetto
+         // NON ancora iniziato non è un'urgenza e non deve dipingere l'alunno di rosso.
+         // Rosso solo se il servizio è già finito o scaduto e i soldi non sono stati incassati.
+         const debitoUrgente = pkgs.some(p => p.stati.includes('DA_PAGARE')
+           && (p.stati.includes('SCADUTO') || p.stati.includes('ESAURITO')))
+         // Servizio già partito (giorno civile italiano) ma non saldato: giallo, non rosso
+         const debitoInCorso = pkgs.some(p => p.stati.includes('DA_PAGARE')
+           && romeDateStr(new Date(p.dataInizio)) <= oggiStr)
          const hasDaRinnovare = pkgs.some(p => p.stati.includes('DA_RINNOVARE') || p.stati.includes('ESAURITO'))
          const hasScaduto = pkgs.some(p => p.stati.includes('SCADUTO'))
 
-         if (hasDaPagare) {
-           globalStatus = 'Da pagare'
+         if (debitoUrgente) {
+           globalStatus = 'Da saldare'
            statusColor = 'error'
+         } else if (debitoInCorso) {
+           globalStatus = 'Da saldare'
+           statusColor = 'warning'
          } else if (hasDaRinnovare) {
            globalStatus = 'Da rinnovare'
            statusColor = 'warning'

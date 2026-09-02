@@ -32,6 +32,18 @@ const progresso = computed(() => {
   }
 })
 
+// Pacchetto non ancora iniziato: confronto solo sul giorno (azzerando l'ora), mai sull'orario
+const nonIniziato = computed(() => {
+  const inizio = props.pacchetto?.dataInizio
+  if (!inizio) return false
+  const d = new Date(inizio)
+  if (isNaN(d.getTime())) return false
+  d.setHours(0, 0, 0, 0)
+  const oggi = new Date()
+  oggi.setHours(0, 0, 0, 0)
+  return d.getTime() > oggi.getTime()
+})
+
 const colore = computed(() => {
   switch (props.stato) {
     case 'ATTIVO':       return 'success'
@@ -41,6 +53,8 @@ const colore = computed(() => {
     case 'DA_PAGARE':
       // Se il pacchetto ha più del 90% rimanente, il badge "Da PAGARE" è neutro (meno allarmante)
       if (props.pacchetto && progresso.value > 90) return 'neutral'
+      // Pacchetto che non è ancora partito: nessuna urgenza di incasso, badge neutro
+      if (nonIniziato.value) return 'neutral'
       return 'warning'
     case 'PAGATO':       return 'info'
     case 'CHIUSO':       return 'neutral'
