@@ -4,7 +4,8 @@ import { createPortalAccount } from '../../../../services/portal-user.service'
 import { toHttpError } from '../../../../utils/http-error'
 
 // POST /api/admin/students/:id/portal-access
-// Con force=true: collega lo studente a un account GENITORE esistente (senza reset password)
+// AGGIUNGE un genitore all'alunno (gli altri genitori già collegati non si toccano).
+// Con force=true: collega l'alunno a un account GENITORE esistente (senza reset password)
 // Senza force (o force=false): crea nuovo account o restituisce { requiresConfirmation: true }
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -19,14 +20,17 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const force = body.force === true
 
-  let input: { studentId: string; email: string; firstName: string; lastName: string }
+  let input: { studentId: string; email: string; firstName: string; lastName: string; relazione?: string }
   if (force) {
-    // Solo email necessaria per trovare l'account esistente
-    const emailParse = z.object({ email: z.string().email() }).safeParse(body)
+    // Solo email necessaria per trovare l'account esistente; l'etichetta resta opzionale
+    const emailParse = z.object({
+      email:     z.string().email(),
+      relazione: z.string().max(50).optional(),
+    }).safeParse(body)
     if (!emailParse.success) {
       throw createError({ statusCode: 422, statusMessage: 'Email non valida' })
     }
-    input = { studentId, email: emailParse.data.email, firstName: '', lastName: '' }
+    input = { studentId, email: emailParse.data.email, firstName: '', lastName: '', relazione: emailParse.data.relazione }
   } else {
     const result = CreatePortalAccessSchema.safeParse({ ...body, studentId })
     if (!result.success) {
@@ -55,7 +59,11 @@ export default defineEventHandler(async (event) => {
     }
   } catch (err: any) {
     if (err.statusCode) throw err
-    const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('staff') ? 409 : 400
+    const code = err.message?.includes('non trovato')
+      ? 404
+      : (err.message?.includes('staff') || err.message?.includes('già collegato') || err.message?.includes('già usata'))
+          ? 409
+          : 400
     throw toHttpError(err, code)
   }
 })

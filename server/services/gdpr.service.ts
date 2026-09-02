@@ -5,7 +5,7 @@
 // - anonymizeLostContacts → art. 5.1.e (limitazione della conservazione): pulizia
 //   automatica dei contatti "Persi" da oltre 12 mesi, lanciata dal cron giornaliero
 import { db } from '../database/client'
-import { students, studentNotes, bookings, users, packages, payments, packageRecharges, lessons, lessonStudents, contacts, contactInteractions } from '../database/schema'
+import { students, studentParents, studentNotes, bookings, users, packages, payments, packageRecharges, lessons, lessonStudents, contacts, contactInteractions } from '../database/schema'
 import { and, eq, ne, inArray, isNull, lt, sql } from 'drizzle-orm'
 
 export async function anonymizeStudent(id: string) {
@@ -36,24 +36,32 @@ export async function anonymizeStudent(id: string) {
       }).where(eq(users.id, student.studentUserId))
     }
 
-    // Account portale del genitore: anonimizzato solo se non è collegato ad altri figli
-    let accountGenitoreAnonimizzato = false
-    if (student.portalUserId) {
-      const [altroFiglio] = await tx.select({ id: students.id }).from(students)
-        .where(and(eq(students.portalUserId, student.portalUserId), ne(students.id, id)))
+    // Account portale dei genitori collegati: ognuno viene anonimizzato solo se non
+    // ha altri figli collegati (chi ne ha resta intatto, gli serve per gli altri figli).
+    const collegamenti = await tx.select({ parentUserId: studentParents.parentUserId })
+      .from(studentParents)
+      .where(eq(studentParents.studentId, id))
+
+    let genitoriAnonimizzati = 0
+    for (const { parentUserId } of collegamenti) {
+      const [altroFiglio] = await tx.select({ id: studentParents.id }).from(studentParents)
+        .where(and(eq(studentParents.parentUserId, parentUserId), ne(studentParents.studentId, id)))
         .limit(1)
-      if (!altroFiglio) {
-        await tx.update(users).set({
-          active:    false,
-          email:     `anonimizzato-${student.portalUserId}@anonimo.invalid`,
-          firstName: 'Genitore',
-          lastName:  'Anonimizzato',
-          phone:     null,
-          updatedAt: new Date(),
-        }).where(eq(users.id, student.portalUserId))
-        accountGenitoreAnonimizzato = true
-      }
+      if (altroFiglio) continue
+
+      await tx.update(users).set({
+        active:    false,
+        email:     `anonimizzato-${parentUserId}@anonimo.invalid`,
+        firstName: 'Genitore',
+        lastName:  'Anonimizzato',
+        phone:     null,
+        updatedAt: new Date(),
+      }).where(eq(users.id, parentUserId))
+      genitoriAnonimizzati++
     }
+
+    // Nessun genitore deve più vedere questo alunno nel portale
+    await tx.delete(studentParents).where(eq(studentParents.studentId, id))
 
     // Anagrafica studente: svuotata. Pacchetti/pagamenti/contabilità NON si toccano
     // (conservazione obbligatoria per legge), ma non rimandano più a una persona identificabile.
@@ -72,7 +80,7 @@ export async function anonymizeStudent(id: string) {
     return {
       noteEliminate:            noteEliminate.length,
       prenotazioniAnonimizzate: prenotazioni.length,
-      accountGenitoreAnonimizzato,
+      genitoriAnonimizzati,
     }
   })
 }

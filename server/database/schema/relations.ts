@@ -1,6 +1,6 @@
 import { relations } from 'drizzle-orm'
 import { users, tutorProfiles, tutorAvailabilities } from './users'
-import { students, studentReferrals } from './students'
+import { students, studentReferrals, studentParents } from './students'
 import { packages, standardPackages, packageRecharges, payments } from './packages'
 import { lessons, lessonStudents, timeSlots } from './lessons'
 import { accountingEntries, tutorPayments, tutorReimbursements } from './accounting'
@@ -17,7 +17,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   availabilities:  many(tutorAvailabilities),
   bookingSubjects: many(bookingSubjects),
   bookings:        many(bookings),
-  linkedStudents:  many(students, { relationName: 'portalUser' }),
+  parentLinks:     many(studentParents),
   ownStudent:      many(students, { relationName: 'studentUser' }),
   authoredNotes:   many(studentNotes),
 }))
@@ -30,7 +30,7 @@ export const studentsRelations = relations(students, ({ one, many }) => ({
   packages:   many(packages),
   referredBy: many(studentReferrals, { relationName: 'referred' }),
   referrals:  many(studentReferrals, { relationName: 'referrer' }),
-  portalUser:  one(users, { fields: [students.portalUserId], references: [users.id], relationName: 'portalUser' }),
+  parents:     many(studentParents),
   studentUser: one(users, { fields: [students.studentUserId], references: [users.id], relationName: 'studentUser' }),
   notes:       many(studentNotes),
 }))
@@ -94,4 +94,10 @@ export const contactsRelations = relations(contacts, ({ one, many }) => ({
 export const contactInteractionsRelations = relations(contactInteractions, ({ one }) => ({
   contact:   one(contacts, { fields: [contactInteractions.contactId], references: [contacts.id] }),
   createdBy: one(users, { fields: [contactInteractions.createdByUserId], references: [users.id] }),
+}))
+
+// Ponte alunno ↔ genitori con accesso al portale famiglie
+export const studentParentsRelations = relations(studentParents, ({ one }) => ({
+  student:    one(students, { fields: [studentParents.studentId], references: [students.id] }),
+  parentUser: one(users, { fields: [studentParents.parentUserId], references: [users.id] }),
 }))

@@ -5,6 +5,8 @@ export const CreatePortalAccessSchema = z.object({
   email:     z.string().email({ message: 'Email non valida' }),
   firstName: z.string().min(1).max(100),
   lastName:  z.string().min(1).max(100),
+  // Etichetta libera del legame con l'alunno: "Padre", "Madre", "Tutore legale"…
+  relazione: z.string().max(50).optional(),
 })
 
 export const ResetPortalPasswordSchema = z.object({

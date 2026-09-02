@@ -2,6 +2,7 @@ import { getPortalAccess } from '../../../../services/portal-user.service'
 import { toHttpError } from '../../../../utils/http-error'
 
 // GET /api/admin/students/:id/portal-access
+// Restituisce l'elenco dei genitori collegati all'alunno ({ parents: [...] })
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
 

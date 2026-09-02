@@ -26,7 +26,6 @@ export const students = pgTable('students', {
   note:            text('note'),
   bisogniSpeciali: text('bisogni_speciali'),
 
-  portalUserId:                text('portal_user_id').references(() => users.id, { onDelete: 'set null' }),
   // Account personale dello STUDENTE (solo prenotazioni). Attivo di default alla
   // creazione; per disattivarlo si usa users.active del relativo utente.
   studentUserId:               text('student_user_id').references(() => users.id, { onDelete: 'set null' }),
@@ -36,7 +35,6 @@ export const students = pgTable('students', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   activeNameIdx:  index('students_active_name_idx').on(t.active, t.lastName, t.firstName),
-  portalUserIdx:  index('students_portal_user_idx').on(t.portalUserId),
 }))
 
 export const studentReferrals = pgTable('student_referrals', {
@@ -48,4 +46,18 @@ export const studentReferrals = pgTable('student_referrals', {
   uniquePair:  uniqueIndex('referral_unique_pair').on(t.referredId, t.referrerId),
   referredIdx: index('referral_referred_idx').on(t.referredId),
   referrerIdx: index('referral_referrer_idx').on(t.referrerId),
+}))
+
+// Collegamento N-a-N tra un alunno e i suoi genitori con accesso al portale famiglie
+// (es. genitori separati: ognuno ha il proprio account e vede lo stesso figlio).
+export const studentParents = pgTable('student_parents', {
+  id:           text('id').primaryKey().$defaultFn(cuid),
+  studentId:    text('student_id').notNull().references(() => students.id, { onDelete: 'cascade' }),
+  parentUserId: text('parent_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  relazione:    varchar('relazione', { length: 50 }), // "Padre", "Madre", "Tutore legale", testo libero
+  createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  uniquePair: uniqueIndex('student_parents_unique_pair').on(t.studentId, t.parentUserId),
+  studentIdx: index('student_parents_student_idx').on(t.studentId),
+  parentIdx:  index('student_parents_parent_idx').on(t.parentUserId),
 }))

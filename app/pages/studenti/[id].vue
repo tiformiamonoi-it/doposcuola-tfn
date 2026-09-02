@@ -342,16 +342,21 @@
                   </dl>
                 </UCard>
 
-                <!-- Portale Famiglie -->
+                <!-- Portale Famiglie — un alunno può avere PIÙ genitori collegati -->
                 <UCard v-if="isAdmin">
                   <template #header>
-                    <div class="flex items-center gap-2">
-                      <UIcon name="i-heroicons-globe-alt" class="w-5 h-5 text-tfn-500" />
-                      <span class="font-medium text-slate-800">Credenziali Portale Famiglie</span>
+                    <div class="flex items-center justify-between gap-2">
+                      <div class="flex items-center gap-2">
+                        <UIcon name="i-heroicons-globe-alt" class="w-5 h-5 text-tfn-500" />
+                        <span class="font-medium text-slate-800">Credenziali Portale Famiglie</span>
+                        <StatHelp text="Ogni genitore ha un proprio account (email e password) per accedere al portale famiglie. Puoi collegarne quanti ne servono: rimuovendone uno, gli altri continuano a funzionare." />
+                      </div>
+                      <UButton icon="i-heroicons-plus" size="xs" variant="soft" @click="apriModalCreaAccesso">Aggiungi genitore</UButton>
                     </div>
                   </template>
 
-                  <div v-if="confermaCollegamento" class="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
+                  <!-- L'email inserita appartiene già a un account genitore esistente -->
+                  <div v-if="confermaCollegamento" class="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3 mb-4">
                     <div class="flex items-start gap-3">
                       <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                       <div>
@@ -365,32 +370,40 @@
                       <UButton size="sm" color="primary" :loading="creandoAccesso" @click="creaAccessoPortale(true)">Sì, collega studente</UButton>
                     </div>
                   </div>
-                  <template v-else-if="!(portalAccess as any)?.portalUser">
-                    <p class="text-sm text-slate-500 mb-4">Questo studente non ha ancora un account portale. Crea un accesso per il genitore per consentirgli di visualizzare note e richiedere lezioni.</p>
-                    <UButton icon="i-heroicons-plus" @click="apriModalCreaAccesso">Crea accesso portale</UButton>
-                  </template>
-                  <template v-else>
-                    <div class="bg-slate-50 border border-slate-100 rounded-lg p-4">
-                      <dl class="space-y-3 text-sm">
-                        <div class="flex justify-between items-center border-b border-slate-200 pb-2">
-                          <span class="text-slate-500">Email di accesso</span>
-                          <span class="font-medium text-slate-800">{{ (portalAccess as any).portalUser?.email }}</span>
-                        </div>
-                        <div class="flex items-center justify-between pt-1">
-                          <span class="text-slate-500">Prenotazione online abilitata</span>
-                          <USwitch :model-value="(portalAccess as any).abilitatoPrenotazioneOnline" :loading="togglando" @update:model-value="togglePrenotazione" />
-                        </div>
-                      </dl>
-                    </div>
 
-                    <UAlert v-if="resetPassword" color="warning" icon="i-heroicons-key" title="Nuova password temporanea" :description="`Comunica questa password al genitore: ${resetPassword} (mostrata una sola volta)${resetEmailInviata ? ' — inviata anche via email al genitore' : ''}`" class="mt-4" :close-button="{ icon: 'i-heroicons-x-mark' }" @close="resetPassword = null" />
-                    <UAlert v-if="credenziali" color="info" icon="i-heroicons-key" title="Account creato — comunicare al genitore:" :description="`Email: ${credenziali.email} | Password: ${credenziali.tempPassword}${credenziali.emailInviata ? ' — credenziali inviate anche via email' : ''}`" class="mt-4" :close-button="{ icon: 'i-heroicons-x-mark' }" @close="credenziali = null" />
-
-                    <div class="mt-4 flex gap-2">
-                      <UButton variant="outline" size="sm" icon="i-heroicons-key" @click="reimpostaPassword">Genera nuova password</UButton>
-                      <UButton variant="outline" color="error" size="sm" icon="i-heroicons-trash" @click="eliminaAccessoPortale()">Elimina account</UButton>
+                  <!-- Elenco genitori collegati -->
+                  <p v-if="genitoriPortale.length === 0" class="text-sm text-slate-500">
+                    Nessun genitore è ancora collegato al portale. Usa <strong>Aggiungi genitore</strong> per creare un accesso e consentirgli di vedere le note e richiedere lezioni.
+                  </p>
+                  <div v-else class="space-y-2">
+                    <div
+                      v-for="g in genitoriPortale"
+                      :key="g.id"
+                      class="bg-slate-50 border border-slate-100 rounded-lg p-3 flex flex-wrap items-start justify-between gap-3"
+                    >
+                      <div class="min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap">
+                          <span class="font-medium text-slate-800">{{ g.firstName }} {{ g.lastName }}</span>
+                          <UBadge v-if="g.relazione" color="primary" variant="subtle" size="xs">{{ g.relazione }}</UBadge>
+                          <UBadge v-if="!g.active" color="neutral" variant="subtle" size="xs">Account disattivato</UBadge>
+                        </div>
+                        <div class="text-sm text-slate-500 mt-0.5 break-all">{{ g.email }}</div>
+                      </div>
+                      <div class="flex gap-2 shrink-0">
+                        <UButton variant="outline" size="xs" icon="i-heroicons-key" :loading="resettandoId === g.id" @click="reimpostaPassword(g.id, g.email)">Genera nuova password</UButton>
+                        <UButton variant="outline" color="error" size="xs" icon="i-heroicons-trash" :loading="rimuovendoId === g.id" @click="eliminaAccessoPortale(g.id, g.email)">Rimuovi</UButton>
+                      </div>
                     </div>
-                  </template>
+                  </div>
+
+                  <UAlert v-if="resetPassword" color="warning" icon="i-heroicons-key" title="Nuova password temporanea" :description="`Comunica questa password a ${resetPassword.email}: ${resetPassword.tempPassword} (mostrata una sola volta)${resetPassword.emailInviata ? ' — inviata anche via email al genitore' : ''}`" class="mt-4" :close-button="{ icon: 'i-heroicons-x-mark' }" @close="resetPassword = null" />
+                  <UAlert v-if="credenziali" color="info" icon="i-heroicons-key" title="Account creato — comunicare al genitore:" :description="`Email: ${credenziali.email} | Password: ${credenziali.tempPassword}${credenziali.emailInviata ? ' — credenziali inviate anche via email' : ''}`" class="mt-4" :close-button="{ icon: 'i-heroicons-x-mark' }" @close="credenziali = null" />
+
+                  <!-- Impostazione dell'ALUNNO, valida per tutti i genitori collegati -->
+                  <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-sm">
+                    <span class="text-slate-500">Prenotazione online abilitata</span>
+                    <USwitch :model-value="(portalAccess as any)?.abilitatoPrenotazioneOnline ?? false" :loading="togglando" @update:model-value="togglePrenotazione" />
+                  </div>
                 </UCard>
 
                 <!-- Account Studente (solo prenotazioni) -->
@@ -501,12 +514,13 @@
       @refresh="ricaricaDopoPacchetto"
     />
 
-    <!-- ─── MODAL CREA ACCESSO PORTALE ─── -->
-    <UModal v-model:open="mostraModalCreaAccesso" title="Crea accesso portale">
+    <!-- ─── MODAL AGGIUNGI GENITORE AL PORTALE ─── -->
+    <UModal v-model:open="mostraModalCreaAccesso" title="Aggiungi genitore al portale">
       <template #body>
         <div class="space-y-4 p-4">
           <p class="text-sm text-slate-500">
             Inserisci i dati del genitore. Verrà generata una password temporanea da comunicare manualmente.
+            Se l'email è già registrata come genitore (per esempio di un fratello), verrà chiesta una conferma prima di collegare l'account.
           </p>
           <UFormField label="Email genitore">
             <UInput v-model="datiCreaAccesso.email" type="email" class="w-full" placeholder="genitore@email.it" />
@@ -516,6 +530,31 @@
           </UFormField>
           <UFormField label="Cognome">
             <UInput v-model="datiCreaAccesso.lastName" class="w-full" placeholder="Rossi" />
+          </UFormField>
+          <UFormField label="Ruolo (facoltativo)" help="Serve solo alla segreteria per capire chi è chi.">
+            <div class="flex gap-2">
+              <USelect
+                v-model="datiCreaAccesso.relazione"
+                :items="RELAZIONI_ITEMS"
+                placeholder="Nessuna etichetta"
+                class="w-full"
+              />
+              <UInput
+                v-if="datiCreaAccesso.relazione === 'ALTRO'"
+                v-model="datiCreaAccesso.relazioneAltro"
+                class="flex-1"
+                placeholder="Es. Zia, Affidatario…"
+                :maxlength="50"
+              />
+            </div>
+            <button
+              v-if="datiCreaAccesso.relazione"
+              type="button"
+              class="text-xs text-tfn-500 hover:underline mt-1 block"
+              @click="datiCreaAccesso.relazione = ''; datiCreaAccesso.relazioneAltro = ''"
+            >
+              Togli etichetta
+            </button>
           </UFormField>
         </div>
       </template>
@@ -528,7 +567,7 @@
             :disabled="!datiCreaAccesso.email || !datiCreaAccesso.firstName || !datiCreaAccesso.lastName"
             @click="creaAccessoPortale()"
           >
-            Crea account
+            Aggiungi genitore
           </UButton>
         </div>
       </template>
@@ -1000,12 +1039,31 @@ function esportaCsvPrenotazioni() {
   URL.revokeObjectURL(url)
 }
 
+// Elenco dei genitori collegati a questo alunno (possono essere più di uno)
+const genitoriPortale = computed<any[]>(() => ((portalAccess.value as any)?.parents ?? []) as any[])
+
+// Etichette di ruolo proposte; "ALTRO" apre un campo di testo libero accanto al menu
+const RELAZIONI_ITEMS = [
+  { label: 'Padre',           value: 'Padre' },
+  { label: 'Madre',           value: 'Madre' },
+  { label: 'Tutore legale',   value: 'Tutore legale' },
+  { label: 'Nonno/a',         value: 'Nonno/a' },
+  { label: 'Altro (specifica)', value: 'ALTRO' },
+]
+
 const mostraModalCreaAccesso = ref(false)
-const datiCreaAccesso = reactive({ email: '', firstName: '', lastName: '' })
+const datiCreaAccesso = reactive({ email: '', firstName: '', lastName: '', relazione: '', relazioneAltro: '' })
+// Etichetta effettiva da inviare all'API: vuota = nessuna etichetta (campo omesso dal body)
+const relazioneScelta = computed(() => {
+  if (!datiCreaAccesso.relazione) return ''
+  if (datiCreaAccesso.relazione === 'ALTRO') return datiCreaAccesso.relazioneAltro.trim().slice(0, 50)
+  return datiCreaAccesso.relazione
+})
 const credenziali = ref<{ email: string; tempPassword: string; emailInviata?: boolean } | null>(null)
 const creandoAccesso = ref(false)
-const resetPassword = ref<string | null>(null)
-const resetEmailInviata = ref(false)
+const resetPassword = ref<{ email: string; tempPassword: string; emailInviata: boolean } | null>(null)
+const resettandoId = ref<string | null>(null)
+const rimuovendoId = ref<string | null>(null)
 
 // ─── Account Studente (solo prenotazioni) ───
 const { data: studentAccount, refresh: refreshStudentAccount } = useLazyFetch(
@@ -1082,12 +1140,19 @@ const confermaCollegamento = ref<{
 
 function apriModalCreaAccesso() {
   const s = studente.value as any
-  datiCreaAccesso.email = s?.parentEmail ?? ''
-  if (s?.parentName) {
+  // Il primo genitore si precompila con i dati anagrafici della scheda; dal secondo
+  // in poi si parte da campi vuoti (altrimenti si riproporrebbe il genitore già collegato).
+  const primoGenitore = genitoriPortale.value.length === 0
+  datiCreaAccesso.email     = primoGenitore ? (s?.parentEmail ?? '') : ''
+  datiCreaAccesso.firstName = ''
+  datiCreaAccesso.lastName  = ''
+  if (primoGenitore && s?.parentName) {
     const parts = (s.parentName as string).trim().split(/\s+/)
     datiCreaAccesso.firstName = parts[0] ?? ''
     datiCreaAccesso.lastName  = parts.slice(1).join(' ')
   }
+  datiCreaAccesso.relazione      = ''
+  datiCreaAccesso.relazioneAltro = ''
   confermaCollegamento.value = null
   mostraModalCreaAccesso.value = true
 }
@@ -1095,9 +1160,16 @@ function apriModalCreaAccesso() {
 async function creaAccessoPortale(force = false) {
   creandoAccesso.value = true
   try {
+    const relazione = relazioneScelta.value
     const body = force
-      ? { email: datiCreaAccesso.email, force: true }
-      : { ...datiCreaAccesso }
+      ? { email: datiCreaAccesso.email, force: true, ...(relazione ? { relazione } : {}) }
+      : {
+          studentId: id,
+          email:     datiCreaAccesso.email,
+          firstName: datiCreaAccesso.firstName,
+          lastName:  datiCreaAccesso.lastName,
+          ...(relazione ? { relazione } : {}),
+        }
     const res = await $fetch(`/api/admin/students/${id}/portal-access`, {
       method: 'POST',
       body,
@@ -1118,20 +1190,20 @@ async function creaAccessoPortale(force = false) {
 
     if (res.alreadyExisted) {
       toast.add({
-        title: 'Studente collegato',
+        title: 'Genitore collegato',
         description: 'L\'account del genitore era già registrato — le credenziali non sono cambiate.',
         color: 'success',
       })
       confermaCollegamento.value = null
     } else {
       credenziali.value = { email: res.email, tempPassword: res.tempPassword, emailInviata: res.emailInviata === true }
-      toast.add({ title: 'Account portale creato', color: 'success' })
+      toast.add({ title: 'Genitore aggiunto al portale', color: 'success' })
     }
     mostraModalCreaAccesso.value = false
   } catch (e: any) {
     toast.add({
       title: 'Errore',
-      description: e?.data?.statusMessage ?? 'Impossibile creare account',
+      description: e?.data?.statusMessage ?? 'Impossibile aggiungere il genitore',
       color: 'error',
     })
   } finally {
@@ -1139,45 +1211,59 @@ async function creaAccessoPortale(force = false) {
   }
 }
 
-function eliminaAccessoPortale() {
-  const email = (portalAccess.value as any)?.portalUser?.email ?? ''
+// Scollega UN genitore da QUESTO alunno. Se non ha altri figli collegati il backend
+// elimina anche l'account; se ne ha altri, l'account resta attivo per loro.
+function eliminaAccessoPortale(parentUserId: string, email = '') {
+  if (!parentUserId) return
   chiediConferma(
     {
-      title: 'Eliminare l\'account portale?',
-      description: `L'account ${email} verrà eliminato e il genitore non potrà più accedere. Utile se l'email era sbagliata. Se l'account è collegato anche ad altri figli, perderanno l'accesso anche loro.`,
-      confirmLabel: 'Elimina',
+      title: 'Rimuovere il genitore dall\'alunno?',
+      description: `${email} non potrà più vedere questo alunno nel portale. Se non ha altri figli collegati, l'account viene eliminato; gli altri genitori di questo alunno restano collegati.`,
+      confirmLabel: 'Rimuovi',
       confirmColor: 'error',
     },
     async () => {
+      rimuovendoId.value = parentUserId
       try {
-        await $fetch(`/api/admin/students/${id}/portal-access`, { method: 'DELETE' })
-        toast.add({ title: 'Account portale eliminato', color: 'success', icon: 'i-heroicons-check-circle' })
+        const res = await $fetch(`/api/admin/students/${id}/portal-access/${parentUserId}`, { method: 'DELETE' }) as any
+        toast.add({
+          title: res?.accountEliminato ? 'Genitore rimosso e account eliminato' : 'Genitore scollegato',
+          description: res?.accountEliminato
+            ? `${email} non aveva altri alunni collegati: l'account è stato eliminato.`
+            : `${email} non vede più questo alunno, ma il suo account resta attivo per gli altri figli collegati.`,
+          color: 'success',
+          icon: 'i-heroicons-check-circle',
+        })
         credenziali.value = null
         resetPassword.value = null
         await refreshPortal()
       } catch (e: any) {
-        toast.add({ title: 'Errore', description: e?.data?.statusMessage ?? 'Impossibile eliminare l\'account', color: 'error' })
+        toast.add({ title: 'Errore', description: e?.data?.statusMessage ?? 'Impossibile rimuovere il genitore', color: 'error' })
+      } finally {
+        rimuovendoId.value = null
       }
     }
   )
 }
 
-async function reimpostaPassword() {
-  const acc = portalAccess.value as any
-  if (!acc?.portalUser?.id) return
+// Nuova password temporanea per UN genitore specifico dell'elenco
+async function reimpostaPassword(parentUserId: string, email = '') {
+  if (!parentUserId) return
+  resettandoId.value = parentUserId
   try {
-    const res = await $fetch(`/api/admin/students/${id}/portal-access`, {
+    const res = await $fetch(`/api/admin/students/${id}/portal-access/${parentUserId}`, {
       method: 'PUT',
-      body: { action: 'reset-password', userId: acc.portalUser.id },
+      body: { action: 'reset-password' },
     }) as any
-    resetPassword.value = res.tempPassword
-    resetEmailInviata.value = res.emailInviata === true
+    resetPassword.value = { email, tempPassword: res.tempPassword, emailInviata: res.emailInviata === true }
   } catch (e: any) {
     toast.add({
       title: 'Errore',
       description: e?.data?.statusMessage ?? 'Impossibile reimpostare password',
       color: 'error',
     })
+  } finally {
+    resettandoId.value = null
   }
 }
 

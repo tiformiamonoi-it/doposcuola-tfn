@@ -1,9 +1,10 @@
 import { z } from 'zod'
-import { resetPortalPassword, updatePrenotazioneFlag } from '../../../../services/portal-user.service'
+import { updatePrenotazioneFlag } from '../../../../services/portal-user.service'
 import { toHttpError } from '../../../../utils/http-error'
 
+// Solo azioni che riguardano l'alunno nel suo insieme: le azioni su un singolo
+// genitore (reset password, scollegamento) stanno in portal-access/[parentUserId].*
 const PutSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('reset-password'), userId: z.string().min(1) }),
   z.object({ action: z.literal('toggle-prenotazione'), abilitato: z.boolean() }),
 ])
 
@@ -25,11 +26,6 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    if (result.data.action === 'reset-password') {
-      const { tempPassword, emailInviata } = await resetPortalPassword(result.data.userId)
-      return { ok: true, tempPassword, emailInviata }
-    }
-
     if (result.data.action === 'toggle-prenotazione') {
       await updatePrenotazioneFlag(studentId, result.data.abilitato)
       return { ok: true }

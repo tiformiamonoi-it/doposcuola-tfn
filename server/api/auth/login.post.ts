@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { db } from '../../database/client'
-import { users, students } from '../../database/schema'
+import { users, students, studentParents } from '../../database/schema'
 import { TERMS_VERSION, PRIVACY_STUDENTE_VERSION } from '#shared/legal'
 import { rateLimitExceeded } from '../../utils/rate-limit'
 
@@ -34,11 +34,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, message: 'Credenziali non valide' })
   }
 
-  // GENITORE: figli collegati (supporto fratelli). STUDENTE: sé stesso.
+  // GENITORE: figli collegati via student_parents (supporto fratelli e più genitori).
+  // STUDENTE: sé stesso.
   let linkedStudentIds: string[] | undefined
-  if (user.role === 'GENITORE' || user.role === 'STUDENTE') {
+  if (user.role === 'GENITORE') {
+    const linked = await db.query.studentParents.findMany({
+      where: eq(studentParents.parentUserId, user.id),
+      columns: { studentId: true },
+    })
+    linkedStudentIds = linked.map((s) => s.studentId)
+  } else if (user.role === 'STUDENTE') {
     const linked = await db.query.students.findMany({
-      where: eq(user.role === 'GENITORE' ? students.portalUserId : students.studentUserId, user.id),
+      where: eq(students.studentUserId, user.id),
       columns: { id: true },
     })
     linkedStudentIds = linked.map((s) => s.id)

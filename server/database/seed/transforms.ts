@@ -100,7 +100,7 @@ export const tx = {
     parentIndirizzo: r.parentIndirizzo, parentCitta: r.parentCitta, parentCap: r.parentCap,
     parentCF: r.parentCF, parentPIva: r.parentPIva,
     active: toBool(r.active), note: r.note, bisogniSpeciali: r.bisogniSpeciali,
-    portalUserId: null, abilitatoPrenotazioneOnline: false,
+    abilitatoPrenotazioneOnline: false,
     createdAt: toDateReq(r.createdAt), updatedAt: toDateReq(r.updatedAt),
   }),
 

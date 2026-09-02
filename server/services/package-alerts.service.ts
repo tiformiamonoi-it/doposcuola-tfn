@@ -1,13 +1,15 @@
-// Avvisi email al genitore per pacchetti in esaurimento (ore) o in scadenza (data).
+// Avvisi email ai genitori per pacchetti in esaurimento (ore) o in scadenza (data).
+// L'avviso va a TUTTI i genitori collegati con account attivo (student_parents);
+// se l'alunno non ne ha nessuno si usa l'email di contatto in anagrafica.
 // Soglie identiche allo stato DA_RINNOVARE: ore residue < 20%, scadenza entro 3 giorni.
 // Dedup tramite packages.avvisoOreInviatoAt / avvisoScadenzaInviatoAt
 // (azzerati da ricarica o modifica di ore/scadenza in package.service.ts).
-import { and, eq, isNull, or, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import { db } from '../database/client'
-import { packages, students, users } from '../database/schema'
+import { packages, students, studentParents, users } from '../database/schema'
 import { sendEmail, emailAvvisoPacchetto } from '../utils/email'
 
-// ponytail: cap 50 email/run — ben sotto il limite Brevo (300/giorno); il resto passa al giro dopo
+// ponytail: cap 50 pacchetti/run — ben sotto il limite Brevo (300/giorno); il resto passa al giro dopo
 const MAX_PER_RUN = 50
 
 export async function runPackageAlerts() {
@@ -19,14 +21,13 @@ export async function runPackageAlerts() {
     dataScadenza:            packages.dataScadenza,
     avvisoOreInviatoAt:      packages.avvisoOreInviatoAt,
     avvisoScadenzaInviatoAt: packages.avvisoScadenzaInviatoAt,
+    studentId:               students.id,
     studentFirstName:        students.firstName,
     studentLastName:         students.lastName,
     parentEmail:             students.parentEmail,
-    portalEmail:             users.email,
   })
     .from(packages)
     .innerJoin(students, eq(packages.studentId, students.id))
-    .leftJoin(users, eq(students.portalUserId, users.id))
     .where(and(
       eq(packages.sospeso, false),
       sql`NOT ('CHIUSO' = ANY(${packages.stati}))`,
@@ -49,12 +50,41 @@ export async function runPackageAlerts() {
     ))
     .limit(MAX_PER_RUN)
 
+  // Una sola query per tutti gli alunni coinvolti: email dei genitori con account attivo
+  const studentIds = [...new Set(rows.map((r) => r.studentId))]
+  const parentRows = studentIds.length
+    ? await db.select({ studentId: studentParents.studentId, email: users.email })
+        .from(studentParents)
+        .innerJoin(users, eq(studentParents.parentUserId, users.id))
+        .where(and(inArray(studentParents.studentId, studentIds), eq(users.active, true)))
+    : []
+
+  const emailPerStudente = new Map<string, string[]>()
+  for (const p of parentRows) {
+    const lista = emailPerStudente.get(p.studentId) ?? []
+    if (!lista.includes(p.email)) lista.push(p.email)
+    emailPerStudente.set(p.studentId, lista)
+  }
+
   let inviati = 0
+  let emailInviate = 0
+
+  // Invia lo stesso avviso a ogni destinatario (sendEmail accetta un solo `to`).
+  // L'avviso conta come inviato se almeno un destinatario lo ha ricevuto.
+  async function inviaATutti(destinatari: string[], contenuto: { subject: string; html: string }) {
+    let almenoUno = false
+    for (const to of destinatari) {
+      const { sent } = await sendEmail({ to, ...contenuto })
+      if (sent) { almenoUno = true; emailInviate++ }
+    }
+    return almenoUno
+  }
 
   for (const row of rows) {
-    // Destinatario: account portale, altrimenti l'email genitore in anagrafica
-    const to = row.portalEmail ?? row.parentEmail
-    if (!to) continue
+    // Destinatari: tutti i genitori con account attivo; in mancanza, l'email in anagrafica
+    const genitori = emailPerStudente.get(row.studentId) ?? []
+    const destinatari = genitori.length > 0 ? genitori : (row.parentEmail ? [row.parentEmail] : [])
+    if (destinatari.length === 0) continue
 
     const nomeStudente = `${row.studentFirstName} ${row.studentLastName}`
     // Ricontrollo completo in JS: la riga può essere entrata nel result per l'altra condizione
@@ -70,27 +100,21 @@ export async function runPackageAlerts() {
     const flags: Record<string, Date> = {}
 
     if (oreQuasiEsaurite) {
-      const { sent } = await sendEmail({
-        to,
-        ...emailAvvisoPacchetto({
-          nomeStudente,
-          nomePacchetto: row.nome,
-          tipoAvviso: 'ore',
-        }),
-      })
+      const sent = await inviaATutti(destinatari, emailAvvisoPacchetto({
+        nomeStudente,
+        nomePacchetto: row.nome,
+        tipoAvviso: 'ore',
+      }))
       if (sent) { flags.avvisoOreInviatoAt = new Date(); inviati++ }
     }
 
     if (inScadenza) {
-      const { sent } = await sendEmail({
-        to,
-        ...emailAvvisoPacchetto({
-          nomeStudente,
-          nomePacchetto: row.nome,
-          tipoAvviso: 'scadenza',
-          dataScadenza: row.dataScadenza!.toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' }),
-        }),
-      })
+      const sent = await inviaATutti(destinatari, emailAvvisoPacchetto({
+        nomeStudente,
+        nomePacchetto: row.nome,
+        tipoAvviso: 'scadenza',
+        dataScadenza: row.dataScadenza!.toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' }),
+      }))
       if (sent) { flags.avvisoScadenzaInviatoAt = new Date(); inviati++ }
     }
 
@@ -100,5 +124,5 @@ export async function runPackageAlerts() {
     }
   }
 
-  return { processati: rows.length, inviati }
+  return { processati: rows.length, inviati, emailInviate }
 }
