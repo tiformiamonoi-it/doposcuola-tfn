@@ -162,6 +162,20 @@
       "when": 1788464903447,
       "tag": "0022_rich_old_lace",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1789072541381,
+      "tag": "0023_colorful_stranger",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789075119343,
+      "tag": "0024_good_human_robot",
+      "breakpoints": true
     }
   ]
 }

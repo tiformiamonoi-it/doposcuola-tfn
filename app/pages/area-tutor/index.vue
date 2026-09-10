@@ -73,7 +73,7 @@ import { startOfMonth, endOfMonth, addMonths, format, getDay, getDaysInMonth, se
 import { it } from 'date-fns/locale'
 
 definePageMeta({ middleware: ['staff-only'] })
-useHead({ title: 'Area Tutor — Ti Formiamo Noi' })
+useHead({ title: 'Area Tutor — tiformiamonoi' })
 
 const toast = useToast()
 

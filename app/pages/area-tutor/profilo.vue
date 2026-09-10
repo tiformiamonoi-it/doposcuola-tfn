@@ -58,7 +58,7 @@
 
 <script setup lang="ts">
 definePageMeta({ middleware: ['staff-only'] })
-useHead({ title: 'Il mio profilo — Ti Formiamo Noi' })
+useHead({ title: 'Il mio profilo — tiformiamonoi' })
 
 const toast = useToast()
 const { user } = useUserSession()

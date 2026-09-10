@@ -1,4 +1,4 @@
-// Augmenta i tipi di nuxt-auth-utils con il modello utente di Ti Formiamo Noi.
+// Augmenta i tipi di nuxt-auth-utils con il modello utente di tiformiamonoi.
 // Questi tipi sono usati da useUserSession() nel frontend e getUserSession() nel server.
 //
 // Sta in shared/ (e non in app/types/) perché ../shared/**/*.d.ts è incluso sia dal

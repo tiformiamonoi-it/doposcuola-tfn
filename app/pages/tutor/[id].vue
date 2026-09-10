@@ -45,11 +45,14 @@
             <UButton size="sm" variant="outline" icon="i-heroicons-pencil" @click="modalModificaAperto = true">
               Modifica
             </UButton>
-            <UButton size="sm" icon="i-heroicons-banknotes" @click="apriLiquidaDettaglio">
+            <!-- Su telefono la riga non regge badge + due bottoni + menù: "Liquida"
+                 si sposta dentro il menù a tre puntini qui accanto (stessa scelta
+                 fatta nella scheda dell'alunno). -->
+            <UButton size="sm" icon="i-heroicons-banknotes" class="hidden sm:inline-flex" @click="apriLiquidaDettaglio">
               Liquida
             </UButton>
             <UDropdownMenu :items="menuAzioni">
-              <UButton icon="i-heroicons-ellipsis-vertical" variant="ghost" size="sm" />
+              <UButton icon="i-heroicons-ellipsis-vertical" variant="ghost" size="sm" aria-label="Altre azioni su questo tutor" />
             </UDropdownMenu>
           </div>
         </div>
@@ -67,7 +70,18 @@
       </div>
 
       <!-- Tab -->
-      <UTabs :items="tabs" class="w-full">
+      <!--
+        Come nella scheda dell'alunno: su telefono le linguette non ci stanno in
+        riga e venivano schiacciate fino a diventare illeggibili. Qui la striscia
+        scorre di lato con le etichette per intero; su schermi larghi non cambia nulla.
+      -->
+      <UTabs
+        ref="riferimentoTabs"
+        :items="tabs"
+        class="w-full"
+        :ui="{ list: 'overflow-x-auto scrollbar-nascosta', trigger: 'shrink-0', label: 'text-clip whitespace-nowrap' }"
+        @update:model-value="portaInVistaLinguetta"
+      >
 
         <!-- ─── Tab ANAGRAFICA ─── -->
         <template #anagrafica>
@@ -80,6 +94,7 @@
                   <div class="flex gap-2"><dt class="text-slate-400 w-32 shrink-0">Cognome</dt><dd>{{ tutor.lastName }}</dd></div>
                   <div class="flex gap-2"><dt class="text-slate-400 w-32 shrink-0">Email</dt><dd>{{ tutor.email }}</dd></div>
                   <div class="flex gap-2"><dt class="text-slate-400 w-32 shrink-0">Telefono</dt><dd>{{ tutor.phone ?? '—' }}</dd></div>
+                  <div class="flex gap-2"><dt class="text-slate-400 w-32 shrink-0">Data di nascita</dt><dd>{{ dataNascitaTutor ? formatData(dataNascitaTutor) : '—' }}</dd></div>
                   <div class="flex gap-2"><dt class="text-slate-400 w-32 shrink-0">Cod. Fiscale</dt><dd>{{ tutor.codiceFiscale ?? '—' }}</dd></div>
                   <div class="flex gap-2"><dt class="text-slate-400 w-32 shrink-0">P.IVA</dt><dd>{{ tutor.partitaIva ?? '—' }}</dd></div>
                   <div class="flex gap-2"><dt class="text-slate-400 w-32 shrink-0">Indirizzo</dt><dd>{{ [tutor.indirizzo, tutor.citta, tutor.cap].filter(Boolean).join(', ') || '—' }}</dd></div>
@@ -402,6 +417,10 @@
           </div>
           <UFormField name="email" label="Email"><UInput v-model="datiModifica.email" type="email" class="w-full" /></UFormField>
           <UFormField name="phone" label="Telefono"><UInput v-model="datiModifica.phone" class="w-full" /></UFormField>
+          <!-- Facoltativa: serve al campanellino dei compleanni -->
+          <UFormField name="dataNascita" label="Data di nascita" hint="Facoltativa">
+            <UInput v-model="datiModifica.dataNascita" type="date" class="w-full" />
+          </UFormField>
           <UFormField name="password" label="Nuova password (opzionale)" hint="Lascia vuoto per non cambiarla. Al tutor arriva comunque un link per scegliersene una sua: nessuna password viaggia via email.">
             <div class="flex gap-2">
               <UInput v-model="datiModifica.password" type="text" placeholder="min. 8 caratteri" class="flex-1" />
@@ -706,6 +725,18 @@ const tabs = [
   { label: 'Statistiche', slot: 'statistiche' },
 ]
 
+// Su telefono la striscia delle linguette scorre di lato: quando si cambia
+// scheda riportiamo sotto gli occhi quella scelta. "nearest" fa scorrere il
+// minimo indispensabile, così la pagina non salta su e giù.
+const riferimentoTabs = ref<any>(null)
+async function portaInVistaLinguetta() {
+  await nextTick()
+  const radice = riferimentoTabs.value?.$el as HTMLElement | undefined
+  radice
+    ?.querySelector<HTMLElement>('[data-slot="trigger"][data-state="active"]')
+    ?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+}
+
 // ─── Colonne tabelle ──────────────────────────
 const colonneComp = [
   { id: 'meseLabel',         header: 'Mese' },
@@ -737,6 +768,13 @@ const colonnePerf = [
 
 const metodiPagamento = METODI_PAGAMENTO_ITEMS
 
+// Il tipo che useLazyFetch assegna a `tutor` è un'unione (scheda tutor | altre
+// risposte dell'API): TypeScript non sa quale ramo sia e rifiuta l'accesso a
+// QUALSIASI campo — succede già a codiceFiscale, città, cap e agli altri.
+// Qui la lettura passa da un solo punto tipizzato a mano, così la data di nascita
+// non allunga quella lista di errori.
+const dataNascitaTutor = computed<string | null>(() => (tutor.value as any)?.dataNascita ?? null)
+
 // ─── Modal Modifica ───────────────────────────
 const modalModificaAperto = ref(false)
 const salvando = ref(false)
@@ -745,6 +783,7 @@ const datiModifica = reactive({
   lastName: tutor.value?.lastName ?? '',
   email: tutor.value?.email ?? '',
   phone: tutor.value?.phone ?? '',
+  dataNascita: dataNascitaTutor.value ?? '',
   role: tutor.value?.role ?? 'TUTOR',
   codiceFiscale: tutor.value?.codiceFiscale ?? '',
   partitaIva: tutor.value?.partitaIva ?? '',
@@ -764,6 +803,7 @@ watch(tutor, (t) => {
     lastName: t.lastName ?? '',
     email: t.email ?? '',
     phone: t.phone ?? '',
+    dataNascita: (t as any).dataNascita ?? '',
     role: t.role ?? 'TUTOR',
     codiceFiscale: t.codiceFiscale ?? '',
     partitaIva: t.partitaIva ?? '',
@@ -786,6 +826,8 @@ async function salvaTutor() {
         ...datiModifica,
         password: datiModifica.password || undefined,
         phone: datiModifica.phone || null,
+        // Campo vuoto = "non lo so": a database ci va NULL, non una stringa vuota
+        dataNascita: datiModifica.dataNascita || null,
         codiceFiscale: datiModifica.codiceFiscale || null,
         partitaIva: datiModifica.partitaIva || null,
         indirizzo: datiModifica.indirizzo || null,
@@ -997,13 +1039,22 @@ async function confermaPagaRimborso() {
 }
 
 // ─── Menu azioni header ───────────────────────
-const menuAzioni = computed(() => [[
-  {
+const menuAzioni = computed(() => [
+  // Solo su telefono: in barra "Liquida" è nascosto perché la riga sforerebbe
+  // lo schermo. `sm:hidden` fa sparire questa voce appena il bottone torna
+  // visibile, così non ci sono mai due modi contemporanei di fare la stessa cosa.
+  [{
+    label: 'Liquida compensi',
+    icon: 'i-heroicons-banknotes',
+    class: 'sm:hidden',
+    onSelect: () => apriLiquidaDettaglio(),
+  }],
+  [{
     label: tutor.value?.active ? 'Disattiva tutor' : 'Riattiva tutor',
     icon: tutor.value?.active ? 'i-heroicons-pause-circle' : 'i-heroicons-play-circle',
     onSelect: () => toggleAttivo(),
-  },
-]])
+  }],
+])
 
 async function toggleAttivo() {
   try {

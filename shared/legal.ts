@@ -22,7 +22,7 @@ export const TERMS_VERSION = '2026-08-v4'
 export const PRIVACY_STUDENTE_VERSION = 'studente-2026-08-v3'
 
 export const TERMINI_TESTO = `TERMINI E CONDIZIONI DEL SERVIZIO
-Ti Formiamo Noi — Doposcuola e ripetizioni
+tiformiamonoi — Doposcuola e ripetizioni
 Ultimo aggiornamento: agosto 2026
 
 1. CHI SIAMO
@@ -94,7 +94,7 @@ Il trattamento dei dati personali è descritto nell'Informativa privacy; l'uso d
 
 export const PRIVACY_TESTO = `INFORMATIVA SUL TRATTAMENTO DEI DATI PERSONALI
 ai sensi degli artt. 13 e 14 del Regolamento (UE) 2016/679 ("GDPR")
-Ti Formiamo Noi — Doposcuola e ripetizioni
+tiformiamonoi — Doposcuola e ripetizioni
 Ultimo aggiornamento: agosto 2026
 
 1. TITOLARE DEL TRATTAMENTO

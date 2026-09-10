@@ -19,7 +19,7 @@
 
     <!-- Intestazione foglio -->
     <div class="border-b-2 border-slate-800 pb-4 mb-6">
-      <h1 class="text-2xl font-bold text-slate-900">Ti Formiamo Noi</h1>
+      <h1 class="text-2xl font-bold text-slate-900">tiformiamonoi</h1>
       <p class="text-sm text-slate-600">Programma lezioni tutor</p>
     </div>
 
@@ -64,7 +64,7 @@
     <p class="mt-6 text-sm font-medium text-slate-700">Totale: {{ lezioni.length }} lezioni</p>
 
     <p class="mt-10 text-xs text-slate-400">
-      Documento generato dal gestionale Ti Formiamo Noi.
+      Documento generato dal gestionale tiformiamonoi.
     </p>
   </div>
 </template>
@@ -73,7 +73,7 @@
 import { oggiISO, formatData } from '~/utils/format'
 
 definePageMeta({ layout: false, middleware: ['tutor-only'] })
-useHead({ title: 'Stampa lezioni — Ti Formiamo Noi' })
+useHead({ title: 'Stampa lezioni — tiformiamonoi' })
 
 const { user } = useUserSession()
 const oggi = oggiISO()

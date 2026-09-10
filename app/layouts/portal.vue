@@ -150,7 +150,7 @@ const whatsappOrario = computed(() => {
 
 const showWhatsApp = computed(() => !!whatsappNumero.value)
 const whatsappLink = computed(() => {
-  const text = encodeURIComponent('Ciao, scrivo dal portale Ti Formiamo Noi.')
+  const text = encodeURIComponent('Ciao, scrivo dal portale tiformiamonoi.')
   return `https://wa.me/${whatsappNumero.value.replace(/\D/g, '')}?text=${text}`
 })
 </script>

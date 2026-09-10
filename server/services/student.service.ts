@@ -314,6 +314,7 @@ export async function createStudent(data: CreateStudentInput) {
   const [created] = await db.insert(students).values({
     firstName:       nomeProprio(data.firstName),
     lastName:        nomeProprio(data.lastName),
+    dataNascita:     data.dataNascita     ?? null,
     classe:          data.classe          ?? null,
     scuola:          data.scuola          ?? null,
     studentPhone:    data.studentPhone    ?? null,
@@ -326,6 +327,19 @@ export async function createStudent(data: CreateStudentInput) {
     parentCap:       data.parentCap       ?? null,
     parentCF:        data.parentCF        ?? null,
     parentPIva:      data.parentPIva      ?? null,
+    parentRelazione: data.parentRelazione ?? null,
+    // Secondo genitore/tutore: si salva anche se non gli si dà l'accesso al
+    // portale — prima quei dati non avevano dove stare e andavano persi.
+    parent2Name:        data.parent2Name ? nomeProprio(data.parent2Name) : null,
+    parent2Email:       data.parent2Email       ?? null,
+    parent2Phone:       data.parent2Phone       ?? null,
+    parent2Indirizzo:   data.parent2Indirizzo   ?? null,
+    parent2Citta:       data.parent2Citta       ?? null,
+    parent2Cap:         data.parent2Cap         ?? null,
+    parent2CF:          data.parent2CF          ?? null,
+    parent2PIva:        data.parent2PIva        ?? null,
+    parent2DataNascita: data.parent2DataNascita ?? null,
+    parent2Relazione:   data.parent2Relazione   ?? null,
     note:            data.note            ?? null,
     bisogniSpeciali: data.bisogniSpeciali ?? null,
     active:          data.active          ?? true,
@@ -350,6 +364,7 @@ export async function updateStudent(id: string, data: UpdateStudentInput) {
   if (typeof changes.firstName === 'string')  changes.firstName  = nomeProprio(changes.firstName)
   if (typeof changes.lastName === 'string')   changes.lastName   = nomeProprio(changes.lastName)
   if (typeof changes.parentName === 'string' && changes.parentName) changes.parentName = nomeProprio(changes.parentName)
+  if (typeof changes.parent2Name === 'string' && changes.parent2Name) changes.parent2Name = nomeProprio(changes.parent2Name)
 
   const [updated] = await db.update(students)
     .set(changes as Partial<typeof students.$inferInsert>)

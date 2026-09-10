@@ -129,6 +129,10 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
         lastName:  input.lastName,
         role:      'GENITORE',
         active:    true,
+        // Recapito e data di nascita del genitore: per il secondo genitore questo
+        // è l'unico posto dove possono stare (students ha una sola riga "genitore")
+        phone:       input.phone ?? null,
+        dataNascita: input.dataNascita ?? null,
         // Niente "password temporanea da cambiare": la password se la sceglie
         // direttamente il genitore dal link, quindi non c'è nulla da forzare dopo.
         mustChangePassword: false,
@@ -159,8 +163,19 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
 }
 
 // Crea l'account personale dello STUDENTE (solo prenotazioni).
-// Attivo di default; il consenso del genitore è registrato con timestamp.
-export async function createStudentAccount(input: { studentId: string; email: string; firstName: string; lastName: string }) {
+// Attivo di default; il consenso del genitore è registrato con data, ORA e OPERATORE.
+//
+// `registratoDaUserId` è chi della segreteria sta creando l'account in questo
+// momento (arriva dalla sessione, non dal browser: nessuno può dichiarare di
+// essere un altro). L'informativa privacy promette "data e ora" del consenso:
+// senza il nome di chi l'ha raccolto quella riga non è dimostrabile a nessuno.
+export async function createStudentAccount(input: {
+  studentId: string
+  email: string
+  firstName: string
+  lastName: string
+  registratoDaUserId?: string | null
+}) {
   const existing = await db.query.users.findFirst({
     where: eq(users.email, input.email.toLowerCase()),
   })
@@ -180,7 +195,10 @@ export async function createStudentAccount(input: { studentId: string; email: st
       role:      'STUDENTE',
       active:    true,
       mustChangePassword: false, // la password se la sceglie lo studente dal link
-      consensoGenitoreAt: new Date(), // il genitore ha autorizzato (spunta obbligatoria in UI)
+      // Il genitore ha autorizzato: data e ora esatte…
+      consensoGenitoreAt: new Date(),
+      // …e chi della segreteria era davanti al genitore quando l'ha detto.
+      consensoGenitoreRegistratoDaUserId: input.registratoDaUserId ?? null,
     }).returning()
 
     if (!user) throw new Error('Creazione account studente fallita')

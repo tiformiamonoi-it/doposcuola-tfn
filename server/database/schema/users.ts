@@ -1,4 +1,4 @@
-import { pgTable, text, varchar, boolean, timestamp, date, uniqueIndex, index, numeric } from 'drizzle-orm/pg-core'
+import { pgTable, text, varchar, boolean, timestamp, date, uniqueIndex, index, numeric, type AnyPgColumn } from 'drizzle-orm/pg-core'
 import { cuid, userRoleEnum, tutorPaymentModeEnum, passwordTokenScopoEnum } from './common'
 
 export const users = pgTable('users', {
@@ -10,6 +10,10 @@ export const users = pgTable('users', {
   role:      userRoleEnum('role').notNull().default('TUTOR'),
   phone:     varchar('phone', { length: 20 }),
   active:    boolean('active').notNull().default(true),
+  // Giorno civile di nascita 'AAAA-MM-GG' di chi ha un account: genitori del
+  // portale, studenti con account, staff. MAI timestamptz — vedi il commento
+  // gemello su students.dataNascita. Facoltativo.
+  dataNascita: date('data_nascita', { mode: 'string' }),
   // Forza il cambio password al primo accesso (password temporanea/impostata dall'admin)
   mustChangePassword: boolean('must_change_password').notNull().default(false),
   // Accettazione documenti legali (GENITORE: termini+privacy; STUDENTE: privacy studente)
@@ -17,6 +21,15 @@ export const users = pgTable('users', {
   termsAcceptedVersion: varchar('terms_accepted_version', { length: 40 }),
   // STUDENTE minorenne: quando il genitore ha autorizzato la creazione dell'account
   consensoGenitoreAt:   timestamp('consenso_genitore_at', { withTimezone: true }),
+  // CHI della segreteria ha raccolto quell'autorizzazione. L'informativa privacy
+  // promette "data e ora" del consenso: senza un nome, quella riga non è
+  // dimostrabile a nessuno — resta un timestamp senza testimone.
+  // Auto-riferimento a users: serve l'annotazione AnyPgColumn, come per
+  // accountingEntries.linkedEntryId, altrimenti TypeScript va in ricorsione infinita.
+  // onDelete 'set null': se l'operatore un giorno viene cancellato, il consenso
+  // (data e ora) NON deve sparire con lui.
+  consensoGenitoreRegistratoDaUserId: text('consenso_genitore_registrato_da_user_id')
+    .references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
   // Tutorial di benvenuto al primo accesso (tutor/famiglia/studente)
   tutorialVisto: boolean('tutorial_visto').notNull().default(false),
   // Portale famiglia: ultima visita alla pagina Note (per il badge "note non lette")
@@ -35,6 +48,9 @@ export const tutorProfiles = pgTable('tutor_profiles', {
   cap:          varchar('cap', { length: 10 }),
   codiceFiscale: varchar('codice_fiscale', { length: 20 }),
   partitaIva:   varchar('partita_iva', { length: 20 }),
+  // L'anagrafica del tutor sta qui (non su users, dove c'è solo l'accesso).
+  // Giorno civile 'AAAA-MM-GG', mai timestamptz: vedi students.dataNascita.
+  dataNascita:  date('data_nascita', { mode: 'string' }),
   materie:      text('materie').array().notNull().default([]),
   noteInterne:  text('note_interne'),
   modalitaPagamento: tutorPaymentModeEnum('modalita_pagamento').notNull().default('ORE'),

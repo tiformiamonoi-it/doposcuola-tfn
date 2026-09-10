@@ -215,7 +215,7 @@ import ModalLezioneRapida from '~/components/calendario/ModalLezioneRapida.vue'
 import ModalGestisciSlot from '~/components/calendario/ModalGestisciSlot.vue'
 
 definePageMeta({ middleware: ['tutor-only'] })
-useHead({ title: 'Il mio Calendario — Ti Formiamo Noi' })
+useHead({ title: 'Il mio Calendario — tiformiamonoi' })
 
 const { user } = useUserSession()
 const toast = useToast()

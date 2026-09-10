@@ -2,11 +2,11 @@
 // Usata in: pacchetti, contabilita, lezioni, studenti, componenti vari
 
 // Giorno civile corrente in Italia (Europe/Rome), formato 'YYYY-MM-DD'.
-// NON usare new Date().toISOString().slice(0,10): quella è la data UTC e tra
-// mezzanotte e le ~2 di notte italiane restituisce ancora "ieri".
-export function oggiISO(): string {
-  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome' }).format(new Date())
-}
+// La funzione vive in shared/giorno-civile.ts perché serve identica anche al
+// server (i compleanni del campanellino si calcolano lì). Qui è solo ri-esportata
+// per nome — la forma che l'auto-import di Nuxt riconosce — così nei template si
+// continua a scrivere oggiISO() senza import espliciti, esattamente come prima.
+export { oggiISO } from '#shared/giorno-civile'
 
 export function formatData(d: string | Date | null | undefined): string {
   if (!d) return '—'

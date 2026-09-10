@@ -112,7 +112,7 @@
 import { z } from 'zod'
 
 definePageMeta({ layout: false })
-useHead({ title: 'Accedi — Ti Formiamo Noi' })
+useHead({ title: 'Accedi — tiformiamonoi' })
 
 // Redirect se già loggato (solo client-side per evitare SSR loop)
 const { loggedIn, user } = useUserSession()

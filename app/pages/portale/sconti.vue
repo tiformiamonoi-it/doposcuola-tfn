@@ -3,7 +3,7 @@
     <div>
       <h2 class="font-heading text-xl font-bold text-slate-900">Sconti e convenzioni</h2>
       <p class="text-sm text-slate-500 mt-0.5">
-        Le attività convenzionate con Ti Formiamo Noi offrono questi vantaggi agli studenti iscritti.
+        Le attività convenzionate con tiformiamonoi offrono questi vantaggi agli studenti iscritti.
       </p>
     </div>
 

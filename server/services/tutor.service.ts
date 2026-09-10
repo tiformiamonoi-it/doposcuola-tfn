@@ -198,6 +198,7 @@ export async function getTutorById(id: string) {
       cap:               tutorProfiles.cap,
       codiceFiscale:     tutorProfiles.codiceFiscale,
       partitaIva:        tutorProfiles.partitaIva,
+      dataNascita:       tutorProfiles.dataNascita,
       materie:           tutorProfiles.materie,
       noteInterne:       tutorProfiles.noteInterne,
       modalitaPagamento: tutorProfiles.modalitaPagamento,
@@ -237,6 +238,9 @@ export async function createTutor(data: CreateTutorInput) {
 
     const [profile] = await tx.insert(tutorProfiles).values({
       userId:            user.id,
+      // L'anagrafica sta sul profilo, non sull'account: qui la data di nascita
+      // (facoltativa) che serve al campanellino dei compleanni.
+      dataNascita:       data.dataNascita ?? null,
       modalitaPagamento: data.modalitaPagamento ?? 'ORE',
       importoForfait:    data.importoForfait ?? null,
     }).returning()
@@ -263,7 +267,7 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
 
   const userFields    = ['firstName', 'lastName', 'email', 'phone', 'role', 'active']
   const profileFields = ['indirizzo', 'citta', 'cap', 'codiceFiscale', 'partitaIva',
-                         'materie', 'noteInterne', 'modalitaPagamento', 'importoForfait']
+                         'dataNascita', 'materie', 'noteInterne', 'modalitaPagamento', 'importoForfait']
 
   for (const [key, val] of Object.entries(data)) {
     if (val === undefined) continue

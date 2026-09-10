@@ -44,6 +44,12 @@
         </UCard>
       </div>
 
+      <!--
+        Da tablet in su (sm e oltre) la riga resta com'era: tutti i bottoni in fila.
+        Su telefono cinque bottoni con etichette lunghe sforano lo schermo: resta
+        visibile solo l'azione principale ("Registra Pagamento") e tutto il resto
+        si rifugia nel menù a tre puntini, con "Elimina" in fondo e in rosso.
+      -->
       <div class="flex justify-end gap-3">
         <UButton
           v-if="pacchetto?.sospeso"
@@ -51,6 +57,7 @@
           color="success"
           variant="soft"
           size="sm"
+          class="hidden sm:inline-flex"
           @click="chiediToggleSospeso(false)"
         >
           Riattiva
@@ -61,6 +68,7 @@
           color="warning"
           variant="soft"
           size="sm"
+          class="hidden sm:inline-flex"
           @click="chiediToggleSospeso(true)"
         >
           Sospendi
@@ -70,6 +78,7 @@
           color="primary"
           variant="soft"
           size="sm"
+          class="hidden sm:inline-flex"
           @click="modalCreaAperto = true"
         >
           Rinnova pacchetto
@@ -79,6 +88,7 @@
           color="neutral"
           variant="soft"
           size="sm"
+          class="hidden sm:inline-flex"
           @click="modalModificaAperto = true"
         >
           Modifica pacchetto
@@ -86,16 +96,20 @@
         <UButton
           v-if="puoEliminare"
           color="error" variant="soft" icon="i-heroicons-trash"
+          class="hidden sm:inline-flex"
           @click="chiediEliminazionePacchetto"
         >
           Elimina pacchetto
         </UButton>
         <UTooltip v-else text="Non eliminabile: ha pagamenti e/o lezioni collegate">
-          <UButton color="error" variant="soft" icon="i-heroicons-trash" disabled>Elimina pacchetto</UButton>
+          <UButton color="error" variant="soft" icon="i-heroicons-trash" disabled class="hidden sm:inline-flex">Elimina pacchetto</UButton>
         </UTooltip>
         <UButton icon="i-heroicons-banknotes" :disabled="giaSaldato" @click="modalPagamentoAperto = true">
           {{ giaSaldato ? 'Già saldato' : 'Registra Pagamento' }}
         </UButton>
+        <UDropdownMenu :items="azioniTelefono">
+          <UButton icon="i-heroicons-ellipsis-vertical" variant="ghost" color="neutral" class="sm:hidden" aria-label="Altre azioni su questo pacchetto" />
+        </UDropdownMenu>
       </div>
 
       <!-- Storico lezioni (70%) + Storico pagamenti (30%), affiancati -->
@@ -258,6 +272,34 @@ const pagamenti = computed(() => pagamentiRes.value?.data ?? [])
 
 const giaSaldato    = computed(() => !!pacchetto.value?.stati?.includes('PAGATO'))
 const puoEliminare  = computed(() => pagamenti.value.length === 0 && lezioni.value.length === 0)
+
+// ─── Azioni della riga in alto quando lo schermo è stretto ───
+// Su telefono i bottoni con l'etichetta lunga sono nascosti e vivono qui dentro.
+// Le condizioni sono le stesse dei bottoni (sospeso / puoEliminare), così non
+// compaiono scorciatoie che in barra non esistono.
+// "Elimina pacchetto" sta in un gruppo a parte, in fondo e in rosso.
+const azioniTelefono = computed(() => {
+  const gestione: Record<string, unknown>[] = [
+    pacchetto.value?.sospeso
+      ? { label: 'Riattiva', icon: 'i-heroicons-play-circle', onSelect: () => chiediToggleSospeso(false) }
+      : { label: 'Sospendi', icon: 'i-heroicons-pause-circle', onSelect: () => chiediToggleSospeso(true) },
+    { label: 'Rinnova pacchetto', icon: 'i-heroicons-arrow-path-rounded-square', onSelect: () => { modalCreaAperto.value = true } },
+    { label: 'Modifica pacchetto', icon: 'i-heroicons-pencil', onSelect: () => { modalModificaAperto.value = true } },
+  ]
+
+  // Fuori dal menù il bottone spento ha un fumetto che spiega il perché, ma sul
+  // telefono i fumetti non si vedono: qui la spiegazione la scriviamo sotto la voce.
+  const pericolose: Record<string, unknown>[] = [{
+    label: 'Elimina pacchetto',
+    icon: 'i-heroicons-trash',
+    color: 'error',
+    disabled: !puoEliminare.value,
+    ...(puoEliminare.value ? {} : { description: 'Ha pagamenti o lezioni collegate' }),
+    onSelect: () => chiediEliminazionePacchetto(),
+  }]
+
+  return [gestione, pericolose]
+})
 
 
 function refreshTutto() {

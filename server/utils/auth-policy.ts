@@ -40,6 +40,11 @@ export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: 
   { prefix: '/api/tutors/today-pool',       roles: STAFF },
   { prefix: '/api/tutor-payments',          roles: ADMIN_SUPER },
   { prefix: '/api/notes',                   roles: STAFF },
+  // Centro notifiche (il campanellino): il default STAFF non basterebbe.
+  // Dentro ci sono nomi di alunni, numeri dei genitori e — in futuro — i consensi
+  // privacy da raccogliere: stessa riservatezza di Contatti e Rientri, niente TUTOR.
+  // NB: '/api/notes' è un percorso diverso e resta com'era.
+  { prefix: '/api/notifiche',               roles: ADMIN_SUPER },
   // Contatti (mini-CRM): dati personali di persone esterne → niente TUTOR,
   // né in lettura né in scrittura. NB: '/api/contact' (form pubblico del sito)
   // è un percorso diverso e resta pubblico, vedi isPublicApi().

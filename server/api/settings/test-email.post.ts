@@ -5,7 +5,7 @@ import { sendEmail, emailProva } from '../../utils/email'
 //
 // PERCHE' il destinatario non si può scegliere: un endpoint che manda posta a un
 // indirizzo qualsiasi passato dal browser diventa, di fatto, un servizio per
-// spedire email a nome di Ti Formiamo Noi. Qui l'indirizzo lo decide la sessione,
+// spedire email a nome di tiformiamonoi. Qui l'indirizzo lo decide la sessione,
 // quindi al massimo ci si manda un messaggio da soli.
 //
 // /api/settings è già riservato ad ADMIN/SUPER_TUTOR da API_POLICY: qui stringiamo

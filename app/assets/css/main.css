@@ -36,3 +36,15 @@
 .font-heading {
   font-family: var(--font-heading);
 }
+
+/* Nasconde la barra di scorrimento lasciando lo scorrimento col dito.
+   Serve alle strisce di linguette (UTabs) che su telefono scorrono di lato:
+   la barra grigia ruberebbe altezza e sporcherebbe il disegno, ma il gesto
+   di trascinamento continua a funzionare, e con esso la rotellina del mouse. */
+.scrollbar-nascosta {
+  scrollbar-width: none;      /* Firefox */
+  -ms-overflow-style: none;   /* Edge/IE legacy */
+}
+.scrollbar-nascosta::-webkit-scrollbar {
+  display: none;              /* Chrome, Safari, browser dei telefoni */
+}

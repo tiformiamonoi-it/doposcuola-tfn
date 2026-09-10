@@ -143,9 +143,14 @@
     <header
       class="fixed top-0 right-0 left-0 lg:left-[var(--sb)] h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-6 z-30 transition-all duration-300"
     >
-      <h1 class="text-sm font-semibold text-slate-900">{{ pageTitle }}</h1>
-      <div class="w-7 h-7 rounded-full bg-tfn-500 flex items-center justify-center">
-        <span class="text-white text-xs font-semibold">{{ iniziali }}</span>
+      <h1 class="text-sm font-semibold text-slate-900 truncate">{{ pageTitle }}</h1>
+      <div class="flex items-center gap-1 shrink-0">
+        <!-- Campanellino: compleanni e avvisi. Solo ADMIN/SUPER_TUTOR — dentro ci
+             sono numeri di telefono dei genitori, che ai tutor non servono. -->
+        <CentroNotifiche v-if="isAdminOrSuperTutor" />
+        <div class="w-7 h-7 rounded-full bg-tfn-500 flex items-center justify-center">
+          <span class="text-white text-xs font-semibold">{{ iniziali }}</span>
+        </div>
       </div>
     </header>
 

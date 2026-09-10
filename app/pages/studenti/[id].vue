@@ -17,14 +17,30 @@
 
     <!-- Contenuto principale -->
     <template v-else>
+      <!--
+        Barra azioni. Da tablet in su (sm e oltre) resta com'era: tutti i bottoni in riga.
+        Da telefono cinque bottoni in fila non ci stanno e le ultime azioni finivano
+        fuori dallo schermo: restano in barra solo la freccia "indietro" e "Modifica",
+        il resto si rifugia nel menù a tre puntini (che è anche più sicuro, perché
+        "Disattiva" e "Anonimizza" non stanno più a un pollice da "Modifica").
+      -->
       <div class="flex items-center justify-between mb-4">
-        <UButton to="/studenti" variant="ghost" icon="i-heroicons-arrow-left" size="sm">Torna alla lista</UButton>
+        <!-- Su telefono l'etichetta sparisce e resta la sola freccia: `sr-only` la
+             tiene comunque a disposizione dei lettori di schermo. -->
+        <UButton to="/studenti" variant="ghost" icon="i-heroicons-arrow-left" size="sm" aria-label="Torna alla lista">
+          <span class="sr-only sm:not-sr-only">Torna alla lista</span>
+        </UButton>
         <div class="flex items-center gap-2">
-          <UButton :to="`/stampe/studente-${id}`" icon="i-heroicons-printer" variant="ghost" size="sm">Stampa lezioni</UButton>
-          <UButton v-if="isAdmin" :to="`/api/students/${id}/export`" external target="_blank" icon="i-heroicons-arrow-down-tray" variant="ghost" size="sm">Esporta dati</UButton>
+          <UButton :to="`/stampe/studente-${id}`" icon="i-heroicons-printer" variant="ghost" size="sm" class="hidden sm:inline-flex">Stampa lezioni</UButton>
+          <UButton v-if="isAdmin" :to="`/api/students/${id}/export`" external target="_blank" icon="i-heroicons-arrow-down-tray" variant="ghost" size="sm" class="hidden sm:inline-flex">Esporta dati</UButton>
           <UButton v-if="isAdmin" icon="i-heroicons-pencil-square" variant="ghost" size="sm" @click="apriModalModifica">Modifica</UButton>
-          <UButton v-if="studente.active" icon="i-heroicons-user-minus" variant="ghost" color="error" size="sm" :loading="disattivando" @click="disattivaStudente">Disattiva</UButton>
-          <UButton v-if="isSoloAdmin" icon="i-heroicons-shield-exclamation" variant="ghost" color="error" size="sm" @click="anonimizzaAperto = true">Anonimizza</UButton>
+          <UButton v-if="studente.active" icon="i-heroicons-user-minus" variant="ghost" color="error" size="sm" :loading="disattivando" class="hidden sm:inline-flex" @click="disattivaStudente">Disattiva</UButton>
+          <UButton v-if="isSoloAdmin" icon="i-heroicons-shield-exclamation" variant="ghost" color="error" size="sm" class="hidden sm:inline-flex" @click="anonimizzaAperto = true">Anonimizza</UButton>
+          <!-- Se per il ruolo di chi guarda non resta nessuna azione da nascondere,
+               il bottone a tre puntini non compare affatto. -->
+          <UDropdownMenu v-if="azioniTelefono.length > 0" :items="azioniTelefono">
+            <UButton icon="i-heroicons-ellipsis-vertical" variant="ghost" color="neutral" size="sm" class="sm:hidden" aria-label="Altre azioni su questo studente" />
+          </UDropdownMenu>
         </div>
       </div>
 
@@ -59,7 +75,11 @@
               <UAvatar :alt="studente.firstName + ' ' + studente.lastName" size="3xl" class="mb-3 bg-primary-500 text-white font-bold" :ui="{ fallback: 'text-white' }" />
               <h2 class="text-2xl font-semibold text-slate-900">{{ studente.firstName }} {{ studente.lastName }}</h2>
               <p class="text-sm text-slate-500 mt-1">{{ studente.classe ?? '' }} <span v-if="studente.scuola">• {{ studente.scuola }}</span></p>
-              
+              <!-- Il livello NON è un campo del database: si ricava dalla classe
+                   (vedi shared/livello-scolastico.ts). "—" quando la classe è vuota
+                   o non si capisce: meglio dire "non lo so" che tirare a indovinare. -->
+              <p class="text-xs text-slate-400 mt-0.5">Livello: {{ etichettaLivelloStudente }}</p>
+
               <div class="flex items-center gap-2 mt-3">
                 <UBadge :color="studente.active ? 'success' : 'neutral'" variant="subtle" size="sm">
                   {{ studente.active ? 'Attivo' : 'Inattivo' }}
@@ -71,6 +91,13 @@
             <USeparator class="my-4" />
 
             <div class="space-y-3 text-sm">
+              <div class="flex items-center gap-3" v-if="dataNascitaStudente">
+                <UIcon name="i-heroicons-cake" class="w-4 h-4 text-slate-400" />
+                <div>
+                  <div class="text-xs text-slate-500">Data di nascita</div>
+                  <div class="font-medium text-slate-700">{{ formatData(dataNascitaStudente) }}</div>
+                </div>
+              </div>
               <div class="flex items-center gap-3" v-if="studente.studentPhone">
                 <UIcon name="i-heroicons-phone" class="w-4 h-4 text-slate-400" />
                 <div>
@@ -157,8 +184,21 @@
         </div>
 
         <!-- TABS AREA -->
-        <div class="lg:col-span-8">
-          <UTabs :items="tabItems" class="w-full">
+        <div ref="contenitoreTabs" class="lg:col-span-8">
+          <!--
+            Su telefono le linguette non ci stanno tutte in riga: il tema di Nuxt UI
+            le stringeva fino a tagliare le parole ("Pan… Pa… L… Pre…"). Con questi
+            ritocchi la striscia scorre di lato (`overflow-x-auto`), ogni linguetta
+            tiene la sua larghezza (`shrink-0`) e l'etichetta non viene più tagliata
+            (`text-clip` sostituisce il `truncate` del tema, `whitespace-nowrap` la
+            tiene su una riga sola). Dove ci stanno tutte, l'aspetto non cambia.
+          -->
+          <UTabs
+            :items="tabItems"
+            class="w-full"
+            :ui="{ list: 'overflow-x-auto scrollbar-nascosta', trigger: 'shrink-0', label: 'text-clip whitespace-nowrap' }"
+            @update:model-value="portaInVistaLinguetta"
+          >
             <template #panoramica>
               <div class="space-y-6 mt-4">
                 <!-- KPI Cards -->
@@ -336,19 +376,21 @@
 
             <template #famiglia>
               <div class="mt-4 space-y-6">
-                <!-- Dati Genitore -->
+                <!-- Dati Genitore (il primo: è quello a cui si intestano le fatture) -->
                 <UCard>
                   <template #header>
                     <div class="flex items-center justify-between">
                       <div class="flex items-center gap-2">
                         <UIcon name="i-heroicons-users" class="w-5 h-5 text-tfn-500" />
                         <span class="font-medium text-slate-800">Dati Anagrafici Genitore</span>
+                        <StatHelp text="Sono i dati usati per le fatture. Se ci sono due genitori, questo resta l'intestatario predefinito." />
                       </div>
                       <UButton icon="i-heroicons-pencil-square" variant="ghost" size="xs" @click="apriModalModifica">Modifica dati</UButton>
                     </div>
                   </template>
                   <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                     <InfoRow label="Nome Cognome" :value="studente.parentName" />
+                    <InfoRow label="Parentela" :value="genitori.relazione1" />
                     <InfoRow label="Email" :value="studente.parentEmail" />
                     <InfoRow label="Telefono" :value="studente.parentPhone" />
                     <InfoRow label="Indirizzo" :value="studente.parentIndirizzo" />
@@ -357,6 +399,42 @@
                     <InfoRow label="Partita IVA" :value="studente.parentPIva" />
                   </dl>
                 </UCard>
+
+                <!-- SECONDO GENITORE / TUTORE.
+                     Il riquadro esiste solo se il secondo genitore c'è davvero:
+                     una scheda piena di caselle vuote fa solo scorrere di più. -->
+                <UCard v-if="haSecondoGenitore">
+                  <template #header>
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center gap-2">
+                        <UIcon name="i-heroicons-user-plus" class="w-5 h-5 text-tfn-500" />
+                        <span class="font-medium text-slate-800">Secondo Genitore o Tutore</span>
+                      </div>
+                      <UButton icon="i-heroicons-pencil-square" variant="ghost" size="xs" @click="apriModalModifica">Modifica dati</UButton>
+                    </div>
+                  </template>
+                  <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <InfoRow label="Nome Cognome" :value="genitori.nome2" />
+                    <InfoRow label="Parentela" :value="genitori.relazione2" />
+                    <InfoRow label="Email" :value="genitori.email2" />
+                    <InfoRow label="Telefono" :value="genitori.telefono2" />
+                    <InfoRow label="Data di nascita" :value="genitori.dataNascita2" />
+                    <InfoRow label="Indirizzo" :value="genitori.indirizzo2" />
+                    <InfoRow label="Città e CAP" :value="genitori.cittaCap2" />
+                    <InfoRow label="Codice Fiscale" :value="genitori.cf2" />
+                    <InfoRow label="Partita IVA" :value="genitori.piva2" />
+                  </dl>
+                </UCard>
+
+                <!-- Non c'è: una riga sola con il modo per aggiungerlo -->
+                <div v-else-if="isAdmin" class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-slate-200 px-4 py-3">
+                  <p class="text-sm text-slate-500">
+                    Nessun secondo genitore o tutore registrato.
+                  </p>
+                  <UButton icon="i-heroicons-plus" variant="soft" size="xs" @click="apriModalSecondoGenitore">
+                    Aggiungi un secondo genitore
+                  </UButton>
+                </div>
 
                 <!-- Portale Famiglie — un alunno può avere PIÙ genitori collegati -->
                 <UCard v-if="isAdmin">
@@ -475,9 +553,12 @@
                           <span class="text-slate-500">Email di accesso</span>
                           <span class="font-medium text-slate-800">{{ (studentAccount as any).studentUser?.email }}</span>
                         </div>
-                        <div class="flex justify-between items-center border-b border-slate-200 pb-2">
-                          <span class="text-slate-500">Consenso genitore registrato</span>
-                          <span class="font-medium text-slate-800">{{ (studentAccount as any).studentUser?.consensoGenitoreAt ? formatData((studentAccount as any).studentUser.consensoGenitoreAt) : '—' }}</span>
+                        <!-- L'informativa privacy promette "data E ORA" del consenso,
+                             e una data senza il nome di chi l'ha raccolta non è
+                             dimostrabile a nessuno: qui si mostrano tutti e tre. -->
+                        <div class="flex justify-between items-start gap-3 border-b border-slate-200 pb-2">
+                          <span class="text-slate-500 shrink-0">Consenso genitore registrato</span>
+                          <span class="font-medium text-slate-800 text-right">{{ consensoGenitoreTesto }}</span>
                         </div>
                         <div class="flex items-center justify-between pt-1">
                           <span class="text-slate-500">Account attivo (può prenotare)</span>
@@ -621,6 +702,11 @@
             </UFormField>
           </div>
 
+          <!-- Facoltativa: serve al campanellino dei compleanni, non blocca nulla -->
+          <UFormField name="dataNascita" label="Data di nascita" hint="Facoltativa">
+            <UInput v-model="datiModifica.dataNascita" type="date" class="w-full" />
+          </UFormField>
+
           <div class="grid grid-cols-2 gap-4">
             <UFormField name="classe" label="Classe">
               <USelectMenu
@@ -707,6 +793,94 @@
             </UFormField>
           </div>
 
+          <div class="grid grid-cols-2 gap-4">
+            <UFormField name="parentPIva" label="Partita IVA">
+              <UInput v-model="datiModifica.parentPIva" class="w-full" />
+            </UFormField>
+            <UFormField label="Che parentela ha con l'alunno?">
+              <USelect v-model="datiModifica.parentRelazione" :items="RELAZIONI_ANAGRAFICA" placeholder="Scegli..." class="w-full" />
+              <UInput v-if="datiModifica.parentRelazione === 'Altro'" v-model="datiModifica.parentRelazioneAltro"
+                placeholder="Es. Nonna, Zio…" class="w-full mt-2" :maxlength="50" />
+            </UFormField>
+          </div>
+
+          <!-- ─── SECONDO GENITORE / TUTORE ───
+               Sotto una spunta e non sempre aperto: chi ha un solo genitore non
+               deve scorrere dieci caselle vuote per arrivare alle note. -->
+          <USeparator label="Secondo genitore o tutore" />
+
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-sm font-medium text-slate-800">C'è un secondo genitore o tutore</p>
+              <p class="text-xs text-slate-500">Es. genitori separati, o entrambi da tenere aggiornati.</p>
+            </div>
+            <UCheckbox v-model="mostraSecondoGenitore" aria-label="C'è un secondo genitore o tutore" />
+          </div>
+
+          <!-- Togliere la spunta cancella i suoi dati: va detto PRIMA di salvare -->
+          <UAlert
+            v-if="!mostraSecondoGenitore && haSecondoGenitore"
+            color="warning"
+            variant="subtle"
+            icon="i-heroicons-exclamation-triangle"
+            title="Il secondo genitore verrà rimosso"
+            description="Salvando, nome, recapiti e dati fiscali del secondo genitore vengono cancellati dalla scheda. L'eventuale suo accesso al portale resta attivo e va tolto dalla sezione Credenziali Portale Famiglie."
+          />
+
+          <div v-if="mostraSecondoGenitore" class="space-y-4 border border-slate-100 rounded-lg p-4 bg-slate-50/50">
+            <div class="grid grid-cols-2 gap-4">
+              <UFormField name="parent2Name" label="Nome Genitore">
+                <UInput v-model="datiModifica.parent2Name" class="w-full" />
+              </UFormField>
+              <UFormField name="parent2Phone" label="Tel. Genitore">
+                <UInput
+                  v-model="datiModifica.parent2Phone"
+                  class="w-full"
+                  @blur="datiModifica.parent2Phone = normalizzaTelefono(datiModifica.parent2Phone)"
+                />
+              </UFormField>
+            </div>
+
+            <UFormField name="parent2Email" label="Email genitore">
+              <UInput v-model="datiModifica.parent2Email" type="email" class="w-full" />
+            </UFormField>
+
+            <div class="grid grid-cols-2 gap-4">
+              <UFormField label="Che parentela ha con l'alunno?">
+                <USelect v-model="datiModifica.parent2Relazione" :items="RELAZIONI_ANAGRAFICA" placeholder="Scegli..." class="w-full" />
+                <UInput v-if="datiModifica.parent2Relazione === 'Altro'" v-model="datiModifica.parent2RelazioneAltro"
+                  placeholder="Es. Nonna, Zio…" class="w-full mt-2" :maxlength="50" />
+              </UFormField>
+              <UFormField name="parent2DataNascita" label="Data di nascita" hint="Facoltativa">
+                <UInput v-model="datiModifica.parent2DataNascita" type="date" class="w-full" />
+              </UFormField>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+              <UFormField name="parent2Indirizzo" label="Indirizzo" class="col-span-2">
+                <UInput v-model="datiModifica.parent2Indirizzo" class="w-full" />
+              </UFormField>
+              <UFormField name="parent2Cap" label="CAP">
+                <UInput v-model="datiModifica.parent2Cap" class="w-full" />
+              </UFormField>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <UFormField name="parent2Citta" label="Città">
+                <UInput v-model="datiModifica.parent2Citta" class="w-full" />
+              </UFormField>
+              <UFormField name="parent2CF" label="Codice Fiscale">
+                <UInput v-model="datiModifica.parent2CF" class="w-full" />
+              </UFormField>
+            </div>
+
+            <UFormField name="parent2PIva" label="Partita IVA">
+              <UInput v-model="datiModifica.parent2PIva" class="w-full" />
+            </UFormField>
+          </div>
+
+          <USeparator />
+
           <UFormField name="bisogniSpeciali" label="Bisogni speciali">
             <UTextarea v-model="datiModifica.bisogniSpeciali" :rows="2" class="w-full" />
           </UFormField>
@@ -762,6 +936,18 @@ const tabItems = computed(() => [
   // (il server non manda comunque i recapiti dei genitori ai TUTOR)
   ...(isAdmin.value ? [{ label: 'Famiglia', slot: 'famiglia' }] : []),
 ])
+
+// Su telefono la striscia delle linguette scorre di lato: cambiando scheda la
+// linguetta scelta può restare fuori dalla parte visibile. Qui la riportiamo
+// sotto gli occhi. "nearest" fa scorrere il minimo indispensabile, così la
+// pagina non salta su e giù mentre si cambia scheda.
+const contenitoreTabs = ref<HTMLElement | null>(null)
+async function portaInVistaLinguetta() {
+  await nextTick()
+  contenitoreTabs.value
+    ?.querySelector<HTMLElement>('[data-slot="trigger"][data-state="active"]')
+    ?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+}
 
 const filtroLezioni = reactive({ dataInizio: '', dataFine: '' })
 const { data: dataLezioni, pending: pendingLezioni } = useLazyFetch('/api/lessons', { query: { studentId: id, limit: 1000 } })
@@ -825,9 +1011,24 @@ function esportaCsvLezioni() {
 
 import { SCUOLE_TRAPANI, CLASSI_LISTA } from '~/utils/schools'
 import { formatData } from '~/utils/format'
+import { livelloDaClasse, etichettaLivello } from '#shared/livello-scolastico'
 
 // ─── Fetch studente ───
 const { data: studente, pending, refresh } = useLazyFetch(`/api/students/${id}`)
+
+// Il tipo che useLazyFetch assegna a `studente` è un'unione (scheda alunno | altre
+// risposte dell'API): TypeScript non sa quale ramo sia e rifiuta l'accesso a
+// QUALSIASI campo — succede già a classe, scuola, bisogniSpeciali e agli altri.
+// Qui la lettura passa da un solo punto tipizzato a mano.
+const dataNascitaStudente = computed<string | null>(() => (studente.value as any)?.dataNascita ?? null)
+
+// IL LIVELLO SCOLASTICO NON È SALVATO DA NESSUNA PARTE: si deduce dalla classe.
+// Se la classe è vuota o scritta in un modo che non riconosciamo, qui esce "—"
+// e non un livello inventato: chi legge deve poter capire che il dato manca.
+const etichettaLivelloStudente = computed(() => {
+  const l = livelloDaClasse((studente.value as any)?.classe)
+  return l ? etichettaLivello(l) : '—'
+})
 
 // ─── Fetch pacchetti dello studente ───
 const { data: datiPacchetti, pending: pendingPacchetti, refresh: refreshPacchetti } = useLazyFetch('/api/packages', {
@@ -896,15 +1097,103 @@ async function anonimizzaStudente() {
   }
 }
 
+// ─── Azioni della barra in alto quando lo schermo è stretto ───
+// Su telefono i bottoni "Stampa lezioni", "Esporta dati", "Disattiva" e
+// "Anonimizza" sono nascosti dalla barra e vivono in questo menù.
+// Le condizioni sono le STESSE dei bottoni (isAdmin / active / isSoloAdmin):
+// chi non vede un'azione in barra non deve trovarla nemmeno nel menù.
+// Le due azioni pericolose stanno in un gruppo a parte, in fondo e in rosso,
+// così non si toccano per sbaglio scorrendo con il pollice.
+const azioniTelefono = computed(() => {
+  const ordinarie: Record<string, unknown>[] = [
+    { label: 'Stampa lezioni', icon: 'i-heroicons-printer', to: `/stampe/studente-${id}` },
+  ]
+  if (isAdmin.value) {
+    ordinarie.push({ label: 'Esporta dati', icon: 'i-heroicons-arrow-down-tray', to: `/api/students/${id}/export`, external: true, target: '_blank' })
+  }
+
+  const pericolose: Record<string, unknown>[] = []
+  // `as any` come nel resto della pagina: il tipo che useLazyFetch assegna a
+  // `studente` è un'unione e TypeScript non sa quale ramo sia (vedi riga 897).
+  if ((studente.value as any)?.active) {
+    pericolose.push({ label: 'Disattiva', icon: 'i-heroicons-user-minus', color: 'error', onSelect: () => disattivaStudente() })
+  }
+  if (isSoloAdmin.value) {
+    pericolose.push({ label: 'Anonimizza', icon: 'i-heroicons-shield-exclamation', color: 'error', onSelect: () => { anonimizzaAperto.value = true } })
+  }
+
+  // I gruppi vuoti vanno tolti, altrimenti Nuxt UI disegna una riga di separazione
+  // che non separa niente.
+  return [ordinarie, pericolose].filter(gruppo => gruppo.length > 0)
+})
+
 // ─── Modal modifica ───
 const modalModificaAperto  = ref(false)
 const formModifica         = ref()
 const salvando             = ref(false)
 const altreScuolaModifica  = ref(false)
 
+// Parentele proposte nell'anagrafica. Una lista invece del testo libero per non
+// ritrovarsi "madre", "Madre" e "MAMMA" come tre cose diverse; "Altro" lascia
+// comunque scrivere quello che serve (nonna, zio, affidatario…).
+const RELAZIONI_ANAGRAFICA = ['Madre', 'Padre', 'Tutore legale', 'Nonno/a', 'Altro']
+
+// Dal valore salvato (testo libero) alla coppia menu + casella "Altro"
+function scomponiRelazione(valore?: string | null) {
+  const v = (valore ?? '').trim()
+  if (!v) return { scelta: '', altro: '' }
+  return RELAZIONI_ANAGRAFICA.includes(v) && v !== 'Altro'
+    ? { scelta: v, altro: '' }
+    : { scelta: 'Altro', altro: v }
+}
+
+// …e ritorno: quello che finisce davvero a database (null = nessuna parentela)
+function componiRelazione(scelta: string, altro: string): string | null {
+  if (!scelta) return null
+  if (scelta === 'Altro') return altro.trim().slice(0, 50) || null
+  return scelta
+}
+
+// I campi dei genitori, già pronti per essere mostrati.
+// /api/students/:id risponde con due forme diverse (completa per la segreteria,
+// ridotta per i tutor, senza i recapiti dei genitori): per TypeScript è un'unione
+// e leggerli uno per uno dal template costerebbe un errore di tipo per riga.
+// Si leggono una volta sola qui, e il riquadro in scheda usa questi valori.
+const genitori = computed(() => {
+  const s = studente.value as any
+  const cittaCap = (citta?: string | null, cap?: string | null) =>
+    citta ? `${citta} ${cap ?? ''}`.trim() : null
+  return {
+    relazione1: (s?.parentRelazione as string | null) ?? null,
+    nome2:        (s?.parent2Name as string | null) ?? null,
+    relazione2:   (s?.parent2Relazione as string | null) ?? null,
+    email2:       (s?.parent2Email as string | null) ?? null,
+    telefono2:    (s?.parent2Phone as string | null) ?? null,
+    dataNascita2: s?.parent2DataNascita ? formatData(s.parent2DataNascita) : null,
+    indirizzo2:   (s?.parent2Indirizzo as string | null) ?? null,
+    cittaCap2:    cittaCap(s?.parent2Citta, s?.parent2Cap),
+    cf2:          (s?.parent2CF as string | null) ?? null,
+    piva2:        (s?.parent2PIva as string | null) ?? null,
+  }
+})
+
+// Il secondo genitore c'è se ha almeno un dato suo: così il riquadro in scheda
+// compare solo quando serve davvero.
+const haSecondoGenitore = computed(() => {
+  const g = genitori.value
+  return Boolean(
+    g.nome2 || g.email2 || g.telefono2 || g.cf2 || g.piva2
+    || g.indirizzo2 || g.cittaCap2 || g.dataNascita2 || g.relazione2,
+  )
+})
+
+// Spunta "C'è un secondo genitore" dentro la finestra di modifica
+const mostraSecondoGenitore = ref(false)
+
 const datiModifica = reactive({
   firstName:       '',
   lastName:        '',
+  dataNascita:     '',
   classe:          '',
   scuola:          '',
   studentPhone:    '',
@@ -916,6 +1205,22 @@ const datiModifica = reactive({
   parentCitta:     '',
   parentCap:       '',
   parentCF:        '',
+  parentPIva:      '',
+  // Menu + casella libera: a database va una stringa sola (parentRelazione)
+  parentRelazione:      '',
+  parentRelazioneAltro: '',
+  // Secondo genitore/tutore: stessi campi del primo
+  parent2Name:           '',
+  parent2Phone:          '',
+  parent2Email:          '',
+  parent2Indirizzo:      '',
+  parent2Citta:          '',
+  parent2Cap:            '',
+  parent2CF:             '',
+  parent2PIva:           '',
+  parent2DataNascita:    '',
+  parent2Relazione:      '',
+  parent2RelazioneAltro: '',
   bisogniSpeciali: '',
   note:            '',
 })
@@ -923,9 +1228,12 @@ const datiModifica = reactive({
 function apriModalModifica() {
   if (!studente.value) return
   const s = studente.value as any
+  const rel1 = scomponiRelazione(s.parentRelazione)
+  const rel2 = scomponiRelazione(s.parent2Relazione)
   Object.assign(datiModifica, {
     firstName:       s.firstName       ?? '',
     lastName:        s.lastName        ?? '',
+    dataNascita:     s.dataNascita     ?? '',
     classe:          s.classe          ?? '',
     scuola:          s.scuola          ?? '',
     studentPhone:    s.studentPhone    ?? '',
@@ -937,12 +1245,35 @@ function apriModalModifica() {
     parentCitta:     s.parentCitta     ?? '',
     parentCap:       s.parentCap       ?? '',
     parentCF:        s.parentCF        ?? '',
+    parentPIva:      s.parentPIva      ?? '',
+    parentRelazione:      rel1.scelta,
+    parentRelazioneAltro: rel1.altro,
+    parent2Name:           s.parent2Name        ?? '',
+    parent2Phone:          s.parent2Phone       ?? '',
+    parent2Email:          s.parent2Email       ?? '',
+    parent2Indirizzo:      s.parent2Indirizzo   ?? '',
+    parent2Citta:          s.parent2Citta       ?? '',
+    parent2Cap:            s.parent2Cap         ?? '',
+    parent2CF:             s.parent2CF          ?? '',
+    parent2PIva:           s.parent2PIva        ?? '',
+    parent2DataNascita:    s.parent2DataNascita ?? '',
+    parent2Relazione:      rel2.scelta,
+    parent2RelazioneAltro: rel2.altro,
     bisogniSpeciali: s.bisogniSpeciali ?? '',
     note:            s.note            ?? '',
   })
+  // La sezione del secondo genitore parte aperta solo se c'è qualcuno da mostrare
+  mostraSecondoGenitore.value = haSecondoGenitore.value
   // Se la scuola corrente non è nella lista, mostra input manuale
   altreScuolaModifica.value = !!s.scuola && !SCUOLE_TRAPANI.includes(s.scuola)
   modalModificaAperto.value = true
+}
+
+// Stessa finestra, ma con la sezione del secondo genitore già aperta: è il
+// bottone "Aggiungi un secondo genitore" della scheda.
+function apriModalSecondoGenitore() {
+  apriModalModifica()
+  mostraSecondoGenitore.value = true
 }
 
 async function salvaModifica() {
@@ -952,6 +1283,8 @@ async function salvaModifica() {
       method: 'PUT',
       body: {
         ...datiModifica,
+        // Campo vuoto = "non lo so", quindi NULL a database (mai stringa vuota)
+        dataNascita:     datiModifica.dataNascita     || null,
         classe:          datiModifica.classe          || null,
         scuola:          datiModifica.scuola          || null,
         studentPhone:    datiModifica.studentPhone    || null,
@@ -963,6 +1296,29 @@ async function salvaModifica() {
         parentCitta:     datiModifica.parentCitta     || null,
         parentCap:       datiModifica.parentCap       || null,
         parentCF:        datiModifica.parentCF        || null,
+        parentPIva:      datiModifica.parentPIva      || null,
+        parentRelazione: componiRelazione(datiModifica.parentRelazione, datiModifica.parentRelazioneAltro),
+        // Secondo genitore: se la spunta è tolta si azzera tutto, altrimenti si
+        // salva quello che è stato scritto (casella vuota = NULL, mai "").
+        ...(mostraSecondoGenitore.value
+          ? {
+              parent2Name:        datiModifica.parent2Name        || null,
+              parent2Phone:       datiModifica.parent2Phone       || null,
+              parent2Email:       datiModifica.parent2Email       || null,
+              parent2Indirizzo:   datiModifica.parent2Indirizzo   || null,
+              parent2Citta:       datiModifica.parent2Citta       || null,
+              parent2Cap:         datiModifica.parent2Cap         || null,
+              parent2CF:          datiModifica.parent2CF          || null,
+              parent2PIva:        datiModifica.parent2PIva        || null,
+              parent2DataNascita: datiModifica.parent2DataNascita || null,
+              parent2Relazione:   componiRelazione(datiModifica.parent2Relazione, datiModifica.parent2RelazioneAltro),
+            }
+          : {
+              parent2Name: null, parent2Phone: null, parent2Email: null,
+              parent2Indirizzo: null, parent2Citta: null, parent2Cap: null,
+              parent2CF: null, parent2PIva: null, parent2DataNascita: null,
+              parent2Relazione: null,
+            }),
         bisogniSpeciali: datiModifica.bisogniSpeciali || null,
         note:            datiModifica.note            || null,
       },
@@ -1107,6 +1463,23 @@ const { data: studentAccount, refresh: refreshStudentAccount } = useLazyFetch(
 )
 const datiAccountStudente = reactive({ email: '', firstName: '', lastName: '', consensoGenitore: false })
 const creandoAccountStudente = ref(false)
+
+// "12/09/2026 alle 15:42 — registrato da Maria Rossi".
+// L'ora c'è perché l'informativa privacy parla di "data e ora"; il nome perché un
+// consenso senza un testimone è una riga che nessuno può confermare. Gli account
+// creati PRIMA di questa modifica non hanno l'operatore: si mostra data e ora e
+// basta, senza inventare un nome.
+const consensoGenitoreTesto = computed(() => {
+  const acc = studentAccount.value as any
+  const quando = acc?.studentUser?.consensoGenitoreAt
+  if (!quando) return '—'
+  const d = new Date(quando)
+  const data = d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Rome' })
+  const ora  = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' })
+  const chi  = acc?.consensoRegistratoDa
+  const nome = chi ? `${chi.firstName ?? ''} ${chi.lastName ?? ''}`.trim() : ''
+  return nome ? `${data} alle ${ora} — registrato da ${nome}` : `${data} alle ${ora}`
+})
 const togglandoStudente = ref(false)
 const credenzialiStudente = ref<({ email: string; nome: string; linkPassword: string } & EsitoInvitoEmail) | null>(null)
 

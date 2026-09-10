@@ -1,4 +1,4 @@
-import { pgTable, text, varchar, boolean, timestamp, uniqueIndex, index } from 'drizzle-orm/pg-core'
+import { pgTable, text, varchar, boolean, timestamp, date, uniqueIndex, index } from 'drizzle-orm/pg-core'
 import { cuid } from './common'
 import { users } from './users'
 
@@ -10,9 +10,18 @@ export const students = pgTable('students', {
   classe: varchar('classe', { length: 50 }),
   scuola: varchar('scuola', { length: 100 }),
 
+  // Giorno civile di nascita 'AAAA-MM-GG'. MAI timestamptz (come closureDates.date e
+  // tutorAvailabilities.date): con l'ora dentro, il compleanno di chi è nato a
+  // mezzanotte slitta di un giorno a seconda del fuso, e il campanellino
+  // festeggerebbe la persona sbagliata. Facoltativo: di molti alunni non la sappiamo.
+  dataNascita: date('data_nascita', { mode: 'string' }),
+
   studentPhone: varchar('student_phone', { length: 20 }),
   studentEmail: varchar('student_email', { length: 255 }),
 
+  // ── PRIMO GENITORE / TUTORE ──
+  // È la riga "storica": tutta la fatturazione (codice fiscale, partita IVA,
+  // indirizzo) legge da qui e continua a farlo. Resta l'intestatario predefinito.
   parentName:      varchar('parent_name', { length: 200 }),
   parentEmail:     varchar('parent_email', { length: 255 }),
   parentPhone:     varchar('parent_phone', { length: 20 }),
@@ -21,6 +30,35 @@ export const students = pgTable('students', {
   parentCap:       varchar('parent_cap', { length: 10 }),
   parentCF:        varchar('parent_cf', { length: 20 }),
   parentPIva:      varchar('parent_piva', { length: 20 }),
+  // "Madre", "Padre", "Tutore legale"… stesso testo libero da 50 caratteri di
+  // student_parents.relazione, così le due etichette restano confrontabili.
+  parentRelazione: varchar('parent_relazione', { length: 50 }),
+
+  // ── SECONDO GENITORE / TUTORE ──
+  // PERCHÉ UNA SECONDA SERIE DI COLONNE E NON UNA TABELLA "TUTORI":
+  // 1. È puramente additiva: nessuna riga esistente cambia, e ogni punto del
+  //    gestionale che oggi legge "il genitore" (fatture, pagamenti, stampe,
+  //    esportazioni) continua a leggere la PRIMA serie senza una sola modifica.
+  //    Normalizzando avremmo dovuto riscrivere tutti quei punti, con il rischio
+  //    di toccare fatture e pagamenti già registrati.
+  // 2. Il limite di DUE è voluto, non una scorciatoia: la segreteria registra il
+  //    genitore/tutore che paga e, al massimo, il secondo (genitori separati, o
+  //    entrambi da tenere aggiornati). Chi ha bisogno di più persone collegate usa
+  //    gli account del portale (student_parents), che sono già N-a-N.
+  // Se un giorno servissero tre o più intestatari, allora sì che varrebbe la pena
+  // normalizzare: fino a due, questa forma costa meno e non mette a rischio nulla.
+  parent2Name:        varchar('parent2_name', { length: 200 }),
+  parent2Email:       varchar('parent2_email', { length: 255 }),
+  parent2Phone:       varchar('parent2_phone', { length: 20 }),
+  parent2Indirizzo:   text('parent2_indirizzo'),
+  parent2Citta:       varchar('parent2_citta', { length: 100 }),
+  parent2Cap:         varchar('parent2_cap', { length: 10 }),
+  parent2CF:          varchar('parent2_cf', { length: 20 }),
+  parent2PIva:        varchar('parent2_piva', { length: 20 }),
+  // Giorno civile 'AAAA-MM-GG' come students.dataNascita: mai timestamptz, o il
+  // compleanno di chi è nato a mezzanotte slitta di un giorno col fuso orario.
+  parent2DataNascita: date('parent2_data_nascita', { mode: 'string' }),
+  parent2Relazione:   varchar('parent2_relazione', { length: 50 }),
 
   active:          boolean('active').notNull().default(true),
   note:            text('note'),

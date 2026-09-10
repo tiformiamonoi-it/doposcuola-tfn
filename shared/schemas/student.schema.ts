@@ -8,6 +8,7 @@
  */
 
 import { z } from 'zod'
+import { DataNascitaOpz } from './data-nascita'
 
 // ─────────────────────────────────────────────
 // SCHEMA BASE STUDENTE
@@ -26,6 +27,10 @@ export const StudentSchema = z.object({
     .min(1, 'Il cognome non può essere vuoto')
     .max(100, 'Il cognome non può superare 100 caratteri')
     .trim(),
+
+  // Giorno civile di nascita 'AAAA-MM-GG'. Facoltativo: serve al campanellino
+  // dei compleanni, non è un dato che blocca l'iscrizione.
+  dataNascita: DataNascitaOpz,
 
   // Info scolastiche (opzionali)
   classe: z
@@ -120,6 +125,92 @@ export const StudentSchema = z.object({
       z.null(),
       z.undefined()
     ]).optional(),
+
+  // "Madre", "Padre", "Tutore legale"… testo libero: l'interfaccia propone una
+  // lista solo per non ritrovarsi "madre", "Madre" e "MAMMA" come tre cose diverse.
+  parentRelazione: z
+    .string()
+    .max(50, 'La parentela non può superare 50 caratteri')
+    .trim()
+    .optional()
+    .nullable(),
+
+  // ─────────────────────────────────────────────
+  // SECONDO GENITORE / TUTORE (facoltativo)
+  // Stessi controlli del primo, perché è la stessa anagrafica: si registra chi
+  // c'è, anche se non gli si dà l'accesso al portale. Il limite di due è voluto
+  // (vedi il commento in server/database/schema/students.ts).
+  // ─────────────────────────────────────────────
+  parent2Name: z
+    .string()
+    .max(200, 'Il nome del genitore non può superare 200 caratteri')
+    .trim()
+    .optional()
+    .nullable(),
+
+  parent2Email: z
+    .union([
+      z.string().trim().email('Indirizzo email non valido'),
+      z.literal(''),
+      z.null(),
+      z.undefined()
+    ]).optional(),
+
+  parent2Phone: z
+    .union([
+      z.string().trim().regex(/^[\d\s+\-().]{7,20}$/, 'Numero di telefono non valido'),
+      z.literal(''),
+      z.null(),
+      z.undefined()
+    ]).optional(),
+
+  parent2Indirizzo: z
+    .string()
+    .max(300, "L'indirizzo non può superare 300 caratteri")
+    .trim()
+    .optional()
+    .nullable(),
+
+  parent2Citta: z
+    .string()
+    .max(100, 'La città non può superare 100 caratteri')
+    .trim()
+    .optional()
+    .nullable(),
+
+  parent2Cap: z
+    .union([
+      z.string().trim().regex(/^\d{5}$/, 'Il CAP deve essere composto da 5 cifre (es: 20100)'),
+      z.literal(''),
+      z.null(),
+      z.undefined()
+    ]).optional(),
+
+  parent2CF: z
+    .union([
+      z.string().trim().regex(/^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/i, 'Codice Fiscale non valido (deve avere 16 caratteri nel formato corretto)'),
+      z.literal(''),
+      z.null(),
+      z.undefined()
+    ]).optional(),
+
+  parent2PIva: z
+    .union([
+      z.string().trim().regex(/^\d{11}$/, 'La Partita IVA deve essere composta da 11 cifre'),
+      z.literal(''),
+      z.null(),
+      z.undefined()
+    ]).optional(),
+
+  // Stesso controllo "giorno civile" della data di nascita dell'alunno
+  parent2DataNascita: DataNascitaOpz,
+
+  parent2Relazione: z
+    .string()
+    .max(50, 'La parentela non può superare 50 caratteri')
+    .trim()
+    .optional()
+    .nullable(),
 
   // Informazioni aggiuntive
   note:            z.string().max(2000, 'Le note non possono superare 2000 caratteri').optional().nullable(),

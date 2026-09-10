@@ -71,6 +71,15 @@ export async function anonymizeStudent(id: string) {
       classe: null, scuola: null, studentPhone: null, studentEmail: null,
       parentName: null, parentEmail: null, parentPhone: null, parentIndirizzo: null,
       parentCitta: null, parentCap: null, parentCF: null, parentPIva: null,
+      parentRelazione: null,
+      // SECONDO GENITORE: si svuota esattamente come il primo. Dimenticarlo qui
+      // vorrebbe dire lasciare nome, recapiti e codice fiscale di una persona nel
+      // database DOPO una richiesta di cancellazione (art. 17): una violazione,
+      // non una dimenticanza estetica. Ogni colonna parent2* aggiunta all'anagrafica
+      // va aggiunta anche in questo elenco.
+      parent2Name: null, parent2Email: null, parent2Phone: null, parent2Indirizzo: null,
+      parent2Citta: null, parent2Cap: null, parent2CF: null, parent2PIva: null,
+      parent2DataNascita: null, parent2Relazione: null,
       note: null, bisogniSpeciali: null,
       active: false,
       abilitatoPrenotazioneOnline: false,

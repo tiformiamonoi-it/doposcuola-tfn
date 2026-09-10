@@ -8,7 +8,7 @@ import { bookings, bookingSubjects } from './bookings'
 import { studentNotes } from './notes'
 import { contacts, contactInteractions } from './contacts'
 import { studentConfirmations } from './confirmations'
-import { contactRequests } from './system'
+import { contactRequests, notifiche } from './system'
 
 export const usersRelations = relations(users, ({ one, many }) => ({
   tutorProfile:    one(tutorProfiles, { fields: [users.id], references: [tutorProfiles.userId] }),
@@ -22,6 +22,9 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   ownStudent:      many(students, { relationName: 'studentUser' }),
   authoredNotes:   many(studentNotes),
   passwordTokens:  many(passwordTokens),
+  // Notifiche che questa persona ha segnato come lette (la lettura è di squadra:
+  // resta scritto CHI ha chiuso l'avviso, ma vale per tutti — vedi system.ts)
+  notificheLette:  many(notifiche),
 }))
 
 export const tutorProfilesRelations = relations(tutorProfiles, ({ one }) => ({
@@ -114,4 +117,9 @@ export const studentConfirmationsRelations = relations(studentConfirmations, ({ 
 export const studentParentsRelations = relations(studentParents, ({ one }) => ({
   student:    one(students, { fields: [studentParents.studentId], references: [students.id] }),
   parentUser: one(users, { fields: [studentParents.parentUserId], references: [users.id] }),
+}))
+
+// Centro notifiche: chi della segreteria ha segnato l'avviso come letto
+export const notificheRelations = relations(notifiche, ({ one }) => ({
+  lettaDa: one(users, { fields: [notifiche.lettaDaUserId], references: [users.id] }),
 }))

@@ -1,5 +1,6 @@
 // shared/schemas/tutor.schema.ts
 import { z } from 'zod'
+import { DataNascitaOpz } from './data-nascita'
 
 // Gli importi arrivano da <UInput type="number">, che restituisce un NUMERO appena
 // l'utente tocca il campo (Nuxt UI, Input.vue → looseToNumber) e una stringa se resta
@@ -16,6 +17,8 @@ export const CreateTutorSchema = z.object({
   email:             z.string({ message: 'Email obbligatoria' }).email('Email non valida').toLowerCase().trim(),
   password:          z.string({ message: 'Password obbligatoria' }).min(8, 'Password: almeno 8 caratteri'),
   phone:             z.string().regex(/^[\d\s+\-().]{7,20}$/, 'Telefono non valido').optional().nullable(),
+  // Facoltativa. Finisce su tutorProfiles (l'anagrafica), non su users (l'accesso).
+  dataNascita:       DataNascitaOpz,
   role:              z.enum(['TUTOR', 'ADMIN', 'SUPER_TUTOR']).default('TUTOR'),
   modalitaPagamento: z.enum(['ORE', 'FORFAIT']).default('ORE'),
   importoForfait:    z.coerce.string().optional().nullable(),
@@ -28,6 +31,7 @@ export const UpdateTutorSchema = z.object({
   lastName:          z.string().min(1).max(100).trim().optional(),
   email:             z.string().email('Email non valida').toLowerCase().trim().optional(),
   phone:             z.string().optional().nullable(),
+  dataNascita:       DataNascitaOpz,
   // Reset password da parte dell'admin (todo 2.5): viene hashata nel service
   password:          z.string().min(8, 'Password: almeno 8 caratteri').optional(),
   role:              z.enum(['TUTOR', 'ADMIN', 'SUPER_TUTOR']).optional(),

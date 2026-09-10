@@ -43,7 +43,7 @@
 
 <script setup lang="ts">
 definePageMeta({ layout: false, middleware: ['auth'] })
-useHead({ title: 'Cambio password — Ti Formiamo Noi' })
+useHead({ title: 'Cambio password — tiformiamonoi' })
 
 const { user, fetch: refreshSession } = useUserSession()
 

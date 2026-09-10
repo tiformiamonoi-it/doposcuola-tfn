@@ -6,8 +6,11 @@ const CreateSchema = z.object({
   email:     z.string().email('Email non valida'),
   firstName: z.string().min(1).max(100),
   lastName:  z.string().min(1).max(100),
-  // Autorizzazione del genitore: obbligatoria (necessaria per i minori di 14 anni,
-  // registrata con timestamp in users.consenso_genitore_at)
+  // Autorizzazione del genitore: OBBLIGATORIA anche qui, non solo come spunta a
+  // schermo. z.literal(true) rifiuta il body che non la porta (o che la porta
+  // false): la spunta in interfaccia è una comodità, questo è il vero blocco.
+  // Viene registrata con data, ora e operatore in users.consenso_genitore_at /
+  // users.consenso_genitore_registrato_da_user_id.
   consensoGenitore: z.literal(true, { message: 'Serve l\'autorizzazione del genitore' }),
 })
 
@@ -28,7 +31,13 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const outcome = await createStudentAccount({ studentId, ...result.data })
+    // L'operatore del consenso è chi ha la sessione aperta ADESSO, mai un id
+    // arrivato dal browser: così nessuno può firmare un consenso a nome di un altro.
+    const outcome = await createStudentAccount({
+      studentId,
+      ...result.data,
+      registratoDaUserId: user.id,
+    })
     return {
       ok: true,
       userId: outcome.user.id,

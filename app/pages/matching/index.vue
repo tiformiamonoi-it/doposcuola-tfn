@@ -244,7 +244,7 @@ import { SUPPLEMENTO_SPECIALE } from '#shared/tariffe'
 import { MATERIE_DEFAULT } from '#shared/materie'
 
 definePageMeta({ middleware: ['admin-or-super'] })
-useHead({ title: 'Matching — Ti Formiamo Noi' })
+useHead({ title: 'Matching — tiformiamonoi' })
 
 const toast = useToast()
 

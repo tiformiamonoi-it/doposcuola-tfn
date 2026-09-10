@@ -6,7 +6,7 @@
         <div class="w-14 h-14 rounded-2xl bg-tfn-500 flex items-center justify-center mx-auto">
           <UIcon name="i-heroicons-academic-cap" class="w-8 h-8 text-white" />
         </div>
-        <h1 class="font-heading text-2xl font-bold text-slate-900">Ti Formiamo Noi</h1>
+        <h1 class="font-heading text-2xl font-bold text-slate-900">tiformiamonoi</h1>
         <p class="text-sm text-slate-500">Richiedi informazioni per il tuo figlio</p>
       </div>
 
@@ -120,7 +120,7 @@
 import { PublicContactSchema } from '#shared/schemas/contact.schema'
 
 definePageMeta({ layout: false })
-useHead({ title: 'Richiedi informazioni — Ti Formiamo Noi' })
+useHead({ title: 'Richiedi informazioni — tiformiamonoi' })
 
 const form = reactive({
   nomeStudente: '',

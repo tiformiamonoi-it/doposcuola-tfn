@@ -104,7 +104,7 @@
 import { REGOLE_PASSWORD } from '#shared/schemas/password.schema'
 
 definePageMeta({ layout: false })
-useHead({ title: 'Scegli la tua password — Ti Formiamo Noi' })
+useHead({ title: 'Scegli la tua password — tiformiamonoi' })
 
 const route = useRoute()
 const token = computed(() => String(route.query.token ?? ''))

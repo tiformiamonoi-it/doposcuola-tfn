@@ -157,6 +157,10 @@
           <UFormField name="phone" label="Telefono">
             <UInput v-model="nuovoTutor.phone" placeholder="+39 333 1234567" class="w-full" />
           </UFormField>
+          <!-- Facoltativa: serve al campanellino dei compleanni -->
+          <UFormField name="dataNascita" label="Data di nascita" hint="Facoltativa">
+            <UInput v-model="nuovoTutor.dataNascita" type="date" class="w-full" />
+          </UFormField>
           <div class="grid grid-cols-2 gap-4">
             <UFormField name="role" label="Ruolo">
               <USelect
@@ -337,6 +341,7 @@ const nuovoTutor = reactive({
   email:             '',
   password:          '',
   phone:             '',
+  dataNascita:       '',
   role:              'TUTOR',
   modalitaPagamento: 'ORE',
   importoForfait:    '',
@@ -354,6 +359,8 @@ async function creaTutor() {
       body: {
         ...nuovoTutor,
         phone:          nuovoTutor.phone || null,
+        // Campo vuoto = "non lo so": a database ci va NULL, non una stringa vuota
+        dataNascita:    nuovoTutor.dataNascita || null,
         importoForfait: nuovoTutor.importoForfait || null,
       },
     }) as any
@@ -370,7 +377,7 @@ async function creaTutor() {
     modalCreaAperto.value = false
     Object.assign(nuovoTutor, {
       firstName: '', lastName: '', email: '', password: '',
-      phone: '', role: 'TUTOR', modalitaPagamento: 'ORE', importoForfait: '',
+      phone: '', dataNascita: '', role: 'TUTOR', modalitaPagamento: 'ORE', importoForfait: '',
     })
     refresh()
   } catch (err: any) {
@@ -378,7 +385,7 @@ async function creaTutor() {
     const errors = err.data?.data?.errors
     const fieldNames: Record<string, string> = {
       firstName: 'Nome', lastName: 'Cognome', email: 'Email',
-      password: 'Password', phone: 'Telefono', role: 'Ruolo',
+      password: 'Password', phone: 'Telefono', dataNascita: 'Data di nascita', role: 'Ruolo',
       modalitaPagamento: 'Modalità compenso', importoForfait: 'Importo forfait',
     }
     let desc = ''

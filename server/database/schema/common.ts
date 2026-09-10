@@ -56,3 +56,12 @@ export const interactionEsitoEnum = pgEnum('interaction_esito', ['RISPOSTO', 'NE
 // Sezione Rientri (conferme di inizio anno scolastico): lista fissa condivisa
 // anche da shared/rientri.ts
 export const confirmationStatusEnum = pgEnum('confirmation_status', ['DA_SENTIRE', 'CONFERMATO', 'IN_FORSE', 'NON_TORNA'])
+
+// Centro notifiche (il campanellino): di che cosa parla l'avviso.
+// CONSENSO   = consensi privacy da raccogliere o in scadenza
+// COMPLEANNO = valore previsto ma OGGI NON USATO: i compleanni si ricavano al volo
+//              da data_nascita e non si salvano (vedi notifiche.ts). Sta qui perché
+//              togliere un valore da un enum Postgres è un'operazione distruttiva:
+//              meglio prevederlo adesso che dover rifare l'enum domani.
+// GENERICA   = avviso libero scritto dal gestionale
+export const notificaTipoEnum = pgEnum('notifica_tipo', ['CONSENSO', 'COMPLEANNO', 'GENERICA'])

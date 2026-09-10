@@ -7,5 +7,5 @@ import { PRIVACY_TESTO, TERMS_VERSION } from '#shared/legal'
 import PaginaLegale from '~/components/PaginaLegale.vue'
 
 definePageMeta({ layout: false })
-useHead({ title: 'Informativa privacy — Ti Formiamo Noi' })
+useHead({ title: 'Informativa privacy — tiformiamonoi' })
 </script>
