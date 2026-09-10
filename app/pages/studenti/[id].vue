@@ -96,37 +96,53 @@
           </UCard>
 
           <!-- PACCHETTO ATTIVO WIDGET -->
-          <UCard v-if="pacchettoPerRinnovo" class="bg-primary-600 text-white border-none shadow-lg" :ui="{ body: 'p-5', background: 'bg-primary-600' }">
+          <!--
+            Leggibilità: la card è blu pieno (bg-primary-600 = #00558a). Tutto il testo
+            sopra dev'essere bianco. "white" NON è un colore valido in Nuxt UI v4
+            (validi: primary/secondary/success/info/warning/error/neutral + indigo/pink
+            dichiarati in nuxt.config): usarlo faceva ricadere badge, barra e bottone sul
+            blu di default → blu su blu, illeggibile. Il bianco pieno si ottiene con un
+            colore valido + classi Tailwind (che vincono via tailwind-merge).
+            Contrasto verificato su #00558a: bianco 7,88:1 (AA richiede 4,5:1).
+          -->
+          <UCard v-if="pacchettoPerRinnovo" class="bg-primary-600 text-white border-none shadow-lg" :ui="{ body: 'p-5' }">
             <div class="flex justify-between items-start mb-1">
-              <div class="text-xs font-semibold tracking-wider text-primary-200 uppercase">Pacchetto Attivo</div>
-              <UBadge color="white" variant="solid" size="xs" class="text-primary-700 font-bold">{{ pacchettoPerRinnovo.tipo }}</UBadge>
+              <div class="text-xs font-semibold tracking-wider text-white uppercase">Pacchetto Attivo</div>
+              <UBadge color="neutral" variant="solid" size="xs" class="bg-white text-primary-700 font-bold">{{ pacchettoPerRinnovo.tipo }}</UBadge>
             </div>
             <h3 class="text-lg font-bold mb-1">{{ pacchettoPerRinnovo.nome }}</h3>
-            <div class="text-xs text-primary-200 mb-4">
+            <div class="text-xs text-white mb-4">
               {{ formatData(pacchettoPerRinnovo.dataInizio) }} — {{ pacchettoPerRinnovo.dataScadenza ? formatData(pacchettoPerRinnovo.dataScadenza) : 'Nessuna scadenza' }}
             </div>
 
             <div v-if="pacchettoPerRinnovo.tipo !== 'A_CONSUMO'" class="mb-4">
               <div class="flex justify-between text-xs font-medium mb-1.5">
-                <span class="text-xl font-bold text-white">{{ pacchettoPerRinnovo.tipo === 'MENSILE' ? pacchettoPerRinnovo.giorniResiduo : parseFloat(pacchettoPerRinnovo.oreResiduo) }} <span class="text-sm font-normal text-primary-200">/ {{ pacchettoPerRinnovo.tipo === 'MENSILE' ? pacchettoPerRinnovo.giorniAcquistati : parseFloat(pacchettoPerRinnovo.oreAcquistate) }} {{ pacchettoPerRinnovo.tipo === 'MENSILE' ? 'giorni' : 'ore' }}</span></span>
+                <span class="text-xl font-bold text-white">{{ pacchettoPerRinnovo.tipo === 'MENSILE' ? pacchettoPerRinnovo.giorniResiduo : parseFloat(pacchettoPerRinnovo.oreResiduo) }} <span class="text-sm font-normal text-white">/ {{ pacchettoPerRinnovo.tipo === 'MENSILE' ? pacchettoPerRinnovo.giorniAcquistati : parseFloat(pacchettoPerRinnovo.oreAcquistate) }} {{ pacchettoPerRinnovo.tipo === 'MENSILE' ? 'giorni' : 'ore' }}</span></span>
               </div>
-              <UMeter :value="pacchettoPerRinnovo.tipo === 'MENSILE' ? pacchettoPerRinnovo.giorniResiduo : parseFloat(pacchettoPerRinnovo.oreResiduo)" :max="pacchettoPerRinnovo.tipo === 'MENSILE' ? pacchettoPerRinnovo.giorniAcquistati : parseFloat(pacchettoPerRinnovo.oreAcquistate)" color="white" size="sm" />
+              <!--
+                UMeter non esiste in @nuxt/ui v4 (era la v2): la barra qui non veniva
+                proprio disegnata. L'equivalente v4 è UProgress, che vuole v-model
+                (modelValue) al posto di :value. Barra bianca su binario bianco al 25%:
+                contrasto pieno/vuoto 4,34:1 (per gli elementi grafici AA chiede 3:1).
+              -->
+              <UProgress :model-value="pacchettoPerRinnovo.tipo === 'MENSILE' ? pacchettoPerRinnovo.giorniResiduo : parseFloat(pacchettoPerRinnovo.oreResiduo)" :max="pacchettoPerRinnovo.tipo === 'MENSILE' ? pacchettoPerRinnovo.giorniAcquistati : parseFloat(pacchettoPerRinnovo.oreAcquistate)" size="sm" :ui="{ base: 'bg-white/25', indicator: 'bg-white' }" />
             </div>
             <div v-else class="mb-4">
-               <div class="text-xl font-bold text-white">{{ parseFloat(pacchettoPerRinnovo.oreResiduo) }} <span class="text-sm font-normal text-primary-200">ore (libretto)</span></div>
+               <div class="text-xl font-bold text-white">{{ parseFloat(pacchettoPerRinnovo.oreResiduo) }} <span class="text-sm font-normal text-white">ore (libretto)</span></div>
             </div>
 
-            <div class="flex items-center justify-between mt-5 pt-4 border-t border-primary-500/50">
+            <div class="flex items-center justify-between mt-5 pt-4 border-t border-white/30">
               <div>
-                <div class="text-xs text-primary-200">Da saldare</div>
+                <div class="text-xs text-white">Da saldare</div>
                 <div class="text-lg font-bold">€ {{ parseFloat(pacchettoPerRinnovo.importoResiduo || 0).toFixed(2) }}</div>
               </div>
-              <UButton 
+              <!-- Bottone bianco pieno con testo blu scuro: 9,88:1 (primary-700 su bianco). -->
+              <UButton
                 v-if="parseFloat(pacchettoPerRinnovo.importoResiduo || 0) > 0"
-                color="white" 
-                variant="solid" 
-                size="sm" 
-                class="text-primary-700 font-semibold"
+                color="neutral"
+                variant="solid"
+                size="sm"
+                class="bg-white text-primary-700 font-semibold hover:bg-primary-50 active:bg-primary-100 focus-visible:outline-white"
                 icon="i-heroicons-banknotes"
                 @click="aprirePagamento(pacchettoPerRinnovo)"
               >
@@ -390,14 +406,26 @@
                         <div class="text-sm text-slate-500 mt-0.5 break-all">{{ g.email }}</div>
                       </div>
                       <div class="flex gap-2 shrink-0">
-                        <UButton variant="outline" size="xs" icon="i-heroicons-key" :loading="resettandoId === g.id" @click="reimpostaPassword(g.id, g.email)">Genera nuova password</UButton>
+                        <UButton variant="outline" size="xs" icon="i-heroicons-key" :loading="resettandoId === g.id" @click="reimpostaPassword(g.id, g.email, g.firstName)">Invia link password</UButton>
                         <UButton variant="outline" color="error" size="xs" icon="i-heroicons-trash" :loading="rimuovendoId === g.id" @click="eliminaAccessoPortale(g.id, g.email)">Rimuovi</UButton>
                       </div>
                     </div>
                   </div>
 
-                  <UAlert v-if="resetPassword" color="warning" icon="i-heroicons-key" title="Nuova password temporanea" :description="`Comunica questa password a ${resetPassword.email}: ${resetPassword.tempPassword} (mostrata una sola volta)${resetPassword.emailInviata ? ' — inviata anche via email al genitore' : ''}`" class="mt-4" :close-button="{ icon: 'i-heroicons-x-mark' }" @close="resetPassword = null" />
-                  <UAlert v-if="credenziali" color="info" icon="i-heroicons-key" title="Account creato — comunicare al genitore:" :description="`Email: ${credenziali.email} | Password: ${credenziali.tempPassword}${credenziali.emailInviata ? ' — credenziali inviate anche via email' : ''}`" class="mt-4" :close-button="{ icon: 'i-heroicons-x-mark' }" @close="credenziali = null" />
+                  <div v-if="resetPassword" class="mt-4">
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Link password per {{ resetPassword.email }}</span>
+                      <UButton size="xs" variant="ghost" icon="i-heroicons-x-mark" aria-label="Chiudi" @click="() => { resetPassword = null }" />
+                    </div>
+                    <LinkPrimoAccesso :link="resetPassword.linkPassword" :email="resetPassword.email" :nome="resetPassword.nome" :email-inviata="resetPassword.emailInviata" :motivo-email="resetPassword.motivoEmail" :dettaglio-email="resetPassword.dettaglioEmail" />
+                  </div>
+                  <div v-if="credenziali" class="mt-4">
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Account genitore creato</span>
+                      <UButton size="xs" variant="ghost" icon="i-heroicons-x-mark" aria-label="Chiudi" @click="() => { credenziali = null }" />
+                    </div>
+                    <LinkPrimoAccesso :link="credenziali.linkPassword" :email="credenziali.email" :nome="credenziali.nome" :email-inviata="credenziali.emailInviata" :motivo-email="credenziali.motivoEmail" :dettaglio-email="credenziali.dettaglioEmail" />
+                  </div>
 
                   <!-- Impostazione dell'ALUNNO, valida per tutti i genitori collegati -->
                   <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-sm">
@@ -458,10 +486,16 @@
                       </dl>
                     </div>
 
-                    <UAlert v-if="credenzialiStudente" color="info" icon="i-heroicons-key" title="Credenziali account studente (mostrate una sola volta)" :description="`Email: ${credenzialiStudente.email} | Password: ${credenzialiStudente.tempPassword}${credenzialiStudente.emailInviata ? ' — inviate anche via email allo studente' : ' — email non configurata: comunicale a mano'}`" class="mt-4" :close-button="{ icon: 'i-heroicons-x-mark' }" @close="credenzialiStudente = null" />
+                    <div v-if="credenzialiStudente" class="mt-4">
+                      <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Link password per lo studente</span>
+                        <UButton size="xs" variant="ghost" icon="i-heroicons-x-mark" aria-label="Chiudi" @click="() => { credenzialiStudente = null }" />
+                      </div>
+                      <LinkPrimoAccesso :link="credenzialiStudente.linkPassword" :email="credenzialiStudente.email" :nome="credenzialiStudente.nome" :email-inviata="credenzialiStudente.emailInviata" :motivo-email="credenzialiStudente.motivoEmail" :dettaglio-email="credenzialiStudente.dettaglioEmail" />
+                    </div>
 
                     <div class="mt-4 flex gap-2">
-                      <UButton variant="outline" size="sm" icon="i-heroicons-key" @click="resetPasswordStudente">Genera nuova password</UButton>
+                      <UButton variant="outline" size="sm" icon="i-heroicons-key" @click="resetPasswordStudente">Invia link password</UButton>
                     </div>
                   </template>
                 </UCard>
@@ -705,6 +739,7 @@
 
 
 <script setup lang="ts">
+import type { EsitoInvitoEmail } from '#shared/email'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
 import { UpdateStudentSchema } from '#shared/schemas/student.schema'
 import { normalizzaTelefono } from '~/utils/phone'
@@ -1059,9 +1094,9 @@ const relazioneScelta = computed(() => {
   if (datiCreaAccesso.relazione === 'ALTRO') return datiCreaAccesso.relazioneAltro.trim().slice(0, 50)
   return datiCreaAccesso.relazione
 })
-const credenziali = ref<{ email: string; tempPassword: string; emailInviata?: boolean } | null>(null)
+const credenziali = ref<({ email: string; nome: string; linkPassword: string } & EsitoInvitoEmail) | null>(null)
 const creandoAccesso = ref(false)
-const resetPassword = ref<{ email: string; tempPassword: string; emailInviata: boolean } | null>(null)
+const resetPassword = ref<({ email: string; nome: string; linkPassword: string } & EsitoInvitoEmail) | null>(null)
 const resettandoId = ref<string | null>(null)
 const rimuovendoId = ref<string | null>(null)
 
@@ -1073,7 +1108,7 @@ const { data: studentAccount, refresh: refreshStudentAccount } = useLazyFetch(
 const datiAccountStudente = reactive({ email: '', firstName: '', lastName: '', consensoGenitore: false })
 const creandoAccountStudente = ref(false)
 const togglandoStudente = ref(false)
-const credenzialiStudente = ref<{ email: string; tempPassword: string; emailInviata?: boolean } | null>(null)
+const credenzialiStudente = ref<({ email: string; nome: string; linkPassword: string } & EsitoInvitoEmail) | null>(null)
 
 // Precompila dai dati dello studente appena disponibili
 watch(studentAccount, (acc: any) => {
@@ -1090,7 +1125,7 @@ async function creaAccountStudente() {
       method: 'POST',
       body: { ...datiAccountStudente },
     }) as any
-    credenzialiStudente.value = { email: res.email, tempPassword: res.tempPassword, emailInviata: res.emailInviata === true }
+    credenzialiStudente.value = { email: res.email, nome: datiAccountStudente.firstName, linkPassword: res.linkPassword, emailInviata: res.emailInviata === true, motivoEmail: res.motivoEmail, dettaglioEmail: res.dettaglioEmail }
     toast.add({ title: 'Account studente creato', color: 'success' })
     await refreshStudentAccount()
   } catch (e: any) {
@@ -1126,7 +1161,7 @@ async function resetPasswordStudente() {
       method: 'PUT',
       body: { action: 'reset-password', userId: acc.studentUser.id },
     }) as any
-    credenzialiStudente.value = { email: acc.studentUser.email, tempPassword: res.tempPassword, emailInviata: res.emailInviata === true }
+    credenzialiStudente.value = { email: acc.studentUser.email, nome: acc.studentUser.firstName ?? '', linkPassword: res.linkPassword, emailInviata: res.emailInviata === true, motivoEmail: res.motivoEmail, dettaglioEmail: res.dettaglioEmail }
   } catch (e: any) {
     toast.add({ title: 'Errore', description: e?.data?.statusMessage ?? 'Impossibile reimpostare la password', color: 'error' })
   }
@@ -1196,7 +1231,7 @@ async function creaAccessoPortale(force = false) {
       })
       confermaCollegamento.value = null
     } else {
-      credenziali.value = { email: res.email, tempPassword: res.tempPassword, emailInviata: res.emailInviata === true }
+      credenziali.value = { email: res.email, nome: datiCreaAccesso.firstName, linkPassword: res.linkPassword, emailInviata: res.emailInviata === true, motivoEmail: res.motivoEmail, dettaglioEmail: res.dettaglioEmail }
       toast.add({ title: 'Genitore aggiunto al portale', color: 'success' })
     }
     mostraModalCreaAccesso.value = false
@@ -1246,8 +1281,9 @@ function eliminaAccessoPortale(parentUserId: string, email = '') {
   )
 }
 
-// Nuova password temporanea per UN genitore specifico dell'elenco
-async function reimpostaPassword(parentUserId: string, email = '') {
+// Manda a UN genitore specifico dell'elenco un nuovo link "scegli la tua password".
+// La password attuale NON cambia: se il genitore non apre il link continua a entrare come prima.
+async function reimpostaPassword(parentUserId: string, email = '', nome = '') {
   if (!parentUserId) return
   resettandoId.value = parentUserId
   try {
@@ -1255,7 +1291,7 @@ async function reimpostaPassword(parentUserId: string, email = '') {
       method: 'PUT',
       body: { action: 'reset-password' },
     }) as any
-    resetPassword.value = { email, tempPassword: res.tempPassword, emailInviata: res.emailInviata === true }
+    resetPassword.value = { email, nome, linkPassword: res.linkPassword, emailInviata: res.emailInviata === true, motivoEmail: res.motivoEmail, dettaglioEmail: res.dettaglioEmail }
   } catch (e: any) {
     toast.add({
       title: 'Errore',

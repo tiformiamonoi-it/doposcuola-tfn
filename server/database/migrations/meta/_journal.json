@@ -155,6 +155,13 @@
       "when": 1788342098731,
       "tag": "0021_naive_lionheart",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788464903447,
+      "tag": "0022_rich_old_lace",
+      "breakpoints": true
     }
   ]
 }

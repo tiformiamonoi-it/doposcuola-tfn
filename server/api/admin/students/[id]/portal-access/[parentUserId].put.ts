@@ -2,15 +2,18 @@ import { z } from 'zod'
 import { and, eq } from 'drizzle-orm'
 import { db } from '../../../../../database/client'
 import { studentParents } from '../../../../../database/schema'
-import { resetPortalPassword } from '../../../../../services/portal-user.service'
+import { inviaLinkPassword } from '../../../../../services/portal-user.service'
 import { toHttpError } from '../../../../../utils/http-error'
 
 const PutSchema = z.discriminatedUnion('action', [
+  // Storicamente 'reset-password'; oggi manda un link per SCEGLIERE la password
+  // (l'etichetta resta per non rompere le chiamate già in giro nel frontend)
   z.object({ action: z.literal('reset-password') }),
 ])
 
 // PUT /api/admin/students/:id/portal-access/:parentUserId
-// Azioni su UN singolo genitore collegato all'alunno (per ora: nuova password temporanea).
+// Azioni su UN singolo genitore collegato all'alunno
+// (per ora: manda il link "scegli la tua password").
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
 
@@ -43,8 +46,9 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const { tempPassword, emailInviata } = await resetPortalPassword(parentUserId)
-    return { ok: true, tempPassword, emailInviata }
+    // motivoEmail/dettaglioEmail valorizzati solo se l'email non è partita
+    const { linkPassword, emailInviata, motivoEmail, dettaglioEmail } = await inviaLinkPassword(parentUserId)
+    return { ok: true, linkPassword, emailInviata, motivoEmail, dettaglioEmail }
   } catch (err: any) {
     if (err.statusCode) throw err
     throw toHttpError(err, err.message?.includes('non trovato') ? 404 : 400)

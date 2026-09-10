@@ -1,9 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm'
-import bcrypt from 'bcryptjs'
-import { randomInt } from 'node:crypto'
 import { db } from '../database/client'
 import { users, students, studentParents } from '../database/schema'
-import { sendEmail, emailBenvenutoCredenziali } from '../utils/email'
+import { inviaInvitoPassword, inviaInvitoPasswordAUtente, passwordSegnapostoHash } from '../utils/password-token'
 import type { CreatePortalAccessInput } from '#shared/schemas/portal-user.schema'
 
 // Violazione di un vincolo unico Postgres (23505). Con `constraint` si restringe
@@ -14,15 +12,6 @@ function isUniqueViolation(err: any, constraint?: string): boolean {
   if (!constraint) return true
   const nome = err?.constraint_name ?? err?.constraint ?? causa?.constraint_name ?? causa?.constraint
   return typeof nome === 'string' && nome.includes(constraint)
-}
-
-export function generateTempPassword(length = 10): string {
-  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
-  let result = ''
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(randomInt(chars.length))
-  }
-  return result
 }
 
 // Elenco dei genitori con accesso al portale collegati a uno studente
@@ -126,8 +115,9 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
     return { ok: true, user: safeUser, alreadyExisted: true as const }
   }
 
-  const tempPassword = generateTempPassword()
-  const hashedPassword = await bcrypt.hash(tempPassword, 10)
+  // Nessuno conosce questa password, nemmeno la segreteria: l'account resta
+  // inutilizzabile finché il genitore non usa il link e ne sceglie una sua.
+  const hashedPassword = await passwordSegnapostoHash()
 
   let created
   try {
@@ -139,8 +129,9 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
         lastName:  input.lastName,
         role:      'GENITORE',
         active:    true,
-        // GDPR: la password temporanea vista dalla segreteria vale solo per il primo accesso (13/07/2026)
-        mustChangePassword: true,
+        // Niente "password temporanea da cambiare": la password se la sceglie
+        // direttamente il genitore dal link, quindi non c'è nulla da forzare dopo.
+        mustChangePassword: false,
       }).returning()
 
       if (!user) throw new Error('Inserimento utente portale fallito')
@@ -152,7 +143,7 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
       })
 
       const { password: _pw, ...safeUser } = user
-      return { ok: true, user: safeUser, tempPassword, alreadyExisted: false as const }
+      return { ok: true, user: safeUser, alreadyExisted: false as const }
     })
   } catch (err: any) {
     // Corsa fra due richieste con la stessa email: messaggio chiaro invece di un errore Postgres
@@ -161,13 +152,10 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
     throw err
   }
 
-  // Dopo la transazione: benvenuto con credenziali (non blocca mai la creazione)
-  const { sent } = await sendEmail({
-    to: created.user.email,
-    ...emailBenvenutoCredenziali({ nome: created.user.firstName, email: created.user.email, tempPassword }),
-  })
+  // Dopo la transazione: invito a scegliere la password (non blocca mai la creazione)
+  const invito = await inviaInvitoPassword(created.user)
 
-  return { ...created, emailInviata: sent }
+  return { ...created, ...invito }
 }
 
 // Crea l'account personale dello STUDENTE (solo prenotazioni).
@@ -180,8 +168,8 @@ export async function createStudentAccount(input: { studentId: string; email: st
     throw new Error('Questa email è già usata da un altro account. Usa un\'email personale dello studente.')
   }
 
-  const tempPassword = generateTempPassword()
-  const hashedPassword = await bcrypt.hash(tempPassword, 10)
+  // Come per il genitore: password casuale che non conosce nessuno
+  const hashedPassword = await passwordSegnapostoHash()
 
   const created = await db.transaction(async (tx) => {
     const [user] = await tx.insert(users).values({
@@ -191,7 +179,7 @@ export async function createStudentAccount(input: { studentId: string; email: st
       lastName:  input.lastName,
       role:      'STUDENTE',
       active:    true,
-      mustChangePassword: true,
+      mustChangePassword: false, // la password se la sceglie lo studente dal link
       consensoGenitoreAt: new Date(), // il genitore ha autorizzato (spunta obbligatoria in UI)
     }).returning()
 
@@ -202,15 +190,12 @@ export async function createStudentAccount(input: { studentId: string; email: st
       .where(eq(students.id, input.studentId))
 
     const { password: _pw, ...safeUser } = user
-    return { ok: true as const, user: safeUser, tempPassword }
+    return { ok: true as const, user: safeUser }
   })
 
-  const { sent } = await sendEmail({
-    to: created.user.email,
-    ...emailBenvenutoCredenziali({ nome: created.user.firstName, email: created.user.email, tempPassword }),
-  })
+  const invito = await inviaInvitoPassword(created.user)
 
-  return { ...created, emailInviata: sent }
+  return { ...created, ...invito }
 }
 
 // Scollega UN genitore da UNO studente (es. account creato con email sbagliata,
@@ -266,29 +251,15 @@ export async function setStudentAccountActive(userId: string, active: boolean) {
   return { ok: true, active: updated.active }
 }
 
-// Genera e imposta una nuova password temporanea
-export async function resetPortalPassword(userId: string) {
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-  })
-
-  if (!user) {
-    throw new Error('Account non trovato')
-  }
-
-  const tempPassword = generateTempPassword()
-  const hashedPassword = await bcrypt.hash(tempPassword, 10)
-
-  await db.update(users)
-    .set({ password: hashedPassword, mustChangePassword: true, updatedAt: new Date() })
-    .where(eq(users.id, userId))
-
-  const { sent } = await sendEmail({
-    to: user.email,
-    ...emailBenvenutoCredenziali({ nome: user.firstName, email: user.email, tempPassword }),
-  })
-
-  return { tempPassword, emailInviata: sent }
+// Manda a un genitore/studente già registrato un nuovo link "scegli la tua password".
+// (Prima si chiamava resetPortalPassword e cambiava d'ufficio la password: vedi
+// il commento su inviaInvitoPasswordAUtente per il perché non lo fa più.)
+//
+// Restituisce anche motivoEmail/dettaglioEmail quando la posta non parte: sono
+// gli stessi campi che createPortalAccount e createStudentAccount portano su con
+// lo spread di `invito`, così l'interfaccia dice sempre il motivo vero.
+export async function inviaLinkPassword(userId: string) {
+  return await inviaInvitoPasswordAUtente(userId)
 }
 
 // Aggiorna il flag abilitatoPrenotazioneOnline

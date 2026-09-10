@@ -9,6 +9,8 @@ import { rateLimitExceeded } from '../../utils/rate-limit'
 const loginSchema = z.object({
   email:    z.string().email('Email non valida'),
   password: z.string().min(1, 'Password obbligatoria'),
+  // Default true: i client vecchi (e la PWA già installata) restano collegati
+  ricordami: z.boolean().optional().default(true),
 })
 
 export default defineEventHandler(async (event) => {
@@ -58,19 +60,17 @@ export default defineEventHandler(async (event) => {
       ? user.termsAcceptedVersion === PRIVACY_STUDENTE_VERSION
       : true
 
-  await setUserSession(event, {
-    user: {
-      id:                 user.id,
-      email:              user.email,
-      firstName:          user.firstName,
-      lastName:           user.lastName,
-      role:               user.role,
-      linkedStudentIds,
-      mustChangePassword: user.mustChangePassword,
-      termsAccepted,
-      tutorialVisto: user.tutorialVisto,
-    },
-  })
+  await salvaSessioneUtente(event, {
+    id:                 user.id,
+    email:              user.email,
+    firstName:          user.firstName,
+    lastName:           user.lastName,
+    role:               user.role,
+    linkedStudentIds,
+    mustChangePassword: user.mustChangePassword,
+    termsAccepted,
+    tutorialVisto: user.tutorialVisto,
+  }, body.ricordami)
 
   let redirectTo = ['GENITORE', 'STUDENTE'].includes(user.role) ? '/portale' : (user.role === 'TUTOR' ? '/area-tutor' : '/')
   if (user.mustChangePassword) redirectTo = '/cambio-password'

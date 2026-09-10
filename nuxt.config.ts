@@ -54,7 +54,7 @@ export default defineNuxtConfig({
     // Override con variabili d'ambiente: NUXT_BREVO_API_KEY, NUXT_EMAIL_FROM, ecc.
     brevoApiKey:   '',
     emailFrom:     '',                    // mittente verificato su Brevo
-    emailFromName: 'Ti Formiamo Noi',
+    emailFromName: 'tiformiamonoi',
     appUrl:        '',                    // es. https://gestionale.tiformiamonoi.it (per i link nelle email)
   },
 

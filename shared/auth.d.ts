@@ -26,6 +26,8 @@ declare module '#auth-utils' {
 
   interface UserSession {
     user: User
+    // Login "ricordami": decide la durata del cookie di sessione (vedi server/utils/session.ts)
+    ricordami?: boolean
   }
 
   // Dati cifrati nel cookie, non esposti al client

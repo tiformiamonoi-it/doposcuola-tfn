@@ -6,7 +6,7 @@ import {
 } from '../database/schema'
 import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
-import { sendEmail, emailBenvenutoCredenziali } from '../utils/email'
+import { inviaInvitoPassword } from '../utils/password-token'
 import { nomeProprio } from '../utils/nomi'
 import { CAT } from '#shared/accounting-categories'
 import type {
@@ -226,7 +226,11 @@ export async function createTutor(data: CreateTutorInput) {
       lastName:  nomeProprio(data.lastName),
       role:      data.role ?? 'TUTOR',
       phone:     data.phone ?? null,
-      mustChangePassword: true, // password impostata dall'admin: obbligo cambio al primo accesso
+      // La password iniziale la digita l'admin nel modulo di creazione, quindi la
+      // conosce anche un'altra persona: resta l'obbligo di cambiarla al primo
+      // accesso. Se invece il tutor usa il link qui sotto e se ne sceglie una sua,
+      // l'obbligo decade da solo (lo azzera consumaToken).
+      mustChangePassword: true,
     }).returning()
 
     if (!user) throw new Error('Creazione utente fallita')
@@ -241,13 +245,13 @@ export async function createTutor(data: CreateTutorInput) {
     return { user: safeUser, profile }
   })
 
-  // Dopo la transazione: benvenuto con credenziali (non blocca mai la creazione)
-  const { sent } = await sendEmail({
-    to: created.user.email,
-    ...emailBenvenutoCredenziali({ nome: created.user.firstName, email: created.user.email, tempPassword: data.password, cambioObbligatorio: true }),
-  })
+  // Dopo la transazione: invito a scegliere la password (non blocca mai la creazione).
+  // Nell'email NON viaggia nessuna password, solo un link monouso.
+  // `invito` porta con sé anche il motivo dell'eventuale mancato invio
+  // (motivoEmail/dettaglioEmail): lo spread qui sotto lo fa arrivare fino all'interfaccia.
+  const invito = await inviaInvitoPassword(created.user)
 
-  return { ...created, emailInviata: sent }
+  return { ...created, ...invito }
 }
 
 // ─────────────────────────────────────────────
@@ -294,13 +298,13 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
     return { user: safeUser }
   })
 
-  // Password reimpostata dall'admin: invia le nuove credenziali al tutor
+  // Password reimpostata dall'admin: al tutor arriva un LINK per scegliersela,
+  // mai la password. Scopo PRIMO_ACCESSO (7 giorni) e non RECUPERO (2 ore) perché
+  // l'invito parte dalla segreteria, non da una richiesta del tutor: deve avere
+  // tempo di leggerlo con calma.
   if (updated && data.password) {
-    const { sent } = await sendEmail({
-      to: updated.user.email,
-      ...emailBenvenutoCredenziali({ nome: updated.user.firstName, email: updated.user.email, tempPassword: data.password, cambioObbligatorio: true }),
-    })
-    return { ...updated, emailInviata: sent }
+    const invito = await inviaInvitoPassword({ id, email: updated.user.email, firstName: updated.user.firstName })
+    return { ...updated, ...invito }
   }
 
   return updated

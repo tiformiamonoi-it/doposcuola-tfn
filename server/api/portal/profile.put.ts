@@ -50,7 +50,7 @@ export default defineEventHandler(async (event) => {
   if (!updated) throw createError({ statusCode: 404, statusMessage: 'Account non trovato' })
 
   if (data.newPassword) {
-    await setUserSession(event, { user: { ...user, mustChangePassword: false } })
+    await salvaSessioneUtente(event, { ...user, mustChangePassword: false })
   }
   return { ok: true, firstName: updated.firstName, lastName: updated.lastName }
 })

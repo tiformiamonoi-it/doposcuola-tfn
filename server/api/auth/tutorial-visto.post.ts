@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
     .set({ tutorialVisto: true, updatedAt: new Date() })
     .where(eq(users.id, session.user.id))
 
-  await setUserSession(event, { user: { ...session.user, tutorialVisto: true } })
+  await salvaSessioneUtente(event, { ...session.user, tutorialVisto: true })
 
   return { ok: true }
 })

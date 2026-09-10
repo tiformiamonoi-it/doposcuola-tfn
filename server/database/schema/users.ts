@@ -1,5 +1,5 @@
 import { pgTable, text, varchar, boolean, timestamp, date, uniqueIndex, index, numeric } from 'drizzle-orm/pg-core'
-import { cuid, userRoleEnum, tutorPaymentModeEnum } from './common'
+import { cuid, userRoleEnum, tutorPaymentModeEnum, passwordTokenScopoEnum } from './common'
 
 export const users = pgTable('users', {
   id:        text('id').primaryKey().$defaultFn(cuid),
@@ -53,4 +53,31 @@ export const tutorAvailabilities = pgTable('tutor_availabilities', {
 }, (t) => ({
   uniqueUserDate: uniqueIndex('availability_user_date_unique').on(t.userId, t.date),
   dateIdx:        index('availability_date_idx').on(t.date),
+}))
+
+// I BIGLIETTI D'INGRESSO "scegli la tua password".
+// Ogni riga è un link monouso e a tempo: si consuma quando l'utente sceglie
+// la password (used_at) e comunque scade da solo (expires_at).
+//
+// NEL DATABASE NON FINISCE MAI IL TOKEN IN CHIARO, solo il suo SHA-256:
+// se qualcuno riuscisse a leggere questa tabella (backup rubato, accesso di un
+// fornitore, dump per errore) NON potrebbe ricostruire nessun link e quindi non
+// potrebbe entrare in nessun account. L'unico che possiede il valore in chiaro è
+// chi ha ricevuto il link — esattamente come per le password, salvate hashate.
+export const passwordTokens = pgTable('password_tokens', {
+  id:        text('id').primaryKey().$defaultFn(cuid),
+  userId:    text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // SHA-256 esadecimale del token: 64 caratteri, mai il token vero
+  tokenHash: text('token_hash').notNull(),
+  scopo:     passwordTokenScopoEnum('scopo').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  // Valorizzato quando il link viene usato (o invalidato da un link più recente):
+  // NULL = ancora aperto. Le righe non si cancellano, restano come storico.
+  usedAt:    timestamp('used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  // La ricerca avviene SEMPRE per hash: indice unico, così due link non possono
+  // mai collidere e la lettura resta immediata anche con lo storico che cresce.
+  tokenHashUnique: uniqueIndex('password_tokens_token_hash_unique').on(t.tokenHash),
+  userIdx:         index('password_tokens_user_idx').on(t.userId),
 }))

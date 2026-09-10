@@ -108,26 +108,30 @@
             <UCard>
               <div class="text-xs text-slate-400 mb-3 font-medium uppercase tracking-wide flex items-center gap-1">
                 Credenziali di accesso
-                <StatHelp text="Imposta l'email vera del tutor e genera una password temporanea: gli arriverà via email (se configurata) e al primo accesso dovrà cambiarla. Utile per i tutor creati con email segnaposto." />
+                <StatHelp text="Imposta l'email vera del tutor e mandagli il link per scegliersi la password: nessuna password viaggia via email. Se la posta non parte, il link resta qui: copialo e mandaglielo su WhatsApp. La password attuale non cambia finché il tutor non ne sceglie una nuova." />
               </div>
               <div class="flex flex-wrap items-end gap-3">
                 <UFormField label="Email di accesso" class="flex-1 min-w-56">
                   <UInput v-model="credEmail" type="email" placeholder="email@vera.it" class="w-full" />
                 </UFormField>
-                <UButton icon="i-heroicons-key" :loading="generandoCredenziali" @click="generaCredenziali">
-                  Genera password e invia
+                <UButton icon="i-heroicons-key" :loading="generandoCredenziali" @click="inviaLinkAccesso">
+                  Invia link password
                 </UButton>
               </div>
-              <UAlert
-                v-if="credenzialiGenerate"
-                class="mt-3"
-                color="warning"
-                icon="i-heroicons-key"
-                title="Nuova password temporanea (mostrata una sola volta)"
-                :description="`Email: ${credenzialiGenerate.email} | Password: ${credenzialiGenerate.password}${credenzialiGenerate.emailInviata ? ' — credenziali inviate via email al tutor' : ' — email NON inviata: comunicala a mano'}`"
-                :close-button="{ icon: 'i-heroicons-x-mark' }"
-                @close="credenzialiGenerate = null"
-              />
+              <div v-if="linkAccesso" class="mt-3">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Link password</span>
+                  <UButton size="xs" variant="ghost" icon="i-heroicons-x-mark" aria-label="Chiudi" @click="() => { linkAccesso = null }" />
+                </div>
+                <LinkPrimoAccesso
+                  :link="linkAccesso.link"
+                  :email="linkAccesso.email"
+                  :nome="linkAccesso.nome"
+                  :email-inviata="linkAccesso.emailInviata"
+                  :motivo-email="linkAccesso.motivoEmail"
+                  :dettaglio-email="linkAccesso.dettaglioEmail"
+                />
+              </div>
             </UCard>
 
             <!-- Materie -->
@@ -398,7 +402,7 @@
           </div>
           <UFormField name="email" label="Email"><UInput v-model="datiModifica.email" type="email" class="w-full" /></UFormField>
           <UFormField name="phone" label="Telefono"><UInput v-model="datiModifica.phone" class="w-full" /></UFormField>
-          <UFormField name="password" label="Nuova password (opzionale)" hint="Lascia vuoto per non cambiarla; comunicala al tutor">
+          <UFormField name="password" label="Nuova password (opzionale)" hint="Lascia vuoto per non cambiarla. Al tutor arriva comunque un link per scegliersene una sua: nessuna password viaggia via email.">
             <div class="flex gap-2">
               <UInput v-model="datiModifica.password" type="text" placeholder="min. 8 caratteri" class="flex-1" />
               <UButton icon="i-heroicons-arrow-path" variant="soft" color="neutral" @click="datiModifica.password = generaPasswordCasuale()">
@@ -571,6 +575,7 @@
 </template>
 
 <script setup lang="ts">
+import type { EsitoInvitoEmail } from '#shared/email'
 import { oggiISO } from '~/utils/format'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
 import { METODI_PAGAMENTO_ITEMS, coloreStatoPagamento, coloreStatoRimborso } from '~/utils/contabilita'
@@ -603,30 +608,42 @@ const { data: tutorPayments, refresh: refreshTutorPayments } = useLazyFetch(`/ap
 })
 const eliminandoCompenso = ref<string | null>(null)
 
-// ─── Credenziali di accesso (email vera + password temporanea) ───
+// ─── Credenziali di accesso (email vera + link "scegli la tua password") ───
+// Nessuna password viene generata né mostrata: al tutor arriva solo un link
+// monouso, che la segreteria vede a schermo e può copiare.
 const credEmail = ref('')
 const generandoCredenziali = ref(false)
-const credenzialiGenerate = ref<{ email: string; password: string; emailInviata: boolean } | null>(null)
+const linkAccesso = ref<({ link: string; email: string; nome: string } & EsitoInvitoEmail) | null>(null)
 
 watch(tutor, (t: any) => { if (t?.email && !credEmail.value) credEmail.value = t.email }, { immediate: true })
 
-async function generaCredenziali() {
+async function inviaLinkAccesso() {
   if (!credEmail.value || !credEmail.value.includes('@')) {
     toast.add({ title: 'Inserisci un\'email valida', color: 'warning' })
     return
   }
   generandoCredenziali.value = true
   try {
-    const password = generaPasswordCasuale()
-    const res = await $fetch(`/api/tutors/${id}`, {
-      method: 'PUT',
-      body: { email: credEmail.value, password },
-    }) as any
-    credenzialiGenerate.value = { email: credEmail.value, password, emailInviata: res?.emailInviata === true }
-    toast.add({ title: 'Credenziali generate', color: 'success' })
+    // 1. Se la segreteria ha corretto l'email (tutor creati con email segnaposto)
+    //    la salviamo prima: il link deve partire verso l'indirizzo giusto.
+    if (credEmail.value !== (tutor.value as any)?.email) {
+      await $fetch(`/api/tutors/${id}`, { method: 'PUT', body: { email: credEmail.value } })
+    }
+    // 2. Poi il link vero e proprio. La password attuale NON viene toccata:
+    //    finché il tutor non ne sceglie una nuova continua a entrare come prima.
+    const res = await $fetch(`/api/tutors/${id}/link-password`, { method: 'POST' }) as any
+    linkAccesso.value = {
+      link:         res?.linkPassword ?? '',
+      email:        res?.email ?? credEmail.value,
+      nome:         (tutor.value as any)?.firstName ?? '',
+      emailInviata: res?.emailInviata === true,
+      motivoEmail:    res?.motivoEmail,
+      dettaglioEmail: res?.dettaglioEmail,
+    }
+    toast.add({ title: 'Link generato', color: 'success' })
     refreshTutor()
   } catch (e: any) {
-    toast.add({ title: 'Errore', description: e?.data?.statusMessage ?? 'Impossibile aggiornare le credenziali', color: 'error' })
+    toast.add({ title: 'Errore', description: e?.data?.statusMessage ?? 'Impossibile generare il link', color: 'error' })
   } finally {
     generandoCredenziali.value = false
   }
@@ -763,7 +780,7 @@ watch(tutor, (t) => {
 async function salvaTutor() {
   salvando.value = true
   try {
-    await $fetch(`/api/tutors/${id}`, {
+    const res = await $fetch(`/api/tutors/${id}`, {
       method: 'PUT',
       body: {
         ...datiModifica,
@@ -779,6 +796,18 @@ async function salvaTutor() {
       },
     })
     toast.add({ title: 'Tutor aggiornato', color: 'success' })
+    // Se l'admin ha impostato una password, al tutor è partito anche un link per
+    // scegliersene una sua: mostriamolo, così la segreteria può inoltrarlo.
+    if ((res as any)?.linkPassword) {
+      linkAccesso.value = {
+        link:         (res as any).linkPassword,
+        email:        datiModifica.email || (tutor.value as any)?.email || '',
+        nome:         datiModifica.firstName || (tutor.value as any)?.firstName || '',
+        emailInviata: (res as any).emailInviata === true,
+        motivoEmail:    (res as any).motivoEmail,
+        dettaglioEmail: (res as any).dettaglioEmail,
+      }
+    }
     modalModificaAperto.value = false
     refreshTutor()
   } catch {

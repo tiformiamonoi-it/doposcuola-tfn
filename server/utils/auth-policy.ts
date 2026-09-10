@@ -13,6 +13,12 @@ const FAMIGLIA: Role[] = ['GENITORE', 'STUDENTE']
 export const PUBLIC_API_PREFIXES = [
   '/api/auth/login',
   '/api/auth/forgot-password', // recupero password self-service (rate-limited)
+  // Pagina "scegli la tua password": chi arriva dal link NON è ancora loggato.
+  // isPublicApi() confronta il percorso INTERO (o un suo sotto-percorso), quindi
+  // questo prefisso apre solo /api/auth/imposta-password e niente altro:
+  // un'eventuale futura /api/auth/imposta-password-admin resterebbe protetta
+  // (è la trappola in cui era già caduto '/api/contact' vs '/api/contacts').
+  '/api/auth/imposta-password',
   '/api/_auth/session', // gestito da nuxt-auth-utils
   '/api/contact',       // endpoint pubblico del form
 ]

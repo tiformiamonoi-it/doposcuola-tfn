@@ -236,16 +236,15 @@
         <div v-if="risultato.portaleCreato" class="text-sm text-slate-600">
           ✅ Account portale creato per <strong>{{ risultato.portaleEmail }}</strong>
         </div>
-        <div v-if="risultato.tempPassword" class="bg-amber-50 border border-amber-200 rounded-lg p-3">
-          <p class="text-xs font-medium text-amber-700 uppercase tracking-wide">Password temporanea</p>
-          <div class="flex items-center gap-2 mt-1">
-            <code class="text-lg font-mono text-amber-800">{{ risultato.tempPassword }}</code>
-            <UButton size="xs" variant="ghost" icon="i-heroicons-clipboard" @click="copiaPassword" />
-          </div>
-          <p class="text-xs text-amber-600 mt-1">Copia e condividi con il genitore</p>
-          <p v-if="risultato.emailInviata" class="text-xs text-emerald-600 mt-1">✅ Credenziali inviate anche via email al genitore</p>
-          <p v-else class="text-xs text-amber-600 mt-1">⚠️ Email non inviata (servizio non configurato): comunica la password a mano</p>
-        </div>
+        <LinkPrimoAccesso
+          v-if="risultato.linkPassword"
+          :link="risultato.linkPassword"
+          :email="risultato.portaleEmail"
+          :nome="dati.portale.firstName || dati.genitore.parentName || 'il genitore'"
+          :email-inviata="risultato.emailInviata"
+          :motivo-email="risultato.motivoEmail"
+          :dettaglio-email="risultato.dettaglioEmail"
+        />
         <div v-if="risultato.portaleEsistente" class="text-sm text-amber-600">
           ⚠️ Esiste già un account con email {{ risultato.portaleEmail }}. Lo studente è stato collegato all'account esistente.
         </div>
@@ -273,6 +272,7 @@
 </template>
 
 <script setup lang="ts">
+import type { EsitoInvitoEmail } from '#shared/email'
 import { oggiISO } from '~/utils/format'
 import { METODI_PAGAMENTO_ITEMS } from '~/utils/contabilita'
 import { z } from 'zod'
@@ -459,8 +459,11 @@ const risultato = reactive({
   portaleCreato: false,
   portaleEsistente: false,
   portaleEmail: '',
-  tempPassword: '',
+  // Link "scegli la tua password" da mostrare/copiare (piano B senza email)
+  linkPassword: '',
   emailInviata: false,
+  motivoEmail:    undefined as EsitoInvitoEmail['motivoEmail'],
+  dettaglioEmail: undefined as EsitoInvitoEmail['dettaglioEmail'],
   // Email già di un genitore registrato: collegamento in attesa di conferma
   collegaEsistente: null as null | { studentId: string; email: string; nome: string },
 })
@@ -485,11 +488,6 @@ async function confermaCollegamentoEsistente() {
   } finally {
     collegando.value = false
   }
-}
-
-function copiaPassword() {
-  navigator.clipboard.writeText(risultato.tempPassword)
-  toast.add({ title: 'Password copiata', color: 'success' })
 }
 
 async function salvaTutto() {
@@ -587,10 +585,12 @@ async function salvaTutto() {
 
       // L'endpoint risponde con i campi al livello principale (niente wrapper .data)
       risultato.portaleEmail = portalRes.email || portalBody.email
-      if (portalRes.tempPassword) {
+      if (portalRes.linkPassword) {
         risultato.portaleCreato = true
-        risultato.tempPassword = portalRes.tempPassword
+        risultato.linkPassword = portalRes.linkPassword
         risultato.emailInviata = portalRes.emailInviata === true
+        risultato.motivoEmail    = portalRes.motivoEmail
+        risultato.dettaglioEmail = portalRes.dettaglioEmail
       } else if (portalRes.requiresConfirmation) {
         // Email già registrata come genitore (probabile altro figlio):
         // NON colleghiamo in automatico — chiediamo conferma nel riepilogo finale

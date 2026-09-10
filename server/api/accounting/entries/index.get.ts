@@ -14,6 +14,7 @@ const querySchema = z.object({
   categoria: z.string().optional(),
   // Filtro fattura: CON = da emettere + emesse, DA_EMETTERE = richiesta ma non emessa, EMESSE = già emessa
   fattura: z.enum(['CON', 'DA_EMETTERE', 'EMESSE']).optional(),
+  metodo: z.enum(['CONTANTI', 'BONIFICO', 'POS', 'ASSEGNO', 'ALTRO']).optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -41,6 +42,19 @@ export default defineEventHandler(async (event) => {
     conditions.push(lte(accountingEntries.data, end))
   }
   if (query.categoria) conditions.push(eq(accountingEntries.categoria, query.categoria))
+
+  // Metodo di pagamento. La colonna è facoltativa (può essere vuota) e nella card
+  // "Movimenti per metodo" i movimenti senza metodo finiscono in ALTRO
+  // (getMovimentiPerMetodo): qui deve valere la stessa regola, altrimenti la somma
+  // della card e il contenuto della lista mostrerebbero due numeri diversi.
+  if (query.metodo === 'ALTRO') {
+    conditions.push(or(
+      eq(accountingEntries.metodoPagamento, 'ALTRO'),
+      isNull(accountingEntries.metodoPagamento),
+    ))
+  } else if (query.metodo) {
+    conditions.push(eq(accountingEntries.metodoPagamento, query.metodo))
+  }
 
   // Fattura richiesta: sui pagamenti fa fede payments.richiedeFattura, sui manuali il flag del movimento
   if (query.fattura) {

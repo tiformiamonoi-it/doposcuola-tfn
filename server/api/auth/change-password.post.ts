@@ -3,10 +3,14 @@ import { eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { db } from '../../database/client'
 import { users } from '../../database/schema'
+import { NuovaPasswordSchema } from '#shared/schemas/password.schema'
 
+// Le regole della password stanno in un posto solo: le stesse valgono qui e
+// nella pagina pubblica "scegli la tua password". Se divergessero, un utente
+// potrebbe impostare da un link una password che poi il cambio password rifiuta.
 const ChangePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Password attuale obbligatoria'),
-  newPassword:     z.string().min(8, 'Minimo 8 caratteri').max(100),
+  newPassword:     NuovaPasswordSchema,
 })
 
 // POST /api/auth/change-password — tutti i ruoli loggati
@@ -31,7 +35,7 @@ export default defineEventHandler(async (event) => {
     .where(eq(users.id, session.user.id))
 
   // Aggiorna la sessione: il gate non deve più scattare
-  await setUserSession(event, { user: { ...session.user, mustChangePassword: false } })
+  await salvaSessioneUtente(event, { ...session.user, mustChangePassword: false })
 
   return { ok: true }
 })

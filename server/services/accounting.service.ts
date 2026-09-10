@@ -503,10 +503,19 @@ export function costiFissiMensiliAl(spese: SpesaFissa[], giorno: Date): number {
   return Number(totale.toFixed(2))
 }
 
-// Costo fisso TOTALE di un periodo: ogni spesa pesa solo per i mesi in cui era davvero
-// in vigore (intersezione fra il periodo scelto e la sua validità).
-export function costiFissiDelPeriodo(spese: SpesaFissa[], start: Date, end: Date): number {
-  let totale = 0
+// Una riga del conto dei costi fissi, così come la vede l'utente nel popup del break-even.
+export type DettaglioCostoFisso = {
+  nome: string
+  importoMensile: number
+  mesi: number
+  totalePeriodo: number
+}
+
+// Costo fisso di un periodo VOCE PER VOCE: ogni spesa pesa solo per i mesi in cui era
+// davvero in vigore (intersezione fra il periodo scelto e la sua validità).
+// Le spese fuori periodo non compaiono affatto.
+export function dettaglioCostiFissiDelPeriodo(spese: SpesaFissa[], start: Date, end: Date): DettaglioCostoFisso[] {
+  const righe: DettaglioCostoFisso[] = []
   for (const s of spese) {
     const dal = s.dal ? giornoDaStringa(s.dal) : null
     const al  = s.al  ? giornoDaStringa(s.al)  : null
@@ -515,8 +524,23 @@ export function costiFissiDelPeriodo(spese: SpesaFissa[], start: Date, end: Date
     const a  = al  && al  < end   ? al  : end
     if (a < da) continue // spesa fuori dal periodo
 
-    totale += s.importo * mesiCalendario(da, a)
+    const mesi = mesiCalendario(da, a)
+    righe.push({
+      nome:           s.nome,
+      importoMensile: Number(s.importo.toFixed(2)),
+      mesi:           Math.round(mesi * 100) / 100,
+      totalePeriodo:  Number((s.importo * mesi).toFixed(2)),
+    })
   }
+  return righe
+}
+
+// Costo fisso TOTALE di un periodo: è la somma ESATTA delle righe di dettaglio (già
+// arrotondate ai centesimi), non un secondo conto fatto a parte. Così il numero grande
+// e l'elenco che l'utente legge nel popup non possono mai differire di un centesimo.
+export function costiFissiDelPeriodo(spese: SpesaFissa[], start: Date, end: Date): number {
+  const totale = dettaglioCostiFissiDelPeriodo(spese, start, end)
+    .reduce((acc, r) => acc + r.totalePeriodo, 0)
   return Number(totale.toFixed(2))
 }
 
@@ -561,9 +585,12 @@ export async function getDashboard(startDate: Date, endDate: Date) {
 
   // Costi fissi: ogni spesa pesa solo per i mesi in cui era in vigore.
   // "mensili" = quanto pesano al mese le spese attive a fine periodo (la foto di quel momento).
-  const mesiNelPeriodo    = mesiCalendario(startDate, endDate)
-  const costiFissiMensili = costiFissiMensiliAl(speseFisse, endDate)
-  const costiFissiPeriodo = costiFissiDelPeriodo(speseFisse, startDate, endDate)
+  const mesiNelPeriodo      = mesiCalendario(startDate, endDate)
+  const costiFissiMensili   = costiFissiMensiliAl(speseFisse, endDate)
+  // Il dettaglio è la fonte del totale (vedi costiFissiDelPeriodo): un solo conto,
+  // nessuno scarto possibile fra l'elenco nel popup e il numero del break-even.
+  const costiFissiDettaglio = dettaglioCostiFissiDelPeriodo(speseFisse, startDate, endDate)
+  const costiFissiPeriodo   = costiFissiDelPeriodo(speseFisse, startDate, endDate)
   const breakEven = r2(periodo.margine - costiFissiPeriodo)
 
   return {
@@ -579,6 +606,7 @@ export async function getDashboard(startDate: Date, endDate: Date) {
       mensili: costiFissiMensili,
       periodo: costiFissiPeriodo,
       mesi: Math.round(mesiNelPeriodo * 10) / 10,
+      dettaglio: costiFissiDettaglio,
     },
     breakEven,
   }

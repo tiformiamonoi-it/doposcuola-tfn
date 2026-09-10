@@ -52,9 +52,16 @@ export default defineEventHandler(async (event) => {
         ok: true,
         userId: outcome.user.id,
         email: outcome.user.email,
-        tempPassword: ('tempPassword' in outcome ? (outcome as any).tempPassword : null) ?? null,
+        // Link "scegli la tua password" da mostrare/copiare in segreteria.
+        // Assente quando l'account esisteva già (alreadyExisted): in quel caso
+        // le credenziali del genitore non si toccano.
+        linkPassword: ('linkPassword' in outcome ? (outcome as any).linkPassword : null) ?? null,
         alreadyExisted: outcome.alreadyExisted,
         emailInviata: ('emailInviata' in outcome ? (outcome as any).emailInviata : false) ?? false,
+        // Se l'email non è partita, il perché: serve alla segreteria per capire
+        // se deve solo mandare il link a mano o se la posta è proprio bloccata.
+        motivoEmail: 'motivoEmail' in outcome ? outcome.motivoEmail : undefined,
+        dettaglioEmail: 'dettaglioEmail' in outcome ? outcome.dettaglioEmail : undefined,
       }
     }
   } catch (err: any) {

@@ -97,13 +97,20 @@
             </div>
           </UCard>
 
-          <!-- E7 — Break-even (margine - costi fissi) -->
-          <UCard :class="dash.breakEven >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'">
+          <!-- E7 — Break-even (margine - costi fissi). Cliccabile: apre il conto riga per riga. -->
+          <UCard
+            class="cursor-pointer hover:shadow-md transition-shadow"
+            :class="dash.breakEven >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'"
+            @click="modalBreakEvenAperto = true"
+          >
             <div class="flex items-start justify-between">
               <div>
                 <p class="text-xs font-medium uppercase tracking-wide flex items-center gap-1" :class="dash.breakEven >= 0 ? 'text-emerald-600' : 'text-rose-600'">
                   Break-even
-                  <StatHelp text="Margine meno i costi fissi del periodo (affitto, utenze…). Se è positivo, l'attività si sta ripagando da sola." />
+                  <!-- Il "?" è già un bottone: fermiamo il click qui, altrimenti aprirebbe anche il popup del calcolo -->
+                  <span @click.stop>
+                    <StatHelp text="Margine meno i costi fissi del periodo (affitto, utenze…). Se è positivo, l'attività si sta ripagando da sola." />
+                  </span>
                 </p>
                 <p class="text-2xl font-bold mt-1" :class="dash.breakEven >= 0 ? 'text-emerald-700' : 'text-rose-700'">
                   € {{ fmt(dash.breakEven) }}
@@ -111,6 +118,21 @@
                 <p class="text-[11px] mt-1" :class="dash.breakEven >= 0 ? 'text-emerald-400' : 'text-rose-400'">
                   Margine − € {{ fmt(dash.costiFissi.periodo) }} costi fissi
                 </p>
+                <!--
+                  Accessibilità: la card intera si può cliccare col mouse, ma chi naviga
+                  da tastiera ha bisogno di un comando vero e proprio da raggiungere con
+                  Tab. Un <button> annidato dentro un altro bottone non è valido: per
+                  questo la card resta un contenitore e il comando è questo link.
+                -->
+                <button
+                  type="button"
+                  class="mt-2 inline-flex items-center gap-1 text-[11px] font-medium underline underline-offset-2 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
+                  :class="dash.breakEven >= 0 ? 'text-emerald-700 focus-visible:outline-emerald-600' : 'text-rose-700 focus-visible:outline-rose-600'"
+                  @click.stop="modalBreakEvenAperto = true"
+                >
+                  <UIcon name="i-heroicons-calculator" class="w-3.5 h-3.5" />
+                  Vedi il calcolo
+                </button>
               </div>
               <UIcon name="i-heroicons-presentation-chart-line" class="w-6 h-6" :class="dash.breakEven >= 0 ? 'text-emerald-400' : 'text-rose-400'" />
             </div>
@@ -444,6 +466,10 @@
           </p>
           <UFormField label="Tipo">
             <USelect v-model="filtroEntries.tipo" :items="[{label: 'Tutti', value: 'TUTTI'}, {label: 'Entrata', value: 'ENTRATA'}, {label: 'Uscita', value: 'USCITA'}, {label: 'Credito', value: 'CREDITO'}, {label: 'Debito', value: 'DEBITO'}, {label: 'Nota/Atteso', value: 'NOTA'}, {label: 'Storno', value: 'STORNO'}]" class="w-40" />
+          </UFormField>
+          <!-- Voci riusate da METODI_MOVIMENTO_ITEMS: un solo elenco di metodi in tutto il progetto -->
+          <UFormField label="Metodo">
+            <USelect v-model="filtroEntries.metodo" :items="opzioniFiltroMetodo" class="w-40" />
           </UFormField>
           <UFormField label="Categoria">
             <USelect v-model="filtroEntries.categoria" :items="opzioniFiltro" class="w-52" />
@@ -791,6 +817,76 @@
       </template>
     </UModal>
 
+    <!-- ─── MODAL BREAK-EVEN — il conto riga per riga ─── -->
+    <UModal v-model:open="modalBreakEvenAperto" title="Come si calcola il break-even">
+      <template #body>
+        <div v-if="dash" class="text-sm">
+          <!-- Il conto in colonna: voce a sinistra, importi incolonnati a destra -->
+          <dl class="space-y-2">
+            <div class="flex items-baseline justify-between gap-4">
+              <dt class="text-slate-600">Entrate del periodo</dt>
+              <dd class="font-medium text-green-700 tabular-nums whitespace-nowrap">+ € {{ fmt(dash.periodo.entrate) }}</dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-4">
+              <dt class="text-slate-600">Uscite del periodo</dt>
+              <dd class="font-medium text-red-700 tabular-nums whitespace-nowrap">− € {{ fmt(dash.periodo.uscite) }}</dd>
+            </div>
+
+            <div class="border-t border-slate-200 pt-2 flex items-baseline justify-between gap-4">
+              <dt class="font-medium text-slate-700">Margine</dt>
+              <dd class="font-semibold text-slate-900 tabular-nums whitespace-nowrap">= € {{ fmt(dash.periodo.margine) }}</dd>
+            </div>
+
+            <div class="flex items-baseline justify-between gap-4">
+              <dt class="text-slate-600">Spese fisse del periodo</dt>
+              <dd class="font-medium text-red-700 tabular-nums whitespace-nowrap">− € {{ fmt(dash.costiFissi.periodo) }}</dd>
+            </div>
+          </dl>
+
+          <!-- Le spese fisse una per una: la somma di queste righe È il totale qui sopra -->
+          <ul v-if="dash.costiFissi.dettaglio.length" class="mt-2 space-y-1 pl-3 border-l-2 border-slate-100">
+            <li
+              v-for="(voce, i) in dash.costiFissi.dettaglio"
+              :key="i"
+              class="flex items-baseline justify-between gap-3 text-xs text-slate-500"
+            >
+              <span class="min-w-0">
+                <span class="text-slate-600">{{ voce.nome || 'Spesa senza nome' }}</span>
+                <span class="text-slate-400"> — € {{ fmt(voce.importoMensile) }} al mese × {{ etichettaMesi(voce.mesi) }}</span>
+              </span>
+              <span class="tabular-nums whitespace-nowrap">€ {{ fmt(voce.totalePeriodo) }}</span>
+            </li>
+          </ul>
+          <p v-else class="mt-2 pl-3 border-l-2 border-slate-100 text-xs text-slate-400">
+            Nessuna spesa fissa attiva in questo periodo (si impostano in Impostazioni → Spese fisse).
+          </p>
+
+          <div class="mt-3 pt-2 border-t-2 border-slate-300 flex items-baseline justify-between gap-4">
+            <span class="font-bold uppercase tracking-wide text-slate-700">Break-even</span>
+            <span
+              class="text-lg font-bold tabular-nums whitespace-nowrap"
+              :class="dash.breakEven >= 0 ? 'text-emerald-700' : 'text-rose-700'"
+            >= € {{ fmt(dash.breakEven) }}</span>
+          </div>
+
+          <!-- La stessa cosa detta a parole, per chi non ha voglia di leggere una colonna di numeri -->
+          <p
+            class="mt-4 rounded-lg p-3 leading-relaxed"
+            :class="dash.breakEven >= 0 ? 'bg-emerald-50 text-emerald-900' : 'bg-rose-50 text-rose-900'"
+          >
+            Per andare in pari nel periodo servono <strong>€ {{ fmt(entrateNecessarie) }}</strong> di entrate:
+            ne hai fatte <strong>€ {{ fmt(dash.periodo.entrate) }}</strong>.
+            <template v-if="dash.breakEven < 0">
+              Ti mancano <strong>€ {{ fmt(-dash.breakEven) }}</strong>.
+            </template>
+            <template v-else>
+              Sei in pari, con <strong>€ {{ fmt(dash.breakEven) }}</strong> di margine oltre il necessario.
+            </template>
+          </p>
+        </div>
+      </template>
+    </UModal>
+
     <!-- ─── MODAL DATI FATTURA (numero + data emissione) ─── -->
     <UModal v-model:open="modalDatiFatturaAperto" title="Dati fattura">
       <template #body>
@@ -872,6 +968,15 @@ const opzioniForm = computed(() =>
   categorie.value.filter((c) => !c.sistema).map((c) => ({ label: c.etichetta, value: c.chiave })),
 )
 
+// Filtro Metodo della lista movimenti: riusa l'unico elenco dei metodi (app/utils/contabilita.ts)
+// invece di riscriverlo, così una modifica ai metodi si riflette ovunque.
+// "Altro" comprende anche i movimenti senza metodo indicato, esattamente come nella
+// card "Movimenti per metodo": i due numeri devono sempre coincidere.
+const opzioniFiltroMetodo = [
+  { label: 'Tutti i metodi', value: 'TUTTI' },
+  ...METODI_MOVIMENTO_ITEMS,
+]
+
 // ─── Periodo (default: dal 1° gennaio dell'anno corrente a oggi) ───
 // oggiISO() = giorno civile italiano (con toISOString il periodo escludeva
 // i movimenti di oggi tra mezzanotte e le ~2 di notte)
@@ -930,16 +1035,36 @@ async function apriPrevisionale(tipo: 'CREDITO' | 'DEBITO') {
   }
 }
 
-// ─── Lista Movimenti (stesso periodo + filtri Tipo/Categoria) ───
+// ─── E7 — Popup con il calcolo del break-even, voce per voce ───
+const modalBreakEvenAperto = ref(false)
+
+// Quante entrate servirebbero per chiudere il periodo in pari: tutte le uscite del
+// periodo più le spese fisse. Non è un numero nuovo, è lo stesso conto letto al
+// contrario: entrate − (uscite + spese fisse) = break-even.
+const entrateNecessarie = computed(() => {
+  const d = dash.value
+  if (!d) return 0
+  return Number(((d.periodo.uscite ?? 0) + (d.costiFissi.periodo ?? 0)).toFixed(2))
+})
+
+// "1 mese", "2 mesi", "1,5 mesi": i periodi non sempre coincidono con mesi interi
+function etichettaMesi(mesi: number): string {
+  const n = mesi.toLocaleString('it-IT', { maximumFractionDigits: 2 })
+  return mesi === 1 ? '1 mese' : `${n} mesi`
+}
+
+// ─── Lista Movimenti (stesso periodo + filtri Tipo/Categoria/Metodo) ───
 const filtroEntries = reactive({
   tipo:      'TUTTI',
   categoria: 'TUTTE',
+  metodo:    'TUTTI',
   fattura:   'TUTTE',
   page:      1,
   limit:     50,
 })
 
 const filtroFatturaQuery = () => (filtroEntries.fattura !== 'TUTTE' ? filtroEntries.fattura : undefined)
+const filtroMetodoQuery  = () => (filtroEntries.metodo  !== 'TUTTI' ? filtroEntries.metodo  : undefined)
 
 const { data: entriesData, pending: pendingEntries, refresh: refreshEntries } = useLazyFetch('/api/accounting/entries', {
   query: computed(() => ({
@@ -947,6 +1072,7 @@ const { data: entriesData, pending: pendingEntries, refresh: refreshEntries } = 
     dataFine: periodo.dataFine || undefined,
     tipo: (filtroEntries.tipo && filtroEntries.tipo !== 'TUTTI') ? filtroEntries.tipo : undefined,
     categoria: (filtroEntries.categoria && filtroEntries.categoria !== 'TUTTE') ? filtroEntries.categoria : undefined,
+    metodo: filtroMetodoQuery(),
     fattura: filtroFatturaQuery(),
     page: filtroEntries.page,
     limit: filtroEntries.limit,
@@ -973,6 +1099,7 @@ async function esportaCsv() {
         dataFine: periodo.dataFine || undefined,
         tipo: (filtroEntries.tipo && filtroEntries.tipo !== 'TUTTI') ? filtroEntries.tipo : undefined,
         categoria: (filtroEntries.categoria && filtroEntries.categoria !== 'TUTTE') ? filtroEntries.categoria : undefined,
+        metodo: filtroMetodoQuery(),
         fattura: filtroFatturaQuery(),
         page: 1,
         limit: 10000, // ponytail: una sola pagina gigante — sopra i 10k movimenti servirà uno streaming
@@ -1003,7 +1130,7 @@ async function esportaCsv() {
 }
 
 // USelect (Reka UI) non emette un evento `change` affidabile → osserviamo i filtri.
-watch(() => [filtroEntries.tipo, filtroEntries.categoria, filtroEntries.fattura], caricaEntries)
+watch(() => [filtroEntries.tipo, filtroEntries.categoria, filtroEntries.metodo, filtroEntries.fattura], caricaEntries)
 
 function cambiaPagina() {
   refreshEntries()

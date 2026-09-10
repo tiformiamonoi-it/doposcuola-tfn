@@ -17,7 +17,8 @@
       { label: 'Categorie Contabili', slot: 'categorie' },
       { label: 'Spese Fisse', slot: 'spese' },
       { label: 'Chiusure', slot: 'chiusure' },
-      { label: 'Sconti', slot: 'sconti' }
+      { label: 'Sconti', slot: 'sconti' },
+      { label: 'Email', slot: 'email' }
     ]">
       <template #pacchetti>
         <UCard class="mt-4">
@@ -572,6 +573,66 @@
         </UCard>
       </template>
 
+      <template #email>
+        <UCard class="mt-4">
+          <template #header>
+            <div class="flex items-center gap-2">
+              <UIcon name="i-heroicons-envelope" class="w-4 h-4 text-tfn-500" />
+              <span class="font-medium text-slate-800">Invio email</span>
+            </div>
+          </template>
+
+          <div class="space-y-4">
+            <p class="text-sm text-slate-600">
+              Il gestionale manda email da solo: il link per scegliere la password a tutor e famiglie,
+              gli avvisi sui pacchetti in esaurimento. Se qualcuno dice «non mi è arrivato niente»,
+              da qui controlli in dieci secondi se il problema è la posta.
+            </p>
+            <p class="text-sm text-slate-600">
+              Il pulsante manda un messaggio di prova <strong>al tuo indirizzo</strong> ({{ emailAdmin || 'il tuo account' }}),
+              non a tutor o famiglie: nessuno se ne accorge.
+            </p>
+
+            <div>
+              <UButton
+                icon="i-heroicons-paper-airplane"
+                :loading="provaEmailInCorso"
+                @click="provaInvioEmail"
+              >
+                Manda una email di prova a me stesso
+              </UButton>
+            </div>
+
+            <!-- Esito: verde se è partita, rosso col motivo se no -->
+            <div
+              v-if="esitoProvaEmail"
+              class="rounded-lg border p-3 text-sm"
+              :class="esitoProvaEmail.sent
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                : 'border-red-200 bg-red-50 text-red-800'"
+            >
+              <p class="flex items-start gap-1.5 font-medium">
+                <UIcon
+                  :name="esitoProvaEmail.sent ? 'i-heroicons-check-circle' : 'i-heroicons-exclamation-triangle'"
+                  class="w-4 h-4 mt-0.5 shrink-0"
+                />
+                <span v-if="esitoProvaEmail.sent">
+                  Inviata a {{ esitoProvaEmail.destinatario }} — controlla la posta, anche nello spam
+                </span>
+                <span v-else>{{ testoMotivoProva }}</span>
+              </p>
+              <p v-if="!esitoProvaEmail.sent && esitoProvaEmail.dettaglio" class="mt-1.5 pl-6 text-xs">
+                Dettaglio tecnico: {{ esitoProvaEmail.dettaglio }}
+              </p>
+              <p v-if="!esitoProvaEmail.sent" class="mt-1.5 pl-6 text-xs">
+                Finché la posta non riparte, i link di primo accesso si possono comunque copiare a schermo
+                dalla scheda del tutor o dell'alunno e mandare su WhatsApp.
+              </p>
+            </div>
+          </div>
+        </UCard>
+      </template>
+
     </UTabs>
 
     <!-- ─── MODAL CREA TEMPLATE ─── -->
@@ -705,6 +766,57 @@ import { it } from 'date-fns/locale'
 definePageMeta({ middleware: ['admin-only'] })
 
 const toast = useToast()
+
+// ─── PROVA INVIO EMAIL ───
+// PERCHE': l'utente non ha modo di sapere se la posta funziona finché qualcuno
+// non si lamenta di non aver ricevuto il link. Questo pulsante gli dà una
+// risposta immediata, e quando l'invio fallisce mostra il motivo vero invece di
+// un errore generico (vedi il commento in server/utils/email.ts).
+const { user: utenteLoggato } = useUserSession()
+const emailAdmin = computed(() => utenteLoggato.value?.email ?? '')
+
+type EsitoProvaEmail = {
+  ok: boolean
+  destinatario: string
+  sent: boolean
+  motivo?: 'NON_CONFIGURATO' | 'RIFIUTATO' | 'RETE'
+  dettaglio?: string
+}
+
+const provaEmailInCorso = ref(false)
+const esitoProvaEmail = ref<EsitoProvaEmail | null>(null)
+
+const testoMotivoProva = computed(() => {
+  switch (esitoProvaEmail.value?.motivo) {
+    case 'NON_CONFIGURATO':
+      return 'Non partita: il servizio di posta non è configurato (mancano la chiave o l\'indirizzo mittente).'
+    case 'RIFIUTATO':
+      return 'Non partita: il servizio di posta ha rifiutato l\'invio.'
+    case 'RETE':
+      return 'Non partita: il gestionale non è riuscito a contattare il servizio di posta.'
+    default:
+      return 'Non partita: motivo sconosciuto.'
+  }
+})
+
+async function provaInvioEmail() {
+  provaEmailInCorso.value = true
+  esitoProvaEmail.value = null
+  try {
+    esitoProvaEmail.value = await $fetch<EsitoProvaEmail>('/api/settings/test-email', { method: 'POST' })
+  } catch (e: any) {
+    // Qui ci finiscono solo gli errori veri (sessione scaduta, permessi): il
+    // mancato invio non è un errore, arriva come risposta con sent = false.
+    toast.add({
+      title: 'Prova non riuscita',
+      description: e?.data?.statusMessage ?? e?.statusMessage ?? 'Riprova fra qualche istante.',
+      color: 'error',
+      icon: 'i-heroicons-exclamation-triangle',
+    })
+  } finally {
+    provaEmailInCorso.value = false
+  }
+}
 
 // ─── ConfirmDialog: stato e logica in app/composables/useConfirm.ts ───
 const { confirmOpen, confirmTitle, confirmDescription, confirmLabel, confirmColor, chiediConferma, eseguiConferma } = useConfirm()

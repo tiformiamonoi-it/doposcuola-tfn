@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm'
-import { users, tutorProfiles, tutorAvailabilities } from './users'
+import { users, tutorProfiles, tutorAvailabilities, passwordTokens } from './users'
 import { students, studentReferrals, studentParents } from './students'
 import { packages, standardPackages, packageRecharges, payments } from './packages'
 import { lessons, lessonStudents, timeSlots } from './lessons'
@@ -21,10 +21,16 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   parentLinks:     many(studentParents),
   ownStudent:      many(students, { relationName: 'studentUser' }),
   authoredNotes:   many(studentNotes),
+  passwordTokens:  many(passwordTokens),
 }))
 
 export const tutorProfilesRelations = relations(tutorProfiles, ({ one }) => ({
   user: one(users, { fields: [tutorProfiles.userId], references: [users.id] }),
+}))
+
+// Link monouso "scegli la tua password" → l'account a cui appartengono
+export const passwordTokensRelations = relations(passwordTokens, ({ one }) => ({
+  user: one(users, { fields: [passwordTokens.userId], references: [users.id] }),
 }))
 
 export const studentsRelations = relations(students, ({ one, many }) => ({

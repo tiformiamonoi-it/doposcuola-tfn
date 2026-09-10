@@ -189,6 +189,26 @@
       </template>
     </UModal>
 
+    <!-- Tutor creato: link "scegli la tua password" da mandare al tutor -->
+    <UModal v-model:open="modalLinkAperto" title="Tutor creato">
+      <template #body>
+        <LinkPrimoAccesso
+          v-if="linkNuovoTutor"
+          :link="linkNuovoTutor.link"
+          :email="linkNuovoTutor.email"
+          :nome="linkNuovoTutor.nome"
+          :email-inviata="linkNuovoTutor.emailInviata"
+          :motivo-email="linkNuovoTutor.motivoEmail"
+          :dettaglio-email="linkNuovoTutor.dettaglioEmail"
+        />
+      </template>
+      <template #footer>
+        <div class="flex justify-end">
+          <UButton variant="ghost" @click="() => { modalLinkAperto = false }">Chiudi</UButton>
+        </div>
+      </template>
+    </UModal>
+
     <!-- Modal Liquida Mese -->
     <UModal v-model:open="modalLiquidaAperto" title="Liquida mese" :ui="{ width: 'max-w-md' }">
       <template #body>
@@ -261,6 +281,7 @@
 </template>
 
 <script setup lang="ts">
+import type { EsitoInvitoEmail } from '#shared/email'
 definePageMeta({ middleware: ['admin-or-super'] })
 
 const toast = useToast()
@@ -305,6 +326,10 @@ const metodiPagamento = METODI_PAGAMENTO_ITEMS
 
 // ─── Modal Crea Tutor ─────────────────────────
 const modalCreaAperto = ref(false)
+// Link "scegli la tua password" del tutor appena creato: resta a schermo finché
+// la segreteria non lo chiude, così può copiarlo e mandarlo su WhatsApp.
+const modalLinkAperto = ref(false)
+const linkNuovoTutor = ref<({ link: string; email: string; nome: string } & EsitoInvitoEmail) | null>(null)
 const salvando = ref(false)
 const nuovoTutor = reactive({
   firstName:         '',
@@ -332,13 +357,16 @@ async function creaTutor() {
         importoForfait: nuovoTutor.importoForfait || null,
       },
     }) as any
-    toast.add({
-      title: 'Tutor creato con successo',
-      description: res?.emailInviata
-        ? 'Credenziali inviate via email al tutor'
-        : 'Email non configurata: comunica la password al tutor a mano',
-      color: 'success',
-    })
+    toast.add({ title: 'Tutor creato con successo', color: 'success' })
+    linkNuovoTutor.value = {
+      link:         res?.linkPassword ?? '',
+      email:        res?.user?.email ?? nuovoTutor.email,
+      nome:         nuovoTutor.firstName,
+      emailInviata: res?.emailInviata === true,
+      motivoEmail:    res?.motivoEmail,
+      dettaglioEmail: res?.dettaglioEmail,
+    }
+    modalLinkAperto.value = Boolean(linkNuovoTutor.value.link)
     modalCreaAperto.value = false
     Object.assign(nuovoTutor, {
       firstName: '', lastName: '', email: '', password: '',

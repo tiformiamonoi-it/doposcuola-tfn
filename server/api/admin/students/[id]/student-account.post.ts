@@ -33,8 +33,11 @@ export default defineEventHandler(async (event) => {
       ok: true,
       userId: outcome.user.id,
       email: outcome.user.email,
-      tempPassword: outcome.tempPassword,
+      linkPassword: outcome.linkPassword,
       emailInviata: outcome.emailInviata,
+      // Valorizzati solo quando l'email non è partita: dicono il motivo vero
+      motivoEmail: outcome.motivoEmail,
+      dettaglioEmail: outcome.dettaglioEmail,
     }
   } catch (err: any) {
     if (err.statusCode) throw err

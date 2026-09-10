@@ -26,6 +26,11 @@ export const tutorPaymentStatusEnum = pgEnum('tutor_payment_status', ['PAGATO', 
 export const reimbursementStatusEnum = pgEnum('reimbursement_status', ['DA_PAGARE', 'PARZIALE', 'PAGATO'])
 export const contactRequestStatusEnum = pgEnum('contact_request_status', ['PENDING', 'READ', 'RESOLVED'])
 
+// Link "scegli la tua password": perché è stato creato.
+// PRIMO_ACCESSO = account appena creato dalla segreteria (validità lunga)
+// RECUPERO      = "password dimenticata" chiesto dall'utente (validità breve)
+export const passwordTokenScopoEnum = pgEnum('password_token_scopo', ['PRIMO_ACCESSO', 'RECUPERO'])
+
 // Sezione Contatti (mini-CRM): liste fisse condivise anche da shared/contatti.ts
 export const contactTipoEnum = pgEnum('contact_tipo', ['DOPOSCUOLA', 'MARKETING'])
 export const contactCanaleEnum = pgEnum('contact_canale', [

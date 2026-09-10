@@ -34,6 +34,14 @@
             />
           </UFormField>
 
+          <div class="flex items-start gap-3 pt-1">
+            <USwitch v-model="state.ricordami" aria-label="Ricordami su questo dispositivo" />
+            <div class="text-sm">
+              <p class="text-slate-700 font-medium">Ricordami su questo dispositivo</p>
+              <p class="text-xs text-slate-500">Resti collegato per 30 giorni. Spegnilo se il dispositivo è condiviso con altri.</p>
+            </div>
+          </div>
+
           <UAlert
             v-if="errorMsg"
             color="error"
@@ -69,7 +77,7 @@
       <template #body>
         <div class="space-y-4">
           <p class="text-sm text-slate-600">
-            Inserisci l'email del tuo account: se è registrata ti invieremo una password temporanea.
+            Inserisci l'email del tuo account: se è registrata ti invieremo un link per scegliere una nuova password.
           </p>
           <UFormField label="Email">
             <UInput v-model="recuperoEmail" type="email" placeholder="nome@esempio.com" icon="i-heroicons-envelope" class="w-full" />
@@ -127,20 +135,26 @@ watch(loggedIn, async (isLoggedIn) => {
 const schema = z.object({
   email:    z.string().email('Email non valida'),
   password: z.string().min(1, 'Inserisci la password'),
+  ricordami: z.boolean(),
 })
 
 type Schema = z.output<typeof schema>
 
+// `ricordami` acceso di default: la webapp installata sul telefono non deve
+// chiedere le credenziali a ogni riapertura. Viene inviato con il resto di state.
 const state = reactive<Partial<Schema>>({
   email:    '',
   password: '',
+  ricordami: true,
 })
 
 const loading  = ref(false)
 const errorMsg = ref('')
 
 // ─── Recupero password ───
-const recuperoAperto = ref(false)
+// `/login?recupero=1` apre subito il modale: ci arriva chi ha trovato scaduto
+// il link "scegli la tua password" e deve chiedersene uno nuovo.
+const recuperoAperto = ref(useRoute().query.recupero === '1')
 const recuperoEmail = ref('')
 const recuperoLoading = ref(false)
 const recuperoMessaggio = ref('')

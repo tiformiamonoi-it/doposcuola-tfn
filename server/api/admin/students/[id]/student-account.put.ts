@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { resetPortalPassword, setStudentAccountActive } from '../../../../services/portal-user.service'
+import { inviaLinkPassword, setStudentAccountActive } from '../../../../services/portal-user.service'
 import { toHttpError } from '../../../../utils/http-error'
 
 const PutSchema = z.discriminatedUnion('action', [
@@ -7,7 +7,7 @@ const PutSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('toggle-active'), userId: z.string().min(1), active: z.boolean() }),
 ])
 
-// PUT /api/admin/students/:id/student-account — reset password o attiva/disattiva
+// PUT /api/admin/students/:id/student-account — link "scegli la tua password" o attiva/disattiva
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
   if (!['ADMIN', 'SUPER_TUTOR'].includes(user.role)) {
@@ -22,8 +22,9 @@ export default defineEventHandler(async (event) => {
 
   try {
     if (result.data.action === 'reset-password') {
-      const { tempPassword, emailInviata } = await resetPortalPassword(result.data.userId)
-      return { ok: true, tempPassword, emailInviata }
+      // motivoEmail/dettaglioEmail valorizzati solo se l'email non è partita
+      const { linkPassword, emailInviata, motivoEmail, dettaglioEmail } = await inviaLinkPassword(result.data.userId)
+      return { ok: true, linkPassword, emailInviata, motivoEmail, dettaglioEmail }
     }
     return await setStudentAccountActive(result.data.userId, result.data.active)
   } catch (err: any) {

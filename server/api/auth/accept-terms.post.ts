@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
     .set({ termsAcceptedAt: new Date(), termsAcceptedVersion: versioneAttesa, updatedAt: new Date() })
     .where(eq(users.id, session.user.id))
 
-  await setUserSession(event, { user: { ...session.user, termsAccepted: true } })
+  await salvaSessioneUtente(event, { ...session.user, termsAccepted: true })
 
   return { ok: true }
 })
