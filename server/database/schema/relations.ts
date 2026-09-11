@@ -9,6 +9,7 @@ import { studentNotes } from './notes'
 import { contacts, contactInteractions, contactFigli } from './contacts'
 import { studentConfirmations } from './confirmations'
 import { contactRequests, notifiche } from './system'
+import { consensi } from './consensi'
 
 export const usersRelations = relations(users, ({ one, many }) => ({
   tutorProfile:    one(tutorProfiles, { fields: [users.id], references: [tutorProfiles.userId] }),
@@ -44,6 +45,9 @@ export const studentsRelations = relations(students, ({ one, many }) => ({
   studentUser: one(users, { fields: [students.studentUserId], references: [users.id], relationName: 'studentUser' }),
   notes:       many(studentNotes),
   confirmations: many(studentConfirmations),
+  // Il registro dei consensi dell'alunno (minore di 14 anni, immagini). Il
+  // marketing NON è qui: è della persona, non del figlio — vedi consensi.ts.
+  consensi:    many(consensi),
 }))
 
 export const packagesRelations = relations(packages, ({ one, many }) => ({
@@ -130,4 +134,14 @@ export const studentParentsRelations = relations(studentParents, ({ one }) => ({
 // Centro notifiche: chi della segreteria ha segnato l'avviso come letto
 export const notificheRelations = relations(notifiche, ({ one }) => ({
   lettaDa: one(users, { fields: [notifiche.lettaDaUserId], references: [users.id] }),
+}))
+
+// Registro dei consensi privacy → l'alunno a cui si riferisce.
+// Le DUE colonne che puntano a users (userId = la persona del consenso,
+// attoreUserId = chi l'ha materialmente cambiato) NON sono dichiarate qui apposta:
+// due relazioni verso la stessa tabella vanno disambiguate a mano, e nessuna
+// pagina ha bisogno di leggerle "alla Drizzle". Il servizio dei consensi fa una
+// join esplicita con due alias di users, dove si vede a occhio quale nome è quale.
+export const consensiRelations = relations(consensi, ({ one }) => ({
+  student: one(students, { fields: [consensi.studentId], references: [students.id] }),
 }))

@@ -15,6 +15,23 @@
       </div>
     </div>
 
+    <!-- ═══ INVITO AI CONSENSI FACOLTATIVI ═══
+         Compare solo finché una delle due scelte facoltative (foto/video e
+         promozioni) non ha MAI avuto risposta, e si può chiudere. Non è un
+         blocco: un consenso facoltativo che assilla la famiglia finché non dice
+         di sì non è più libero. -->
+    <UAlert
+      v-if="mostraInvitoConsensi"
+      color="info"
+      variant="subtle"
+      icon="i-heroicons-shield-check"
+      title="Due scelte facoltative da fare"
+      description="Nel tuo profilo puoi dirci se possiamo usare foto e video dei ragazzi e se vuoi ricevere le nostre novità. Puoi cambiare idea quando vuoi."
+      :actions="[{ label: 'Vai al profilo', color: 'info', variant: 'soft', onClick: () => { navigateTo('/portale/profilo') } }]"
+      close
+      @update:open="chiudiInvitoConsensi"
+    />
+
     <!-- ═══ GIORNATE MATERIE SPECIALI DEL MESE ═══ -->
     <UCard v-if="giornateSpecialiMese.length" class="border border-amber-200 bg-amber-50/60">
       <div class="flex items-start gap-3">
@@ -327,6 +344,42 @@ const isStudente = computed(() => (user.value as any)?.role === 'STUDENTE')
 
 // Card giornate speciali: chiusa di default, si apre con la freccetta
 const giornateSpecialiAperte = ref(false)
+
+// ─── Invito ai consensi facoltativi (blocco 5) ───
+// Solo per i genitori, e solo finché foto/video o promozioni non hanno MAI avuto
+// una risposta. Chi lo chiude non lo rivede più su quel dispositivo: la scelta
+// resta comunque disponibile nel Profilo, dove non scade mai.
+const invitoChiuso = ref(false)
+const { data: consensiFamiglia } = useLazyFetch<{
+  figli: { immagini: { valore: boolean | null } }[]
+  marketing: { valore: boolean | null }
+}>('/api/portal/consensi', { server: false, immediate: !isStudente.value })
+
+onMounted(() => {
+  try {
+    invitoChiuso.value = localStorage.getItem('invito-consensi-chiuso') === '1'
+  } catch {
+    // Navigazione privata o cookie bloccati: pazienza, l'invito resta visibile
+  }
+})
+
+const mostraInvitoConsensi = computed(() => {
+  if (isStudente.value || invitoChiuso.value) return false
+  const dati = consensiFamiglia.value
+  if (!dati) return false
+  const senzaRisposta = dati.marketing?.valore === null
+    || (dati.figli ?? []).some((f) => f.immagini?.valore === null)
+  return senzaRisposta
+})
+
+function chiudiInvitoConsensi() {
+  invitoChiuso.value = true
+  try {
+    localStorage.setItem('invito-consensi-chiuso', '1')
+  } catch {
+    // vedi sopra: se non si può ricordare, l'invito ricomparirà al prossimo accesso
+  }
+}
 
 const { data: portalConfigs } = useLazyFetch('/api/portal/configs')
 

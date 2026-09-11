@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm'
 import { db } from '../database/client'
 import { users, students, studentParents } from '../database/schema'
 import { annullaLinkAperti, inviaInvitoPassword, inviaInvitoPasswordAUtente, passwordSegnapostoHash } from '../utils/password-token'
+import { eMinoreDi14 } from '#shared/eta'
 import type { CreatePortalAccessInput } from '#shared/schemas/portal-user.schema'
 
 // Violazione di un vincolo unico Postgres (23505). Con `constraint` si restringe
@@ -182,13 +183,35 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
 // momento (arriva dalla sessione, non dal browser: nessuno può dichiarare di
 // essere un altro). L'informativa privacy promette "data e ora" del consenso:
 // senza il nome di chi l'ha raccolto quella riga non è dimostrabile a nessuno.
+//
+// L'AUTORIZZAZIONE DEL GENITORE NON SERVE SEMPRE (decisione Q16 del piano).
+// Serve — ed è un blocco vero — solo per chi non ha ancora compiuto 14 anni
+// (art. 2-quinquies D.Lgs 196/2003): da 14 in su decide il ragazzo, e pretendere
+// la spunta anche per un sedicenne è chiedere una cosa che non c'entra.
+// Se la data di nascita manca non chiediamo niente (Q17): "non lo so" non è "no",
+// e far firmare per sicurezza è il modo sbagliato di risolvere un dato mancante.
 export async function createStudentAccount(input: {
   studentId: string
   email: string
   firstName: string
   lastName: string
+  /** La spunta "il genitore autorizza": obbligatoria solo sotto i 14 anni */
+  consensoGenitore?: boolean
   registratoDaUserId?: string | null
 }) {
+  // L'età si legge dal database, non dal browser: la regola del minore di 14 anni
+  // non può dipendere da quello che il browser dichiara di sapere.
+  const studente = await db.query.students.findFirst({
+    where: eq(students.id, input.studentId),
+    columns: { id: true, dataNascita: true },
+  })
+  if (!studente) throw new Error('Studente non trovato')
+
+  const consensoGenitore = input.consensoGenitore === true
+  if (!consensoGenitore && eMinoreDi14(studente.dataNascita) === true) {
+    throw new Error('Per un alunno di meno di 14 anni serve l\'autorizzazione del genitore.')
+  }
+
   const existing = await db.query.users.findFirst({
     where: eq(users.email, input.email.toLowerCase()),
   })
@@ -208,10 +231,12 @@ export async function createStudentAccount(input: {
       role:      'STUDENTE',
       active:    true,
       mustChangePassword: false, // la password se la sceglie lo studente dal link
-      // Il genitore ha autorizzato: data e ora esatte…
-      consensoGenitoreAt: new Date(),
+      // Data, ora e operatore SOLO se il genitore ha autorizzato davvero.
+      // Scriverli comunque significherebbe lasciare in archivio la prova di un
+      // consenso che nessuno ha dato: peggio che non averla.
+      consensoGenitoreAt: consensoGenitore ? new Date() : null,
       // …e chi della segreteria era davanti al genitore quando l'ha detto.
-      consensoGenitoreRegistratoDaUserId: input.registratoDaUserId ?? null,
+      consensoGenitoreRegistratoDaUserId: consensoGenitore ? (input.registratoDaUserId ?? null) : null,
     }).returning()
 
     if (!user) throw new Error('Creazione account studente fallita')

@@ -65,3 +65,18 @@ export const confirmationStatusEnum = pgEnum('confirmation_status', ['DA_SENTIRE
 //              meglio prevederlo adesso che dover rifare l'enum domani.
 // GENERICA   = avviso libero scritto dal gestionale
 export const notificaTipoEnum = pgEnum('notifica_tipo', ['CONSENSO', 'COMPLEANNO', 'GENERICA'])
+
+// Consensi privacy (tabella `consensi`): DI CHE COSA si parla.
+// MINORE_14 = autorizzazione del genitore per l'alunno che non ha ancora 14 anni
+//             (art. 2-quinquies D.Lgs 196/2003). Riguarda l'ALUNNO.
+// IMMAGINI  = liberatoria foto e video, facoltativa. Riguarda l'ALUNNO.
+// MARKETING = comunicazioni promozionali. Riguarda LA PERSONA, non il figlio: se
+//             la mamma dice no alle promozioni vale per lei, non "per Luca sì e
+//             per Giulia no". Per questo la riga porta userId e non studentId.
+export const consensoTipoEnum = pgEnum('consenso_tipo', ['MINORE_14', 'IMMAGINI', 'MARKETING'])
+
+// Da DOVE è arrivato il cambiamento: dal portale (l'ha fatto la famiglia) o dal
+// gestionale (l'ha registrato la segreteria). Non è un dettaglio tecnico: solo i
+// cambiamenti della famiglia accendono il campanellino, perché quelli della
+// segreteria li sta facendo proprio chi il campanellino lo guarderebbe.
+export const consensoOrigineEnum = pgEnum('consenso_origine', ['PORTALE', 'GESTIONALE'])

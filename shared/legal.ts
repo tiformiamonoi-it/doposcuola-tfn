@@ -21,6 +21,64 @@
 export const TERMS_VERSION = '2026-08-v4'
 export const PRIVACY_STUDENTE_VERSION = 'studente-2026-08-v3'
 
+// ─────────────────────────────────────────────
+// I CONSENSI DELLA FAMIGLIA (blocco 5, settembre 2026)
+//
+// Tre testi separati, con tre versioni separate, e NON dentro TERMS_VERSION.
+// Il motivo è pratico prima ancora che giuridico: alzare TERMS_VERSION obbliga
+// TUTTE le famiglie a ri-accettare i Termini al primo accesso. Se un domani si
+// corregge una virgola nella liberatoria delle foto, non deve succedere niente
+// del genere — cambia la versione di quel testo soltanto, e la nuova spunta la
+// vedrà solo chi non aveva ancora risposto.
+//
+// Ogni riga del registro dei consensi (tabella `consensi`) porta con sé la
+// versione qui sotto: così, a distanza di anni, si sa non solo QUANDO una persona
+// ha acconsentito, ma CHE COSA aveva letto esattamente in quel momento.
+// ─────────────────────────────────────────────
+
+export const CONSENSO_MINORE14_VERSION  = 'minore14-2026-09-v1'
+export const CONSENSO_IMMAGINI_VERSION  = 'immagini-2026-09-v1'
+export const CONSENSO_MARKETING_VERSION = 'marketing-2026-09-v1'
+
+/**
+ * Dichiarazione del genitore per l'alunno che non ha ancora 14 anni.
+ * È l'unica OBBLIGATORIA delle tre, e solo per lui: da 14 anni compiuti il
+ * ragazzo può acconsentire da sé ai servizi online (art. 2-quinquies D.Lgs
+ * 196/2003), e chiederla lo stesso vorrebbe dire chiedere una cosa che non serve.
+ *
+ * Il nome dell'alunno entra nel testo: una dichiarazione che non dice su CHI la
+ * si sta facendo non è una dichiarazione. Per questo è una funzione e non una
+ * costante — e per la stessa ragione, se un genitore ha due figli piccoli, le
+ * dichiarazioni sono due, una per ciascuno.
+ */
+export function testoConsensoMinore14(nomeAlunno: string): string {
+  const alunno = nomeAlunno.trim() || 'mio figlio/a'
+  return `Dichiaro di esercitare la responsabilità genitoriale su ${alunno} e di autorizzare, ai sensi dell'art. 8 del Regolamento (UE) 2016/679 e dell'art. 2-quinquies del D.Lgs 196/2003, il trattamento dei suoi dati personali connesso all'uso del portale di tiformiamonoi.it, compresa — se attivato — la creazione del suo account personale per prenotare le lezioni.
+Ho letto l'Informativa privacy e so di poter revocare questa autorizzazione in qualsiasi momento scrivendo a info@tiformiamonoi.it, con effetto per il futuro.`
+}
+
+/**
+ * Liberatoria per foto e video. FACOLTATIVA sul serio: si può dire di no e il
+ * doposcuola funziona identico. Per questo NON sta nella schermata che blocca
+ * l'ingresso insieme ai documenti obbligatori — un consenso raccolto in mezzo a
+ * quelli che non si possono rifiutare non sarebbe libero, e quindi non varrebbe.
+ */
+export const CONSENSO_IMMAGINI_TESTO = `Autorizzo tiformiamonoi.it a fotografare e riprendere mio/a figlio/a durante le attività del Centro e a usare quelle immagini sul sito, sulle pagine social e sul materiale informativo del Centro.
+
+L'autorizzazione è gratuita e non ha scadenza. Le immagini non saranno cedute a terzi né usate per scopi diversi da quelli indicati, e non saranno accompagnate da dati che permettano di identificare il ragazzo oltre al nome.
+
+Questo consenso è facoltativo: senza, il servizio resta identico in tutto. Posso revocarlo quando voglio da questa pagina o scrivendo a info@tiformiamonoi.it. Dalla revoca le immagini non saranno più usate e saranno tolte dai canali del Centro appena possibile; copie già diffuse da altri potrebbero non essere recuperabili.
+
+(artt. 96 e 97 della legge 633/1941; art. 6.1.a GDPR)`
+
+/**
+ * Comunicazioni promozionali. È della PERSONA, non del figlio: la casella di
+ * posta è una sola, e "sì per Luca ma no per Giulia" non vorrebbe dire niente.
+ */
+export const CONSENSO_MARKETING_TESTO = `Acconsento a ricevere da tiformiamonoi.it comunicazioni su corsi, iniziative, promozioni e novità, via email o messaggio.
+
+È facoltativo: anche senza, continuo a ricevere tutte le comunicazioni che riguardano il servizio (lezioni, pagamenti, avvisi). Posso revocarlo quando voglio da questa pagina o scrivendo a info@tiformiamonoi.it.`
+
 export const TERMINI_TESTO = `TERMINI E CONDIZIONI DEL SERVIZIO
 tiformiamonoi — Doposcuola e ripetizioni
 Ultimo aggiornamento: agosto 2026
@@ -115,18 +173,21 @@ a) Erogazione del servizio di doposcuola/ripetizioni e gestione del rapporto con
 b) Gestione del portale online, delle prenotazioni e delle comunicazioni di servizio via email (art. 6.1.b GDPR);
 c) Adempimenti fiscali, contabili e di legge (art. 6.1.c GDPR — obbligo legale);
 d) Trattamento di eventuali dati su bisogni educativi particolari (art. 9.2.a GDPR — consenso esplicito);
-e) Difesa di diritti in sede giudiziaria (art. 6.1.f GDPR — legittimo interesse).
-Il conferimento dei dati di cui alle lettere a)-c) è necessario: senza di essi non è possibile erogare il servizio. Il consenso di cui alla lettera d) è facoltativo e revocabile in qualsiasi momento, senza conseguenze sull'erogazione del servizio.
+e) Difesa di diritti in sede giudiziaria (art. 6.1.f GDPR — legittimo interesse);
+f) Invio di comunicazioni commerciali e promozionali del Centro (art. 6.1.a GDPR — consenso);
+g) Pubblicazione di foto e video delle attività sul sito, sulle pagine e sui profili social e sul materiale informativo del Centro (art. 6.1.a GDPR — consenso; artt. 96 e 97 della legge 633/1941). Le immagini pubblicate su piattaforme social sono trattate anche dai gestori di tali piattaforme, che agiscono come titolari autonomi.
+Il conferimento dei dati di cui alle lettere a)-c) è necessario: senza di essi non è possibile erogare il servizio. I consensi di cui alle lettere d), f) e g) sono facoltativi e revocabili in qualsiasi momento — quelli delle lettere f) e g) direttamente dal portale famiglie, nella pagina Profilo — senza alcuna conseguenza sull'erogazione del servizio.
 
 4. MINORI
-Per gli studenti di età inferiore a 14 anni, ai sensi dell'art. 2-quinquies del D.Lgs 196/2003 (come modificato dal D.Lgs 101/2018), il consenso relativo ai servizi online è prestato o autorizzato da chi esercita la responsabilità genitoriale. L'eventuale account personale dello studente è attivato solo previa autorizzazione del genitore, registrata dal Centro con data e ora.
+Per gli studenti di età inferiore a 14 anni, ai sensi dell'art. 2-quinquies del D.Lgs 196/2003 (come modificato dal D.Lgs 101/2018), il consenso relativo ai servizi online è prestato o autorizzato da chi esercita la responsabilità genitoriale. L'eventuale account personale dello studente è attivato solo previa autorizzazione del genitore, registrata dal Centro con data e ora. La stessa autorizzazione è chiesta al genitore anche nel portale famiglie, al primo accesso, e viene registrata con data, ora e versione del testo accettato. Per gli studenti che hanno compiuto 14 anni l'autorizzazione del genitore non è richiesta.
 
 5. DESTINATARI
 I dati non sono diffusi. Possono essere comunicati a: consulenti fiscali e contabili; fornitori di servizi tecnici che agiscono come responsabili del trattamento ex art. 28 GDPR; autorità quando richiesto dalla legge.
 Responsabili del trattamento attualmente utilizzati:
 - Supabase, Inc. (Stati Uniti) — hosting del database del gestionale; i dati sono conservati su server situati nell'Unione Europea (regione Irlanda);
 - Vercel, Inc. (Stati Uniti) — hosting dell'applicazione web;
-- Brevo (Sendinblue SAS, Francia — UE) — invio delle email di servizio (credenziali, avvisi sui pacchetti).
+- Brevo (Sendinblue SAS, Francia — UE) — invio delle email di servizio (credenziali, avvisi sui pacchetti) e, a chi ha prestato il consenso di cui al §3 lettera f), delle comunicazioni promozionali;
+- i gestori delle piattaforme social sulle quali il Centro pubblica le immagini, limitatamente alle immagini per cui è stato prestato il consenso di cui al §3 lettera g).
 L'elenco aggiornato dei responsabili può essere richiesto in qualsiasi momento a info@tiformiamonoi.it.
 
 6. TRASFERIMENTI EXTRA-UE

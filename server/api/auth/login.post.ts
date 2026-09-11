@@ -5,6 +5,7 @@ import { db } from '../../database/client'
 import { users, students, studentParents } from '../../database/schema'
 import { TERMS_VERSION, PRIVACY_STUDENTE_VERSION } from '#shared/legal'
 import { rateLimitExceeded } from '../../utils/rate-limit'
+import { dichiarazioniMinoriMancanti } from '../../services/consensi.service'
 
 const loginSchema = z.object({
   email:    z.string().email('Email non valida'),
@@ -60,6 +61,14 @@ export default defineEventHandler(async (event) => {
       ? user.termsAcceptedVersion === PRIVACY_STUDENTE_VERSION
       : true
 
+  // I figli sotto i 14 anni per cui manca ancora l'autorizzazione del genitore
+  // (blocco 5). Si calcola qui, all'ingresso, e viaggia dentro la sessione: la
+  // schermata che la chiede si apre prima che le API del portale siano aperte,
+  // quindi non potrebbe andarsela a prendere da sola.
+  const dichiarazioniMinori = user.role === 'GENITORE'
+    ? await dichiarazioniMinoriMancanti(linkedStudentIds ?? [])
+    : undefined
+
   await salvaSessioneUtente(event, {
     id:                 user.id,
     email:              user.email,
@@ -69,12 +78,13 @@ export default defineEventHandler(async (event) => {
     linkedStudentIds,
     mustChangePassword: user.mustChangePassword,
     termsAccepted,
+    dichiarazioniMinori,
     tutorialVisto: user.tutorialVisto,
   }, body.ricordami)
 
   let redirectTo = ['GENITORE', 'STUDENTE'].includes(user.role) ? '/portale' : (user.role === 'TUTOR' ? '/area-tutor' : '/')
   if (user.mustChangePassword) redirectTo = '/cambio-password'
-  else if (!termsAccepted) redirectTo = '/portale/accetta-termini'
+  else if (!termsAccepted || (dichiarazioniMinori?.length ?? 0) > 0) redirectTo = '/portale/accetta-termini'
 
   return { ok: true, redirectTo }
 })

@@ -1,6 +1,8 @@
 // Diritti GDPR dell'interessato:
 // - anonymizeStudent      → art. 17 (cancellazione): svuota i dati identificativi ma
-//   conserva pacchetti/pagamenti/contabilità (obbligo fiscale 10 anni, art. 2220 c.c.)
+//   conserva pacchetti/pagamenti/contabilità (obbligo fiscale 10 anni, art. 2220 c.c.).
+//   Pulisce anche la sezione Contatti, da cui quasi ogni alunno proviene: senza
+//   quel passaggio la stessa persona resterebbe in chiaro in un'altra pagina.
 // - exportStudentData     → art. 15/20 (accesso/portabilità): dump JSON dei dati dello studente
 // - anonymizeLostContacts → art. 5.1.e (limitazione della conservazione): pulizia
 //   automatica dei contatti "Persi" da oltre 12 mesi, lanciata dal cron giornaliero
@@ -86,10 +88,86 @@ export async function anonymizeStudent(id: string) {
       updatedAt: new Date(),
     }).where(eq(students.id, id))
 
+    // ── LA SEZIONE CONTATTI (il punto che mancava) ──
+    //
+    // Quasi ogni alunno arriva da un contatto: la mamma che ha scritto su
+    // Instagram, la telefonata di settembre. In quella scheda restano il suo
+    // nome, il suo numero, la classe del figlio e il diario di che cosa ci si è
+    // detti. Svuotare l'anagrafica dell'alunno e lasciare intatta quella scheda
+    // vuol dire NON aver cancellato niente: la persona è ancora lì, con nome e
+    // cognome, in un'altra pagina del gestionale.
+    //
+    // Qui si fa nella STESSA transazione del resto: o si cancella tutto, o non si
+    // cancella niente. Una cancellazione a metà è la peggiore delle due.
+    const adesso = new Date()
+
+    // 1. I "figli" del contatto che puntano a questo alunno spariscono del tutto:
+    //    sono nome, classe e scuola di un minore, e alle statistiche non servono
+    //    (stessa scelta di anonymizeLostContacts).
+    const figliEliminati = await tx.delete(contactFigli)
+      .where(eq(contactFigli.studentId, id))
+      .returning({ contactId: contactFigli.contactId })
+
+    // 2. Il collegamento diretto contatto → alunno si stacca. La riga del contatto
+    //    resta (serve ai conteggi "quanti si sono iscritti"), ma non rimanda più
+    //    a una persona.
+    const contattiScollegati = await tx.update(contacts)
+      .set({ studentId: null, updatedAt: adesso })
+      .where(eq(contacts.studentId, id))
+      .returning({ id: contacts.id })
+
+    // 3. I contatti toccati che ora sono RIMASTI SENZA NESSUN FIGLIO si
+    //    anonimizzano come quelli persi da 12 mesi. Quelli che hanno ancora altri
+    //    figli NON si toccano: lì i dati sono anche della famiglia che resta, e
+    //    cancellarli toglierebbe alla sorella il diritto di essere ricontattata.
+    const daControllare = new Set<string>([
+      ...figliEliminati.map((f) => f.contactId),
+      ...contattiScollegati.map((c) => c.id),
+    ])
+
+    let contattiAnonimizzati = 0
+    for (const contactId of daControllare) {
+      const [altroFiglio] = await tx.select({ id: contactFigli.id })
+        .from(contactFigli)
+        .where(eq(contactFigli.contactId, contactId))
+        .limit(1)
+      if (altroFiglio) continue
+
+      // Il diario resta (serve alle statistiche) ma senza il testo di ciò che si
+      // è detto: lì dentro ci sono spesso il nome del ragazzo e i suoi problemi.
+      await tx.update(contactInteractions)
+        .set({ note: null })
+        .where(eq(contactInteractions.contactId, contactId))
+
+      // Stesso trattamento di anonymizeLostContacts, campo per campo. Chi è già
+      // stato anonimizzato non si ritocca (isNull): la sua data di pulizia è
+      // quella vera, non quella di oggi.
+      const puliti = await tx.update(contacts).set({
+        nome:    'Contatto',
+        cognome: 'anonimizzato',
+        telefono: null, email: null, socialLink: null, note: null,
+        nomeStudente: null, classeScuola: null, materie: null,
+        azienda: null, servizioInteresse: null,
+        archiviatoAt:   sql`COALESCE(${contacts.archiviatoAt}, now())`,
+        anonimizzatoAt: adesso,
+        updatedAt:      adesso,
+      })
+        .where(and(eq(contacts.id, contactId), isNull(contacts.anonimizzatoAt)))
+        .returning({ id: contacts.id })
+
+      contattiAnonimizzati += puliti.length
+    }
+
+    // LE RIGHE DI `consensi` NON SI TOCCANO, di proposito: sono la prova di che
+    // cosa era stato acconsentito e quando, e da sole non contengono nomi né
+    // recapiti — solo dei collegamenti a righe ormai svuotate.
+
     return {
       noteEliminate:            noteEliminate.length,
       prenotazioniAnonimizzate: prenotazioni.length,
       genitoriAnonimizzati,
+      figliContattoEliminati:   figliEliminati.length,
+      contattiAnonimizzati,
     }
   })
 }

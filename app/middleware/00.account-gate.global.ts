@@ -21,4 +21,11 @@ export default defineNuxtRouteMiddleware((to) => {
   if (['GENITORE', 'STUDENTE'].includes(user.value.role) && user.value.termsAccepted === false) {
     return navigateTo('/portale/accetta-termini')
   }
+  // Genitore di un alunno sotto i 14 anni che non ha ancora firmato la
+  // dichiarazione di autorizzazione: stessa schermata dei documenti legali.
+  // Scatta SOLO se non ha mai risposto — chi l'ha data e poi revocata dal Profilo
+  // non viene richiuso fuori, altrimenti la revoca non sarebbe libera.
+  if (user.value.role === 'GENITORE' && (user.value.dichiarazioniMinori?.length ?? 0) > 0) {
+    return navigateTo('/portale/accetta-termini')
+  }
 })

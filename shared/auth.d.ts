@@ -20,6 +20,12 @@ declare module '#auth-utils' {
     mustChangePassword?: boolean
     // GENITORE/STUDENTE: false finché non accetta la versione corrente dei documenti legali
     termsAccepted?: boolean
+    // Solo GENITORE: i figli sotto i 14 anni per cui manca ancora la dichiarazione
+    // di autorizzazione (blocco 5). Finché l'elenco non è vuoto il portale chiede
+    // di firmarla, come fa con i documenti legali. Viaggia nella sessione e non in
+    // una chiamata a parte perché la schermata di accettazione si apre PRIMA che
+    // le API del portale siano raggiungibili (vedi server/middleware/01.auth-guard).
+    dichiarazioniMinori?: { id: string; nome: string }[]
     // Tutorial di benvenuto al primo accesso (tutor/famiglia/studente)
     tutorialVisto?: boolean
   }

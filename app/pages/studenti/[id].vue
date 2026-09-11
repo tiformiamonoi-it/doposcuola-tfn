@@ -550,6 +550,145 @@
                   </div>
                 </UCard>
 
+                <!-- ─── CONSENSI PRIVACY ───
+                     Tre interruttori SEPARATI, non uno generale: si può dire di sì
+                     alle foto e di no alle promozioni. Ogni cambiamento scrive una
+                     riga nuova nello storico, non cancella quella di prima: alla
+                     domanda "in che data ha revocato?" c'è sempre una risposta.
+                     Il marketing ha un interruttore PER OGNI GENITORE, perché è
+                     della persona e non del figlio. -->
+                <UCard v-if="isAdmin">
+                  <template #header>
+                    <div class="flex items-center gap-2">
+                      <UIcon name="i-heroicons-shield-check" class="w-5 h-5 text-tfn-500" />
+                      <span class="font-medium text-slate-800">Consensi</span>
+                      <StatHelp text="Le tre autorizzazioni della privacy, separate: l'autorizzazione del genitore per chi ha meno di 14 anni, le foto e video, le comunicazioni promozionali. Ogni cambiamento resta nello storico con data, ora e nome di chi l'ha fatto." />
+                    </div>
+                  </template>
+
+                  <p v-if="pendingConsensi" class="text-sm text-slate-500">Caricamento dei consensi…</p>
+
+                  <div v-else class="space-y-3">
+
+                    <!-- 1. AUTORIZZAZIONE DEL GENITORE (minore di 14 anni) -->
+                    <div class="rounded-lg border border-slate-100 bg-slate-50 p-3 space-y-2">
+                      <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="min-w-0">
+                          <p class="text-sm font-medium text-slate-800">Autorizzazione del genitore per il minore di 14 anni</p>
+                          <p class="text-xs text-slate-500 mt-0.5">{{ dettaglioVoce(consensi?.minore14) }}</p>
+                        </div>
+                        <USwitch
+                          :model-value="consensi?.minore14?.valore === true"
+                          :loading="salvandoConsenso === 'MINORE_14'"
+                          :disabled="salvandoConsenso !== null"
+                          aria-label="Autorizzazione del genitore per il minore di 14 anni"
+                          @update:model-value="(v: boolean) => chiediCambioConsenso('MINORE_14', v)"
+                        />
+                      </div>
+
+                      <!-- La riga storica: l'autorizzazione raccolta quando è stato
+                           creato l'account personale dello studente. Nata prima di
+                           questo registro, resta dov'è e si mostra qui accanto. -->
+                      <p v-if="consensi?.autorizzazioneAccount" class="text-xs text-slate-500">
+                        Raccolta in segreteria il {{ formatDataOra(consensi.autorizzazioneAccount.quando) }}<template v-if="consensi.autorizzazioneAccount.chi"> da {{ consensi.autorizzazioneAccount.chi }}</template>, alla creazione dell'account dello studente.
+                      </p>
+
+                      <!-- Ha meno di 14 anni e nessuno ha autorizzato: è la sola
+                           situazione in cui questo consenso è obbligatorio. -->
+                      <UAlert
+                        v-if="serveAutorizzazione"
+                        color="warning"
+                        variant="subtle"
+                        icon="i-heroicons-exclamation-triangle"
+                        title="Manca l'autorizzazione del genitore"
+                        description="Questo alunno ha meno di 14 anni: senza l'autorizzazione di un genitore non può avere un account del portale."
+                      />
+
+                      <!-- Senza data di nascita non si chiede niente e non si blocca
+                           niente: si dice solo che non lo sappiamo (decisione Q17). -->
+                      <p v-else-if="consensi && consensi.minoreDi14 === null" class="text-xs text-slate-500 flex flex-wrap items-center gap-1">
+                        <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-slate-400 shrink-0" />
+                        Manca la data di nascita: non posso sapere se serve.
+                        <UButton variant="link" size="xs" class="px-0" @click="apriModalModifica">Modifica dati</UButton>
+                      </p>
+                    </div>
+
+                    <!-- 2. IMMAGINI (foto e video) — facoltativo sul serio -->
+                    <div class="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                      <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="min-w-0">
+                          <p class="text-sm font-medium text-slate-800">Immagini (foto e video)</p>
+                          <p class="text-xs text-slate-500 mt-0.5">{{ dettaglioVoce(consensi?.immagini) }}</p>
+                          <p class="text-xs text-slate-400 mt-0.5">Facoltativo: si può dire di no e il doposcuola funziona identico.</p>
+                        </div>
+                        <USwitch
+                          :model-value="consensi?.immagini?.valore === true"
+                          :loading="salvandoConsenso === 'IMMAGINI'"
+                          :disabled="salvandoConsenso !== null"
+                          aria-label="Consenso alle immagini (foto e video)"
+                          @update:model-value="(v: boolean) => chiediCambioConsenso('IMMAGINI', v)"
+                        />
+                      </div>
+                    </div>
+
+                    <!-- 3. MARKETING — uno per ogni genitore con account -->
+                    <div class="rounded-lg border border-slate-100 bg-slate-50 p-3 space-y-3">
+                      <div>
+                        <p class="text-sm font-medium text-slate-800">Comunicazioni promozionali (marketing)</p>
+                        <p class="text-xs text-slate-400 mt-0.5">È della persona, non del figlio: vale per tutti i figli di quel genitore.</p>
+                      </div>
+
+                      <p v-if="(consensi?.marketing?.length ?? 0) === 0" class="text-xs text-slate-500">
+                        Nessun genitore ha un account del portale. Il consenso alle promozioni appartiene alla persona:
+                        per registrarlo serve prima un accesso, si crea qui sopra con <strong>Aggiungi genitore</strong>.
+                      </p>
+
+                      <div v-for="g in (consensi?.marketing ?? [])" :key="g.userId" class="flex flex-wrap items-start justify-between gap-3 border-t border-slate-200 pt-2 first:border-0 first:pt-0">
+                        <div class="min-w-0">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-sm font-medium text-slate-800">{{ g.nome }}</span>
+                            <UBadge v-if="g.relazione" color="primary" variant="subtle" size="xs">{{ g.relazione }}</UBadge>
+                          </div>
+                          <p class="text-xs text-slate-500 mt-0.5">{{ dettaglioVoce(g) }}</p>
+                        </div>
+                        <USwitch
+                          :model-value="g.valore === true"
+                          :loading="salvandoConsenso === `MARKETING:${g.userId}`"
+                          :disabled="salvandoConsenso !== null"
+                          :aria-label="`Consenso alle comunicazioni promozionali di ${g.nome}`"
+                          @update:model-value="(v: boolean) => chiediCambioConsenso('MARKETING', v, g)"
+                        />
+                      </div>
+                    </div>
+
+                    <!-- STORICO: si apre solo se serve, ma c'è sempre -->
+                    <UCollapsible v-model:open="storicoConsensiAperto">
+                      <button type="button" class="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-600 transition-colors">
+                        <UIcon name="i-heroicons-chevron-right" class="w-3.5 h-3.5 transition-transform" :class="storicoConsensiAperto ? 'rotate-90' : ''" />
+                        Storico dei consensi ({{ storicoConsensi.length }})
+                      </button>
+                      <template #content>
+                        <p v-if="storicoConsensi.length === 0" class="text-sm text-slate-500 mt-2">
+                          Nessun cambiamento registrato: qui compariranno tutti, uno per riga, senza mai cancellare i precedenti.
+                        </p>
+                        <ul v-else class="mt-2 space-y-2">
+                          <li v-for="r in storicoConsensi" :key="r.id" class="text-xs text-slate-600 border-l-2 pl-3" :class="r.valore ? 'border-emerald-200' : 'border-rose-200'">
+                            <div class="font-medium text-slate-800">
+                              {{ ETICHETTE_CONSENSO[r.tipo] ?? r.tipo }} — {{ r.valore ? 'dato' : 'revocato' }}
+                              <template v-if="r.tipo === 'MARKETING' && r.persona"> ({{ r.persona }})</template>
+                            </div>
+                            <div>
+                              {{ formatDataOra(r.quando) }} · {{ r.origine === 'PORTALE' ? 'dal portale famiglie' : 'in segreteria' }}<template v-if="r.chi"> · {{ r.chi }}</template><template v-if="r.versione"> · testo {{ r.versione }}</template>
+                            </div>
+                            <div v-if="r.note" class="text-slate-500 italic">{{ r.note }}</div>
+                          </li>
+                        </ul>
+                      </template>
+                    </UCollapsible>
+
+                  </div>
+                </UCard>
+
                 <!-- Account Studente (solo prenotazioni) -->
                 <UCard v-if="isAdmin">
                   <template #header>
@@ -578,8 +717,18 @@
                           </UFormField>
                         </div>
                       </div>
-                      <UCheckbox v-model="datiAccountStudente.consensoGenitore" label="Il genitore autorizza la creazione dell'account dello studente (obbligatorio per i minori di 14 anni)" />
-                      <UButton icon="i-heroicons-plus" :loading="creandoAccountStudente" :disabled="!datiAccountStudente.email || !datiAccountStudente.consensoGenitore" @click="creaAccountStudente">
+                      <!-- L'AUTORIZZAZIONE DEL GENITORE NON SERVE SEMPRE (Q16).
+                           L'etichetta cambia con l'età e il bottone si blocca solo
+                           quando l'autorizzazione è davvero dovuta: sotto i 14 anni.
+                           Da 14 in su decide il ragazzo; se la data di nascita
+                           manca non si chiede niente (Q17). -->
+                      <UCheckbox v-model="datiAccountStudente.consensoGenitore" :label="etichettaConsensoAccount" />
+                      <p v-if="minoreDi14Studente === null" class="text-xs text-slate-500 flex flex-wrap items-center gap-1">
+                        <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-slate-400 shrink-0" />
+                        Senza la data di nascita non posso sapere se l'autorizzazione serve.
+                        <UButton variant="link" size="xs" class="px-0" @click="apriModalModifica">Completa i dati</UButton>
+                      </p>
+                      <UButton icon="i-heroicons-plus" :loading="creandoAccountStudente" :disabled="!datiAccountStudente.email || (minoreDi14Studente === true && !datiAccountStudente.consensoGenitore)" @click="creaAccountStudente">
                         Crea account studente
                       </UButton>
                     </div>
@@ -1007,6 +1156,7 @@ import { normalizzaTelefono } from '~/utils/phone'
 import { riassumiStati } from '~/utils/statiPacchetto'
 import { ETICHETTE_CAMPO, haDatiGenitore, leggiSerie, nomeConfrontabile, parolaParentela, scriviSerie } from '#shared/genitori'
 import type { CampoGenitore, Fratello, Slot } from '#shared/genitori'
+import { eMinoreDi14 } from '#shared/eta'
 
 definePageMeta({ middleware: ['admin-or-super'] })
 
@@ -1829,11 +1979,154 @@ const resetPassword = ref<({ email: string; nome: string; linkPassword: string }
 const resettandoId = ref<string | null>(null)
 const rimuovendoId = ref<string | null>(null)
 
+// ─── CONSENSI PRIVACY ───
+//
+// I tipi sono scritti a mano invece di lasciarli dedurre dalla risposta: in questa
+// pagina useLazyFetch restituisce quasi sempre un'unione che TypeScript non sa
+// restringere (lo si vede su `studente`, dove ogni campo va letto con `as any`).
+// Dichiarandoli qui, gli interruttori e lo storico restano controllati davvero.
+type TipoConsenso = 'MINORE_14' | 'IMMAGINI' | 'MARKETING'
+
+interface VoceConsensoUI {
+  tipo: TipoConsenso
+  /** null = non ha mai risposto (che è diverso da "ha detto no") */
+  valore: boolean | null
+  quando: string | null
+  origine: 'PORTALE' | 'GESTIONALE' | null
+  chi: string | null
+  versione: string | null
+  note: string | null
+}
+
+interface GenitoreMarketing extends VoceConsensoUI {
+  userId: string
+  nome: string
+  email: string
+  relazione: string | null
+  active: boolean
+}
+
+interface StatoConsensiUI {
+  studentId: string
+  nomeAlunno: string
+  dataNascita: string | null
+  /** null = manca la data di nascita: "non lo so" non è "no" (decisione Q17) */
+  minoreDi14: boolean | null
+  minore14: VoceConsensoUI
+  immagini: VoceConsensoUI
+  marketing: GenitoreMarketing[]
+  /** La riga storica raccolta alla creazione dell'account dello studente */
+  autorizzazioneAccount: { quando: string; chi: string | null } | null
+}
+
+interface RigaStoricoUI {
+  id: string
+  tipo: TipoConsenso
+  valore: boolean
+  quando: string
+  origine: 'PORTALE' | 'GESTIONALE'
+  chi: string | null
+  persona: string | null
+  versione: string | null
+  note: string | null
+}
+
+const ETICHETTE_CONSENSO: Record<TipoConsenso, string> = {
+  MINORE_14: 'Autorizzazione del genitore',
+  IMMAGINI:  'Immagini (foto e video)',
+  MARKETING: 'Comunicazioni promozionali',
+}
+
+const { data: datiConsensi, pending: pendingConsensi, refresh: refreshConsensi } = useLazyFetch<{
+  stato: StatoConsensiUI
+  storico: RigaStoricoUI[]
+}>(`/api/admin/students/${id}/consensi`, { lazy: true })
+
+const consensi = computed<StatoConsensiUI | null>(() => datiConsensi.value?.stato ?? null)
+const storicoConsensi = computed<RigaStoricoUI[]>(() => datiConsensi.value?.storico ?? [])
+const storicoConsensiAperto = ref(false)
+// Quale interruttore sta salvando: 'IMMAGINI', 'MINORE_14' o 'MARKETING:<idGenitore>'.
+// Uno alla volta: due consensi cambiati insieme con una sola conferma a schermo
+// sarebbero due righe di storico che nessuno ha confermato davvero.
+const salvandoConsenso = ref<string | null>(null)
+
+// "Revocato il 12/09/2026 alle 15:42 dal portale famiglie da Maria Bianchi."
+// Chi, quando e DA DOVE, perché su un consenso privacy la provenienza conta
+// quanto la data: una cosa è che l'abbia fatto la famiglia, un'altra la segreteria.
+function dettaglioVoce(v?: VoceConsensoUI | null): string {
+  if (!v || v.valore === null) return 'Mai risposto.'
+  const dove     = v.origine === 'PORTALE' ? 'dal portale famiglie' : 'in segreteria'
+  const chi      = v.chi ? ` da ${v.chi}` : ''
+  const versione = v.versione ? ` (testo ${v.versione})` : ''
+  return `${v.valore ? 'Dato' : 'Revocato'} il ${formatDataOra(v.quando)} ${dove}${chi}${versione}.`
+}
+
+// L'avviso arancione compare SOLO quando l'autorizzazione è davvero dovuta:
+// alunno sotto i 14 anni e nessuno che abbia autorizzato. Con la data di nascita
+// mancante non compare niente (Q17): non si chiede a sproposito.
+const serveAutorizzazione = computed(() => {
+  const c = consensi.value
+  if (!c || c.minoreDi14 !== true) return false
+  if (c.minore14.valore === true) return false
+  // Revocata esplicitamente: l'avviso serve eccome, anche se in passato c'era
+  if (c.minore14.valore === false) return true
+  // Mai risposto nel registro: vale ancora quella raccolta alla creazione dell'account
+  return !c.autorizzazioneAccount
+})
+
+// Ogni cambiamento passa da una finestra di conferma: qui si tocca un consenso
+// privacy, e resta scritto nello storico con il nome di chi l'ha fatto. Mai
+// confirm() del browser — non si può leggere da telefono e non si può tradurre.
+function chiediCambioConsenso(tipo: TipoConsenso, valore: boolean, genitore?: GenitoreMarketing) {
+  const chiave = tipo === 'MARKETING' && genitore ? `MARKETING:${genitore.userId}` : tipo
+  const diChi  = tipo === 'MARKETING' && genitore ? ` di ${genitore.nome}` : ''
+
+  chiediConferma(
+    {
+      title: valore
+        ? `Registrare il consenso${diChi}?`
+        : `Revocare il consenso${diChi}?`,
+      description: `${ETICHETTE_CONSENSO[tipo]}${diChi}: stai registrando che la famiglia ha ${valore ? 'dato' : 'revocato'} questo consenso.\n\nResta scritto nello storico con il tuo nome, la data e l'ora, e non si cancella. Fallo solo se la famiglia te l'ha detto davvero.`,
+      confirmLabel: valore ? 'Sì, registra' : 'Sì, revoca',
+      confirmColor: valore ? 'primary' : 'warning',
+    },
+    async () => {
+      salvandoConsenso.value = chiave
+      try {
+        await $fetch(`/api/admin/students/${id}/consensi`, {
+          method: 'POST',
+          // L'operatore NON si manda da qui: lo legge il server dalla sessione
+          body: { tipo, valore, ...(genitore ? { userId: genitore.userId } : {}) },
+        })
+        await refreshConsensi()
+        toast.add({ title: valore ? 'Consenso registrato' : 'Consenso revocato', color: 'success' })
+      } catch (e: any) {
+        toast.add({ title: 'Errore', description: e?.data?.statusMessage ?? 'Non sono riuscito a registrare il consenso', color: 'error' })
+      } finally {
+        salvandoConsenso.value = null
+      }
+    }
+  )
+}
+
 // ─── Account Studente (solo prenotazioni) ───
 const { data: studentAccount, refresh: refreshStudentAccount } = useLazyFetch(
   `/api/admin/students/${id}/student-account`,
   { lazy: true }
 )
+
+// Ha meno di 14 anni? null = non lo sappiamo, perché manca la data di nascita.
+// Da questa risposta dipendono l'etichetta della spunta e il blocco del bottone:
+// sotto i 14 anni l'autorizzazione del genitore è obbligatoria, da 14 in su no
+// (decisione Q16), e senza data non si chiede niente (Q17).
+const minoreDi14Studente = computed(() => eMinoreDi14(dataNascitaStudente.value))
+
+const etichettaConsensoAccount = computed(() => {
+  const base = 'Il genitore autorizza la creazione dell\'account dello studente'
+  if (minoreDi14Studente.value === true)  return `${base} — obbligatoria: ha meno di 14 anni`
+  if (minoreDi14Studente.value === false) return `${base} — facoltativa: a 14 anni compiuti decide il ragazzo`
+  return `${base} — facoltativa: non so quanti anni ha`
+})
 const datiAccountStudente = reactive({ email: '', firstName: '', lastName: '', consensoGenitore: false })
 const creandoAccountStudente = ref(false)
 
@@ -1873,7 +2166,9 @@ async function creaAccountStudente() {
     }) as any
     credenzialiStudente.value = { email: res.email, nome: datiAccountStudente.firstName, linkPassword: res.linkPassword, emailInviata: res.emailInviata === true, motivoEmail: res.motivoEmail, dettaglioEmail: res.dettaglioEmail }
     toast.add({ title: 'Account studente creato', color: 'success' })
-    await refreshStudentAccount()
+    // Anche i consensi cambiano: se la spunta c'era, nella card "Consensi" compare
+    // la riga "raccolta in segreteria il … alla creazione dell'account".
+    await Promise.all([refreshStudentAccount(), refreshConsensi()])
   } catch (e: any) {
     toast.add({ title: 'Errore', description: e?.data?.statusMessage ?? 'Impossibile creare l\'account studente', color: 'error' })
   } finally {

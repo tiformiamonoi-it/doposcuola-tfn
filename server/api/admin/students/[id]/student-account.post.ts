@@ -6,12 +6,15 @@ const CreateSchema = z.object({
   email:     z.string().email('Email non valida'),
   firstName: z.string().min(1).max(100),
   lastName:  z.string().min(1).max(100),
-  // Autorizzazione del genitore: OBBLIGATORIA anche qui, non solo come spunta a
-  // schermo. z.literal(true) rifiuta il body che non la porta (o che la porta
-  // false): la spunta in interfaccia è una comodità, questo è il vero blocco.
-  // Viene registrata con data, ora e operatore in users.consenso_genitore_at /
-  // users.consenso_genitore_registrato_da_user_id.
-  consensoGenitore: z.literal(true, { message: 'Serve l\'autorizzazione del genitore' }),
+  // Autorizzazione del genitore: un booleano normale, non più un "deve essere true".
+  // NON è diventata facoltativa per tutti — è diventata obbligatoria per chi
+  // davvero la richiede: il blocco vero sta nel servizio, che legge la data di
+  // nascita dal database e rifiuta la creazione solo per gli alunni sotto i 14
+  // anni (decisione Q16). Qui pretendere z.literal(true) rimetterebbe in piedi la
+  // richiesta sbagliata — la spunta per un sedicenne — e lo farebbe di nascosto.
+  // Quando c'è viene registrata con data, ora e operatore in
+  // users.consenso_genitore_at / users.consenso_genitore_registrato_da_user_id.
+  consensoGenitore: z.boolean().optional().default(false),
 })
 
 // POST /api/admin/students/:id/student-account — crea l'account personale dello studente
@@ -50,6 +53,7 @@ export default defineEventHandler(async (event) => {
     }
   } catch (err: any) {
     if (err.statusCode) throw err
-    throw toHttpError(err, err.message?.includes('già usata') ? 409 : 400)
+    if (err.message?.includes('già usata')) throw toHttpError(err, 409)
+    throw toHttpError(err, err.message?.includes('non trovato') ? 404 : 400)
   }
 })
