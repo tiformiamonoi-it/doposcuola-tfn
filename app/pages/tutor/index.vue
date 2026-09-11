@@ -131,87 +131,9 @@
       </div>
     </UCard>
 
-    <!-- Modal Crea Tutor -->
-    <UModal v-model:open="modalCreaAperto" title="Nuovo Tutor" :ui="{ width: 'max-w-lg' }">
-      <template #body>
-        <UForm :state="nuovoTutor" class="space-y-4" @submit="creaTutor">
-          <div class="grid grid-cols-2 gap-4">
-            <UFormField name="firstName" label="Nome" required>
-              <UInput v-model="nuovoTutor.firstName" placeholder="Marco" class="w-full" />
-            </UFormField>
-            <UFormField name="lastName" label="Cognome" required>
-              <UInput v-model="nuovoTutor.lastName" placeholder="Rossi" class="w-full" />
-            </UFormField>
-          </div>
-          <UFormField name="email" label="Email (per il login)" required>
-            <UInput v-model="nuovoTutor.email" type="email" placeholder="marco@email.it" class="w-full" />
-          </UFormField>
-          <UFormField name="password" label="Password iniziale" required hint="Visibile solo ora: comunicala al tutor">
-            <div class="flex gap-2">
-              <UInput v-model="nuovoTutor.password" type="text" placeholder="min. 8 caratteri" class="flex-1" />
-              <UButton icon="i-heroicons-arrow-path" variant="soft" color="neutral" @click="nuovoTutor.password = generaPasswordCasuale()">
-                Genera
-              </UButton>
-            </div>
-          </UFormField>
-          <UFormField name="phone" label="Telefono">
-            <UInput v-model="nuovoTutor.phone" placeholder="+39 333 1234567" class="w-full" />
-          </UFormField>
-          <!-- Facoltativa: serve al campanellino dei compleanni -->
-          <UFormField name="dataNascita" label="Data di nascita" hint="Facoltativa">
-            <UInput v-model="nuovoTutor.dataNascita" type="date" class="w-full" />
-          </UFormField>
-          <div class="grid grid-cols-2 gap-4">
-            <UFormField name="role" label="Ruolo">
-              <USelect
-                v-model="nuovoTutor.role"
-                :items="[
-                  { label: 'Tutor', value: 'TUTOR' },
-                  { label: 'Admin', value: 'ADMIN' },
-                  { label: 'Super Tutor', value: 'SUPER_TUTOR' },
-                ]"
-                class="w-full"
-              />
-            </UFormField>
-            <UFormField name="modalitaPagamento" label="Modalità compenso">
-              <USelect
-                v-model="nuovoTutor.modalitaPagamento"
-                :items="[{ label: 'A ore (tariffa oraria)', value: 'ORE' }, { label: 'Forfait mensile', value: 'FORFAIT' }]"
-                class="w-full"
-              />
-            </UFormField>
-          </div>
-          <UFormField v-if="nuovoTutor.modalitaPagamento === 'FORFAIT'" name="importoForfait" label="Importo forfait (€)">
-            <UInput v-model="nuovoTutor.importoForfait" type="number" placeholder="500" class="w-full" />
-          </UFormField>
-
-          <div class="flex justify-end gap-3 pt-2">
-            <UButton variant="ghost" @click="modalCreaAperto = false">Annulla</UButton>
-            <UButton type="submit" :loading="salvando">Crea Tutor</UButton>
-          </div>
-        </UForm>
-      </template>
-    </UModal>
-
-    <!-- Tutor creato: link "scegli la tua password" da mandare al tutor -->
-    <UModal v-model:open="modalLinkAperto" title="Tutor creato">
-      <template #body>
-        <LinkPrimoAccesso
-          v-if="linkNuovoTutor"
-          :link="linkNuovoTutor.link"
-          :email="linkNuovoTutor.email"
-          :nome="linkNuovoTutor.nome"
-          :email-inviata="linkNuovoTutor.emailInviata"
-          :motivo-email="linkNuovoTutor.motivoEmail"
-          :dettaglio-email="linkNuovoTutor.dettaglioEmail"
-        />
-      </template>
-      <template #footer>
-        <div class="flex justify-end">
-          <UButton variant="ghost" @click="() => { modalLinkAperto = false }">Chiudi</UButton>
-        </div>
-      </template>
-    </UModal>
+    <!-- Modulo "Nuovo Tutor" + finestra "Tutor creato" col link per la password.
+         Sta in un componente perché lo usa anche la scheda contatto ("Crea tutor"). -->
+    <ModalNuovoTutor v-model:open="modalCreaAperto" @created="() => refresh()" />
 
     <!-- Modal Liquida Mese -->
     <UModal v-model:open="modalLiquidaAperto" title="Liquida mese" :ui="{ width: 'max-w-md' }">
@@ -285,7 +207,6 @@
 </template>
 
 <script setup lang="ts">
-import type { EsitoInvitoEmail } from '#shared/email'
 definePageMeta({ middleware: ['admin-or-super'] })
 
 const toast = useToast()
@@ -329,74 +250,11 @@ import { METODI_PAGAMENTO_ITEMS, coloreStatoPagamento } from '~/utils/contabilit
 const metodiPagamento = METODI_PAGAMENTO_ITEMS
 
 // ─── Modal Crea Tutor ─────────────────────────
+// Modulo, controlli e finestra "Tutor creato" stanno in ModalNuovoTutor:
+// qui resta solo l'interruttore che lo apre.
 const modalCreaAperto = ref(false)
-// Link "scegli la tua password" del tutor appena creato: resta a schermo finché
-// la segreteria non lo chiude, così può copiarlo e mandarlo su WhatsApp.
-const modalLinkAperto = ref(false)
-const linkNuovoTutor = ref<({ link: string; email: string; nome: string } & EsitoInvitoEmail) | null>(null)
+// Usato dalla finestra "Liquida mese" (prima lo condivideva anche la creazione)
 const salvando = ref(false)
-const nuovoTutor = reactive({
-  firstName:         '',
-  lastName:          '',
-  email:             '',
-  password:          '',
-  phone:             '',
-  dataNascita:       '',
-  role:              'TUTOR',
-  modalitaPagamento: 'ORE',
-  importoForfait:    '',
-})
-
-async function creaTutor() {
-  if (!nuovoTutor.firstName || !nuovoTutor.lastName || !nuovoTutor.email || !nuovoTutor.password) {
-    toast.add({ title: 'Campi obbligatori mancanti', color: 'error' })
-    return
-  }
-  salvando.value = true
-  try {
-    const res = await $fetch('/api/tutors', {
-      method: 'POST',
-      body: {
-        ...nuovoTutor,
-        phone:          nuovoTutor.phone || null,
-        // Campo vuoto = "non lo so": a database ci va NULL, non una stringa vuota
-        dataNascita:    nuovoTutor.dataNascita || null,
-        importoForfait: nuovoTutor.importoForfait || null,
-      },
-    }) as any
-    toast.add({ title: 'Tutor creato con successo', color: 'success' })
-    linkNuovoTutor.value = {
-      link:         res?.linkPassword ?? '',
-      email:        res?.user?.email ?? nuovoTutor.email,
-      nome:         nuovoTutor.firstName,
-      emailInviata: res?.emailInviata === true,
-      motivoEmail:    res?.motivoEmail,
-      dettaglioEmail: res?.dettaglioEmail,
-    }
-    modalLinkAperto.value = Boolean(linkNuovoTutor.value.link)
-    modalCreaAperto.value = false
-    Object.assign(nuovoTutor, {
-      firstName: '', lastName: '', email: '', password: '',
-      phone: '', dataNascita: '', role: 'TUTOR', modalitaPagamento: 'ORE', importoForfait: '',
-    })
-    refresh()
-  } catch (err: any) {
-    const msg = err.data?.statusMessage ?? 'Errore nella creazione'
-    const errors = err.data?.data?.errors
-    const fieldNames: Record<string, string> = {
-      firstName: 'Nome', lastName: 'Cognome', email: 'Email',
-      password: 'Password', phone: 'Telefono', dataNascita: 'Data di nascita', role: 'Ruolo',
-      modalitaPagamento: 'Modalità compenso', importoForfait: 'Importo forfait',
-    }
-    let desc = ''
-    if (errors) {
-      desc = Object.entries(errors).map(([k, v]) => `${fieldNames[k] ?? k}: ${v}`).join(' | ')
-    }
-    toast.add({ title: msg, description: desc, color: 'error' })
-  } finally {
-    salvando.value = false
-  }
-}
 
 // ─── Modal Liquida ────────────────────────────
 const modalLiquidaAperto  = ref(false)

@@ -379,15 +379,25 @@
                 <!-- Dati Genitore (il primo: è quello a cui si intestano le fatture) -->
                 <UCard>
                   <template #header>
-                    <div class="flex items-center justify-between">
+                    <!-- flex-wrap: da telefono i due bottoni vanno a capo sotto il titolo -->
+                    <div class="flex flex-wrap items-center justify-between gap-2">
                       <div class="flex items-center gap-2">
                         <UIcon name="i-heroicons-users" class="w-5 h-5 text-tfn-500" />
                         <span class="font-medium text-slate-800">Dati Anagrafici Genitore</span>
                         <StatHelp text="Sono i dati usati per le fatture. Se ci sono due genitori, questo resta l'intestatario predefinito." />
                       </div>
-                      <UButton icon="i-heroicons-pencil-square" variant="ghost" size="xs" @click="apriModalModifica">Modifica dati</UButton>
+                      <div class="flex flex-wrap gap-1">
+                        <!-- C5: copia il genitore dalla scheda di un fratello. Funziona anche
+                             per un alunno creato senza nessun genitore. -->
+                        <UButton icon="i-heroicons-magnifying-glass" variant="ghost" size="xs" @click="apriCollegaGenitore">Collega genitore già registrato</UButton>
+                        <UButton icon="i-heroicons-pencil-square" variant="ghost" size="xs" @click="apriModalModifica">Modifica dati</UButton>
+                      </div>
                     </div>
                   </template>
+                  <p v-if="!haPrimoGenitore" class="text-sm text-slate-500 mb-2">
+                    Nessun genitore registrato. Se un fratello o una sorella è già iscritto, usa
+                    <strong>Collega genitore già registrato</strong>: i dati si copiano dalla sua scheda.
+                  </p>
                   <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                     <InfoRow label="Nome Cognome" :value="studente.parentName" />
                     <InfoRow label="Parentela" :value="genitori.relazione1" />
@@ -431,10 +441,36 @@
                   <p class="text-sm text-slate-500">
                     Nessun secondo genitore o tutore registrato.
                   </p>
-                  <UButton icon="i-heroicons-plus" variant="soft" size="xs" @click="apriModalSecondoGenitore">
-                    Aggiungi un secondo genitore
-                  </UButton>
+                  <div class="flex flex-wrap gap-2">
+                    <UButton icon="i-heroicons-magnifying-glass" variant="soft" size="xs" @click="apriCollegaGenitore">
+                      Collega genitore già registrato
+                    </UButton>
+                    <UButton icon="i-heroicons-plus" variant="soft" size="xs" @click="apriModalSecondoGenitore">
+                      Aggiungi un secondo genitore
+                    </UButton>
+                  </div>
                 </div>
+
+                <!-- FRATELLI E SORELLE (C5): niente da inserire a mano, il gestionale li
+                     riconosce dal genitore in comune. Se non ce ne sono, la sezione non c'è. -->
+                <UCard v-if="fratelli.length > 0">
+                  <template #header>
+                    <div class="flex items-center gap-2">
+                      <UIcon name="i-heroicons-user-group" class="w-5 h-5 text-tfn-500" />
+                      <span class="font-medium text-slate-800">Fratelli e sorelle</span>
+                      <StatHelp text="Il gestionale li riconosce da solo dal genitore in comune: stesso account del portale, oppure stesso codice fiscale, email o telefono. Non si inseriscono a mano." />
+                    </div>
+                  </template>
+                  <ul class="space-y-2">
+                    <li v-for="f in fratelli" :key="f.id" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                      <NuxtLink :to="`/studenti/${f.id}`" class="font-medium text-tfn-600 hover:underline">
+                        {{ f.nome }}<template v-if="f.classe"> ({{ f.classe }})</template>
+                      </NuxtLink>
+                      <UBadge v-if="!f.attivo" color="neutral" variant="subtle" size="xs">Ex alunno</UBadge>
+                      <span class="text-xs text-slate-500">{{ comeRiconosciuto(f) }}</span>
+                    </li>
+                  </ul>
+                </UCard>
 
                 <!-- Portale Famiglie — un alunno può avere PIÙ genitori collegati -->
                 <UCard v-if="isAdmin">
@@ -483,8 +519,10 @@
                         </div>
                         <div class="text-sm text-slate-500 mt-0.5 break-all">{{ g.email }}</div>
                       </div>
-                      <div class="flex gap-2 shrink-0">
+                      <!-- flex-wrap: da telefono tre bottoni in fila non ci stanno, vanno a capo -->
+                      <div class="flex flex-wrap gap-2">
                         <UButton variant="outline" size="xs" icon="i-heroicons-key" :loading="resettandoId === g.id" @click="reimpostaPassword(g.id, g.email, g.firstName)">Invia link password</UButton>
+                        <UButton variant="outline" size="xs" icon="i-heroicons-pencil-square" :aria-label="`Correggi email di ${g.firstName} ${g.lastName}`" @click="apriCorreggiEmailGenitore(g)">Correggi email</UButton>
                         <UButton variant="outline" color="error" size="xs" icon="i-heroicons-trash" :loading="rimuovendoId === g.id" @click="eliminaAccessoPortale(g.id, g.email)">Rimuovi</UButton>
                       </div>
                     </div>
@@ -549,9 +587,12 @@
                   <template v-else>
                     <div class="bg-slate-50 border border-slate-100 rounded-lg p-4">
                       <dl class="space-y-3 text-sm">
-                        <div class="flex justify-between items-center border-b border-slate-200 pb-2">
+                        <div class="flex flex-wrap justify-between items-center gap-2 border-b border-slate-200 pb-2">
                           <span class="text-slate-500">Email di accesso</span>
-                          <span class="font-medium text-slate-800">{{ (studentAccount as any).studentUser?.email }}</span>
+                          <div class="flex flex-wrap items-center justify-end gap-2 min-w-0">
+                            <span class="font-medium text-slate-800 break-all">{{ (studentAccount as any).studentUser?.email }}</span>
+                            <UButton variant="outline" size="xs" icon="i-heroicons-pencil-square" @click="apriCorreggiEmailStudente">Correggi email</UButton>
+                          </div>
                         </div>
                         <!-- L'informativa privacy promette "data E ORA" del consenso,
                              e una data senza il nome di chi l'ha raccolta non è
@@ -899,6 +940,52 @@
       </template>
     </UModal>
 
+    <!-- ─── MODAL CORREGGI L'EMAIL DI ACCESSO (alunno o genitore) ─── -->
+    <ModalCorreggiEmail
+      v-model:open="correggiEmailAperto"
+      :account="accountDaCorreggere"
+      :salvando="correggendoEmail"
+      @salva="salvaCorrezioneEmail"
+    />
+
+    <!-- ─── COLLEGA UN GENITORE GIÀ REGISTRATO (C5) ─── -->
+    <ModalCollegaGenitore
+      v-model:open="collegaGenitoreAperto"
+      :student-id="id"
+      :nome-alunno="nomeAlunno"
+      :scheda="(studente as any) ?? null"
+      :account-collegati="genitoriPortale.map((g) => g.id)"
+      @collegato="dopoCollegaGenitore"
+    />
+
+    <!-- ─── PRIMA DI SALVARE: cosa cambia in più salvando la Modifica ─── -->
+    <ModalPrimaDiSalvare
+      v-model:open="primaDiSalvareAperto"
+      :voci="vociConseguenze"
+      :salvando="salvando || eseguendoConseguenze"
+      @conferma="confermaPrimaDiSalvare"
+    />
+
+    <!-- ─── I LINK PARTITI DOPO LA MODIFICA ───
+         La Modifica si apre da qualsiasi linguetta: i link non possono stare solo
+         dentro "Famiglia", dove magari nessuno li vedrebbe. Qui compaiono tutti
+         insieme, con il solito "copia il link" per mandarli su WhatsApp. -->
+    <UModal v-model:open="linkDopoModificaAperto" title="Link per scegliere la password">
+      <template #body>
+        <div class="space-y-4">
+          <div v-for="esito in linkDopoModifica" :key="esito.chiave" class="space-y-1">
+            <p class="text-xs font-medium text-slate-500 uppercase tracking-wide">{{ esito.titolo }}</p>
+            <LinkPrimoAccesso :link="esito.linkPassword" :email="esito.email" :nome="esito.nome" :email-inviata="esito.emailInviata" :motivo-email="esito.motivoEmail" :dettaglio-email="esito.dettaglioEmail" />
+          </div>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex justify-end w-full">
+          <UButton @click="() => { linkDopoModificaAperto = false }">Chiudi</UButton>
+        </div>
+      </template>
+    </UModal>
+
   </div>
 
   <ConfirmDialog
@@ -918,6 +1005,8 @@ import ConfirmDialog from '~/components/ConfirmDialog.vue'
 import { UpdateStudentSchema } from '#shared/schemas/student.schema'
 import { normalizzaTelefono } from '~/utils/phone'
 import { riassumiStati } from '~/utils/statiPacchetto'
+import { ETICHETTE_CAMPO, haDatiGenitore, leggiSerie, nomeConfrontabile, parolaParentela, scriviSerie } from '#shared/genitori'
+import type { CampoGenitore, Fratello, Slot } from '#shared/genitori'
 
 definePageMeta({ middleware: ['admin-or-super'] })
 
@@ -1177,6 +1266,10 @@ const genitori = computed(() => {
   }
 })
 
+// Il primo genitore c'è se ha almeno un dato suo. Serve alla riga "Nessun
+// genitore registrato" per l'alunno creato senza genitore (C5).
+const haPrimoGenitore = computed(() => haDatiGenitore(leggiSerie(studente.value as any, 1)))
+
 // Il secondo genitore c'è se ha almeno un dato suo: così il riquadro in scheda
 // compare solo quando serve davvero.
 const haSecondoGenitore = computed(() => {
@@ -1276,7 +1369,244 @@ function apriModalSecondoGenitore() {
   mostraSecondoGenitore.value = true
 }
 
+// ─── "Prima di salvare": cosa cambia in più salvando la Modifica ───
+// Una lista semplice di voci con la spunta, ognuna con la sua azione da eseguire
+// DOPO il salvataggio dell'anagrafica. Oggi le voci sono le email di accesso
+// (correggi l'email in scheda → cambia anche quella con cui si entra) e i
+// fratelli (cambi il telefono della mamma → aggiorna anche sulla scheda di Luca);
+// altre conseguenze si aggiungono qui come voci nuove, senza toccare la finestra.
+type VoceConseguenza = {
+  id: string
+  etichetta: string
+  dettaglio?: string
+  attiva: boolean
+  esegui: () => Promise<void>
+}
+const vociConseguenze      = ref<VoceConseguenza[]>([])
+const primaDiSalvareAperto = ref(false)
+const eseguendoConseguenze = ref(false)
+
+// Le email si confrontano come le leggerebbe una persona: maiuscole e spazi non contano
+function stessaEmail(a?: string | null, b?: string | null) {
+  return (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase()
+}
+
+// Guarda cosa sta per cambiare e costruisce le voci del riepilogo.
+// Si propone di cambiare un'email di accesso SOLO se, prima della modifica,
+// scheda e account andavano d'accordo: se erano già diverse non sappiamo quale
+// delle due sia quella giusta, e allora meglio non proporre niente.
+function conseguenzeDellaModifica(): VoceConseguenza[] {
+  const s = studente.value as any
+  if (!s) return []
+  const voci: VoceConseguenza[] = []
+  const accStudente = (studentAccount.value as any)?.studentUser ?? null
+
+  // Le email con cui si entra già oggi, di chiunque sia collegato a questo alunno.
+  // Se la "nuova" email è una di queste non è una correzione ma uno scambio (es.
+  // primo e secondo genitore invertiti): non si propone nulla, il server comunque
+  // la rifiuterebbe perché è già usata da un altro account.
+  const emailDiAccesso: string[] = [
+    ...genitoriPortale.value.map((g: any) => g.email as string),
+    ...(accStudente?.email ? [accStudente.email as string] : []),
+  ]
+  const giaDiUnAccesso = (email: string) => emailDiAccesso.some((e) => stessaEmail(e, email))
+
+  // 1. L'email dello studente
+  const nuovaStudente = (datiModifica.studentEmail ?? '').trim()
+  if (
+    accStudente?.id
+    && s.studentEmail && nuovaStudente
+    && !stessaEmail(s.studentEmail, nuovaStudente)
+    && stessaEmail(accStudente.email, s.studentEmail)
+    && !giaDiUnAccesso(nuovaStudente)
+  ) {
+    const acc = accountStudenteDaCorreggere(accStudente)
+    voci.push({
+      id: `email-accesso-${acc.userId}`,
+      etichetta: `Cambia anche l'email con cui ${acc.primoNome || acc.nome} entra (${acc.email} → ${nuovaStudente.toLowerCase()})`,
+      attiva: true,
+      esegui: () => correggiEmailDaModifica(acc, nuovaStudente),
+    })
+  }
+
+  // 2. Le email del primo e del secondo genitore
+  const genitoriScheda = [
+    { vecchia: s.parentEmail as string | null, nuova: datiModifica.parentEmail },
+    // Spunta del secondo genitore tolta = i suoi dati spariscono: nessuna email nuova
+    { vecchia: s.parent2Email as string | null, nuova: mostraSecondoGenitore.value ? datiModifica.parent2Email : '' },
+  ]
+  const giaProposti = new Set<string>()
+  for (const { vecchia, nuova } of genitoriScheda) {
+    const n = (nuova ?? '').trim()
+    if (!vecchia || !n || stessaEmail(vecchia, n) || giaDiUnAccesso(n)) continue
+    const g = genitoriPortale.value.find((p: any) => stessaEmail(p.email, vecchia))
+    // Stesso account su tutti e due i riquadri (caso raro): una voce sola
+    if (!g || giaProposti.has(g.id)) continue
+    giaProposti.add(g.id)
+    const acc = accountGenitoreDaCorreggere(g)
+    voci.push({
+      id: `email-accesso-${acc.userId}`,
+      etichetta: `Cambia anche l'email con cui ${acc.nome} entra nel portale (${acc.email} → ${n.toLowerCase()})`,
+      dettaglio: (acc.numeroFigli ?? 1) > 1
+        ? `Vale per tutti i suoi ${acc.numeroFigli} figli: l'email si aggiorna anche sulle loro schede.`
+        : undefined,
+      attiva: true,
+      esegui: () => correggiEmailDaModifica(acc, n),
+    })
+  }
+
+  // 3. Lo stesso genitore sulla scheda di un fratello (C5, decisione Q15)
+  voci.push(...vociPerIFratelli(s))
+
+  return voci
+}
+
+// ─── Q15: "Maria Bianchi è anche mamma di Luca: aggiorno anche lì?" ───
+// Con la fotocopia (C5) lo stesso genitore sta scritto su due schede: se la mamma
+// cambia numero, va cambiato su tutte e due. Decisione Q15 = (a): il gestionale
+// CHIEDE, sempre, con la finestra "Prima di salvare". Mai da solo: i fratelli si
+// riconoscono anche dal solo telefono, e se una nonna ha dato lo stesso numero
+// per due famiglie, un aggiornamento automatico cambierebbe la famiglia sbagliata.
+
+// I dati della persona che si propone di riportare sul fratello. La parentela
+// no: è il legame con QUESTO alunno (può essere "Madre" di uno e "Tutore legale"
+// dell'altro), non un dato della persona.
+const CAMPI_DA_RIPORTARE: CampoGenitore[] = ['nome', 'telefono', 'email', 'cf', 'piva', 'indirizzo', 'citta', 'cap', 'dataNascita']
+
+// Due valori si confrontano come li leggerebbe una persona: il telefono
+// "333 1234567" e "+393331234567" è lo stesso numero (la casella lo riscrive da
+// sola uscendo dal campo), e l'email o il codice fiscale non cambiano per una maiuscola.
+function valoreConfrontabile(campo: CampoGenitore, v?: string | null): string {
+  const t = (v ?? '').trim()
+  if (campo === 'telefono') return normalizzaTelefono(t)
+  if (campo === 'email') return t.toLowerCase()
+  if (campo === 'cf') return t.toUpperCase()
+  if (campo === 'nome') return nomeConfrontabile(t)
+  return t.replace(/\s+/g, ' ')
+}
+
+// Il legame con cui riportare i dati di QUEL genitore sulla scheda del fratello:
+// serve sapere in quale posto sta là (suoSlot), altrimenti non si sa dove scrivere.
+// "Forte" se c'è almeno un documento sicuro (account, codice fiscale, email);
+// il solo telefono è debole.
+function legamePerGenitore(f: Fratello, mioSlot: Slot): { suoSlot: Slot; forte: boolean } | null {
+  const utili = f.legami.filter((l) => l.mioSlot === mioSlot && l.suoSlot !== null)
+  const forte = utili.find((l) => l.motivo !== 'telefono')
+  const scelto = forte ?? utili[0]
+  if (!scelto?.suoSlot) return null
+  return { suoSlot: scelto.suoSlot, forte: Boolean(forte) }
+}
+
+function vociPerIFratelli(s: any): VoceConseguenza[] {
+  // Dati dei fratelli non arrivati (o nessun fratello): nessuna domanda, e il
+  // salvataggio va avanti come sempre
+  if (fratelli.value.length === 0) return []
+  const voci: VoceConseguenza[] = []
+
+  for (const slot of [1, 2] as Slot[]) {
+    // Spunta del secondo genitore tolta = lo si toglie da QUESTA scheda, non dal
+    // fratello: là resta com'è.
+    if (slot === 2 && !mostraSecondoGenitore.value) continue
+
+    const prima = leggiSerie(s, slot)
+    // datiModifica usa gli stessi nomi di colonna della scheda: si legge allo stesso modo
+    const dopo = leggiSerie(datiModifica, slot)
+    // Si riporta solo ciò che ha un valore NUOVO. Un campo svuotato qui non si
+    // svuota sul fratello: cancellare un dato altrove è più rischioso che lasciarlo.
+    const cambiati = CAMPI_DA_RIPORTARE.filter((campo) =>
+      dopo[campo] && valoreConfrontabile(campo, dopo[campo]) !== valoreConfrontabile(campo, prima[campo]))
+    if (cambiati.length === 0) continue
+
+    const chi = prima.nome || dopo.nome || (slot === 1 ? 'Il primo genitore' : 'Il secondo genitore')
+    const parentela = parolaParentela(prima.relazione)
+
+    for (const f of fratelli.value) {
+      const legame = legamePerGenitore(f, slot)
+      if (!legame) continue
+      // La data di nascita ha una colonna solo nel posto del secondo genitore
+      const campi = cambiati.filter((campo) => campo !== 'dataNascita' || legame.suoSlot === 2)
+      if (campi.length === 0) continue
+
+      const avvisi: string[] = []
+      if (!legame.forte) avvisi.push('Riconosciuto solo dal numero di telefono: controlla che sia davvero la stessa persona.')
+      // Cambiare il nome può voler dire aver messo un'altra persona al suo posto:
+      // in quel caso sul fratello va lasciato il genitore di prima.
+      if (campi.includes('nome') && prima.nome) {
+        avvisi.push(`Cambia anche il nome (${prima.nome} → ${dopo.nome}): se al suo posto hai messo un'altra persona, togli la spunta.`)
+      }
+
+      const valori = scriviSerie(dopo, legame.suoSlot, campi)
+      voci.push({
+        id: `fratello-${f.id}-${slot}`,
+        etichetta: `${chi} è anche ${parentela} di ${f.nome}: aggiorna anche lì (${campi.map((c) => ETICHETTE_CAMPO[c]).join(', ')})`,
+        dettaglio: avvisi.length > 0 ? avvisi.join(' ') : undefined,
+        // Q15: attiva se il legame è sicuro, spenta se c'è solo il telefono
+        attiva: legame.forte,
+        esegui: () => aggiornaFratello(f, valori),
+      })
+    }
+  }
+  return voci
+}
+
+// Azione di una voce "aggiorna anche su Luca": solo i campi cambiati, già
+// rimappati sul posto giusto della scheda del fratello. Come le altre voci, dice
+// da sé se è andata a buon fine e non ferma quelle dopo.
+async function aggiornaFratello(f: Fratello, valori: Record<string, string | null>) {
+  try {
+    // Indirizzo tenuto come testo semplice: scritto "a stampo" TypeScript lo
+    // confonde con /api/students/stats (solo lettura) e rifiuterebbe il PUT.
+    const indirizzoFratello: string = `/api/students/${f.id}`
+    await $fetch(indirizzoFratello, { method: 'PUT', body: valori })
+    toast.add({ title: `Aggiornato anche su ${f.nome}`, color: 'success', icon: 'i-heroicons-check-circle' })
+  } catch (e: any) {
+    toast.add({
+      title: `Scheda di ${f.nome} non aggiornata`,
+      description: e?.data?.statusMessage ?? 'Impossibile aggiornare la scheda del fratello: fallo dalla sua scheda.',
+      color: 'error',
+    })
+  }
+}
+
+// Il bottone "Salva Modifiche". Se il salvataggio non si porta dietro altro,
+// salva subito come sempre; altrimenti prima mostra il riepilogo.
 async function salvaModifica() {
+  const voci = conseguenzeDellaModifica()
+  if (voci.length > 0) {
+    vociConseguenze.value = voci
+    primaDiSalvareAperto.value = true
+    return
+  }
+  await salvaAnagrafica()
+}
+
+// "Salva" nella finestra "Prima di salvare": prima l'anagrafica, poi le voci
+// rimaste spuntate, una alla volta. Ogni voce dice da sé se è andata a buon fine.
+async function confermaPrimaDiSalvare(idAttive: string[]) {
+  const daEseguire = vociConseguenze.value.filter((v) => idAttive.includes(v.id))
+  const salvato = await salvaAnagrafica()
+  if (!salvato) {
+    // L'errore l'ha già detto il toast: si torna alla Modifica, che resta aperta
+    primaDiSalvareAperto.value = false
+    return
+  }
+  if (daEseguire.length > 0) {
+    eseguendoConseguenze.value = true
+    linkDopoModifica.value = []
+    try {
+      for (const voce of daEseguire) await voce.esegui()
+      await ricaricaDopoCorrezione()
+    } finally {
+      eseguendoConseguenze.value = false
+    }
+  }
+  primaDiSalvareAperto.value = false
+  if (linkDopoModifica.value.length > 0) linkDopoModificaAperto.value = true
+}
+
+// Il salvataggio dell'anagrafica vero e proprio (è quello di sempre).
+// Restituisce true se è andato a buon fine.
+async function salvaAnagrafica(): Promise<boolean> {
   salvando.value = true
   try {
     await $fetch(`/api/students/${id}`, {
@@ -1326,8 +1656,12 @@ async function salvaModifica() {
     toast.add({ title: 'Modifiche salvate', color: 'success', icon: 'i-heroicons-check-circle' })
     modalModificaAperto.value = false
     refresh()
+    // Un telefono o un'email cambiati possono fare (o disfare) un fratello
+    refreshFratelli()
+    return true
   } catch (err: any) {
     toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile salvare', color: 'error' })
+    return false
   } finally {
     salvando.value = false
   }
@@ -1432,6 +1766,45 @@ function esportaCsvPrenotazioni() {
 
 // Elenco dei genitori collegati a questo alunno (possono essere più di uno)
 const genitoriPortale = computed<any[]>(() => ((portalAccess.value as any)?.parents ?? []) as any[])
+
+// ─── Fratelli e sorelle (C5) ───
+// Dedotti dal server (genitore in comune), mai scritti a mano. Servono a due cose:
+// la sezione "Fratelli e sorelle" della linguetta Famiglia e la domanda
+// "aggiorno anche su Luca?" della Modifica (Q15). Se la chiamata non riesce la
+// lista resta vuota: sparisce la sezione e non si fanno domande, ma il
+// salvataggio della scheda non si blocca mai per questo.
+const { data: datiFratelli, refresh: refreshFratelli } = useLazyFetch<{ fratelli: Fratello[] }>(
+  `/api/admin/students/${id}/fratelli`,
+  { lazy: true },
+)
+const fratelli = computed<Fratello[]>(() => datiFratelli.value?.fratelli ?? [])
+
+// "stesso account del portale, stessa email" — il perché, detto in chiaro
+const PAROLE_MOTIVO: Record<Fratello['legami'][number]['motivo'], string> = {
+  account: 'stesso account del portale',
+  cf: 'stesso codice fiscale',
+  email: 'stessa email',
+  telefono: 'stesso telefono',
+}
+function comeRiconosciuto(f: Fratello): string {
+  const motivi = [...new Set(f.legami.map((l) => l.motivo))]
+  if (motivi.length === 1 && motivi[0] === 'telefono') return 'Riconosciuto solo dal numero di telefono di un genitore.'
+  return `Genitore in comune: ${motivi.map((m) => PAROLE_MOTIVO[m]).join(', ')}.`
+}
+
+// ─── Collega un genitore già registrato (C5) ───
+const collegaGenitoreAperto = ref(false)
+const nomeAlunno = computed(() => {
+  const s = studente.value as any
+  return s ? `${s.firstName ?? ''} ${s.lastName ?? ''}`.trim() : ''
+})
+function apriCollegaGenitore() {
+  collegaGenitoreAperto.value = true
+}
+// Dopo il collegamento cambiano la scheda, gli accessi al portale e (magari) i fratelli
+async function dopoCollegaGenitore() {
+  await Promise.all([refresh(), refreshPortal(), refreshFratelli()])
+}
 
 // Etichette di ruolo proposte; "ALTRO" apre un campo di testo libero accanto al menu
 const RELAZIONI_ITEMS = [
@@ -1692,6 +2065,164 @@ async function togglePrenotazione(value: boolean) {
     })
   } finally {
     togglando.value = false
+  }
+}
+
+// ─── Correggi l'email di accesso (studente o genitore) ───
+// L'email con cui si entra sta sull'account; la stessa email sta anche sulla
+// scheda. Il server le corregge insieme, annulla i link partiti verso il vecchio
+// indirizzo e, se richiesto, ne manda uno nuovo (vedi correggiEmailAccount).
+type AccountDaCorreggere = {
+  tipo: 'STUDENTE' | 'GENITORE'
+  userId: string
+  /** Nome e cognome, per le frasi delle finestre */
+  nome: string
+  /** Solo il nome di battesimo, per la riga del link ("Manda questo link a Giulia") */
+  primoNome: string
+  /** Email di accesso attuale */
+  email: string
+  /** Solo genitori: quanti alunni vede nel portale, questo compreso */
+  numeroFigli?: number
+}
+
+const accountDaCorreggere = ref<AccountDaCorreggere | null>(null)
+const correggiEmailAperto = ref(false)
+const correggendoEmail    = ref(false)
+// Link partiti dalla finestra "Prima di salvare" della Modifica: si mostrano alla fine
+const linkDopoModifica = ref<({ chiave: string; titolo: string; email: string; nome: string; linkPassword: string } & EsitoInvitoEmail)[]>([])
+const linkDopoModificaAperto = ref(false)
+
+function accountStudenteDaCorreggere(u: any): AccountDaCorreggere {
+  return {
+    tipo: 'STUDENTE',
+    userId: u.id,
+    nome: `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim(),
+    primoNome: u.firstName ?? '',
+    email: u.email,
+  }
+}
+
+function accountGenitoreDaCorreggere(g: any): AccountDaCorreggere {
+  return {
+    tipo: 'GENITORE',
+    userId: g.id,
+    nome: `${g.firstName ?? ''} ${g.lastName ?? ''}`.trim(),
+    primoNome: g.firstName ?? '',
+    email: g.email,
+    numeroFigli: g.numeroFigli,
+  }
+}
+
+function apriCorreggiEmailStudente() {
+  const u = (studentAccount.value as any)?.studentUser
+  if (!u?.id) return
+  accountDaCorreggere.value = accountStudenteDaCorreggere(u)
+  correggiEmailAperto.value = true
+}
+
+function apriCorreggiEmailGenitore(g: any) {
+  if (!g?.id) return
+  accountDaCorreggere.value = accountGenitoreDaCorreggere(g)
+  correggiEmailAperto.value = true
+}
+
+// Una sola funzione per i due tipi di account: cambia solo la porta a cui si bussa.
+// La usano sia la finestra "Correggi email" sia il riepilogo "Prima di salvare",
+// così le due strade fanno esattamente la stessa cosa.
+async function chiamaCorreggiEmail(acc: AccountDaCorreggere, email: string, inviaLink: boolean): Promise<any> {
+  if (acc.tipo === 'STUDENTE') {
+    return await $fetch(`/api/admin/students/${id}/student-account`, {
+      method: 'PUT',
+      body: { action: 'change-email', userId: acc.userId, email, inviaLink },
+    })
+  }
+  return await $fetch(`/api/admin/students/${id}/portal-access/${acc.userId}`, {
+    method: 'PUT',
+    body: { action: 'change-email', email, inviaLink },
+  })
+}
+
+// I link a schermo che puntavano al vecchio indirizzo ormai sono annullati:
+// lasciarli lì farebbe copiare su WhatsApp un link che non funziona più.
+function togliLinkVecchi(acc: AccountDaCorreggere, vecchiaEmail: string) {
+  if (acc.tipo === 'STUDENTE') {
+    credenzialiStudente.value = null
+    return
+  }
+  if (stessaEmail(credenziali.value?.email, vecchiaEmail)) credenziali.value = null
+  if (stessaEmail(resetPassword.value?.email, vecchiaEmail)) resetPassword.value = null
+}
+
+function esitoLink(acc: AccountDaCorreggere, res: any) {
+  return {
+    email: res.email as string,
+    nome: acc.primoNome,
+    linkPassword: res.linkPassword as string,
+    emailInviata: res.emailInviata === true,
+    motivoEmail: res.motivoEmail,
+    dettaglioEmail: res.dettaglioEmail,
+  }
+}
+
+function descrizioneCorrezione(acc: AccountDaCorreggere, res: any): string {
+  const frasi = [`Ora ${acc.primoNome || acc.nome} entra con ${res.email}.`]
+  // Per un genitore l'anagrafica si corregge su tutti i figli collegati: dire
+  // quante schede sono cambiate evita di doverle andare a controllare una per una
+  const schede = Number(res.schedeAllineate ?? 0)
+  if (acc.tipo === 'GENITORE' && schede > 0) {
+    frasi.push(`Email corretta anche in anagrafica: ${schede} ${schede === 1 ? 'scheda' : 'schede'}.`)
+  }
+  frasi.push('Il link mandato al vecchio indirizzo non funziona più.')
+  return frasi.join(' ')
+}
+
+// Dopo una correzione cambiano l'account, l'elenco dei genitori e la scheda
+// (e, se si è aggiornato anche un fratello, i legami con lui)
+async function ricaricaDopoCorrezione() {
+  await Promise.all([refreshPortal(), refreshStudentAccount(), refresh(), refreshFratelli()])
+}
+
+// "Salva" nella finestra "Correggi l'email di accesso"
+async function salvaCorrezioneEmail(dati: { email: string; inviaLink: boolean }) {
+  const acc = accountDaCorreggere.value
+  if (!acc) return
+  correggendoEmail.value = true
+  try {
+    const res = await chiamaCorreggiEmail(acc, dati.email, dati.inviaLink)
+    togliLinkVecchi(acc, res.vecchiaEmail)
+    // Il link nuovo compare nello stesso riquadro, come per "Invia link password"
+    if (res.linkPassword) {
+      if (acc.tipo === 'STUDENTE') credenzialiStudente.value = esitoLink(acc, res)
+      else resetPassword.value = esitoLink(acc, res)
+    }
+    correggiEmailAperto.value = false
+    toast.add({ title: 'Email di accesso corretta', description: descrizioneCorrezione(acc, res), color: 'success', icon: 'i-heroicons-check-circle' })
+    await ricaricaDopoCorrezione()
+  } catch (e: any) {
+    // La finestra resta aperta: si può correggere l'email e riprovare
+    toast.add({ title: 'Email non cambiata', description: e?.data?.statusMessage ?? 'Impossibile correggere l\'email', color: 'error' })
+  } finally {
+    correggendoEmail.value = false
+  }
+}
+
+// Azione di una voce del riepilogo "Prima di salvare": dalla Modifica il link
+// parte sempre (la spunta "manda un link" qui non c'è) e si mette da parte, per
+// mostrarli tutti insieme alla fine.
+async function correggiEmailDaModifica(acc: AccountDaCorreggere, nuovaEmail: string) {
+  try {
+    const res = await chiamaCorreggiEmail(acc, nuovaEmail, true)
+    togliLinkVecchi(acc, res.vecchiaEmail)
+    if (res.linkPassword) {
+      linkDopoModifica.value.push({ chiave: acc.userId, titolo: `Link password per ${acc.nome}`, ...esitoLink(acc, res) })
+    }
+    toast.add({ title: 'Email di accesso corretta', description: descrizioneCorrezione(acc, res), color: 'success', icon: 'i-heroicons-check-circle' })
+  } catch (e: any) {
+    toast.add({
+      title: `Email di accesso di ${acc.nome} non cambiata`,
+      description: e?.data?.statusMessage ?? 'Impossibile correggere l\'email',
+      color: 'error',
+    })
   }
 }
 

@@ -1,7 +1,8 @@
-import { and, asc, count, desc, eq, ilike, isNotNull, isNull, lte, notInArray, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, inArray, isNotNull, isNull, lte, notInArray, or, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/pg-core'
 import { db } from '../database/client'
-import { contacts, contactInteractions, students, users } from '../database/schema'
+import { contacts, contactFigli, contactInteractions, students, users } from '../database/schema'
 import { nomeProprio } from '../utils/nomi'
 import { oggiRomeStr } from '../utils/tutor-time-window'
 // Il ponte con i Rientri (l'import va in questo verso soltanto: confirmation.service
@@ -17,12 +18,17 @@ import type {
   UpdateContactInput,
   CreateInteractionInput,
   ListContactsQuery,
+  FiglioContattoInput,
+  CollegaFiglioInput,
 } from '#shared/schemas/contact.schema'
 
 // Convenzione di progetto: i service segnalano gli errori di dominio con
 // `new Error('messaggio in italiano')`; gli handler li traducono in errori HTTP.
 
 type ContactChanges = Partial<typeof contacts.$inferInsert>
+type RigaContatto = typeof contacts.$inferSelect
+// L'oggetto `tx` che Drizzle passa dentro db.transaction(...)
+type Transazione = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 // Un contatto è "da ricontattare" se ha un post-it con data odierna o passata
 // e non è già chiuso (convertito o perso). Costruito con gli operatori Drizzle
@@ -104,7 +110,11 @@ export async function listContacts(q: ListContactsQuery) {
       ilike(contacts.telefono, testo),
       ilike(contacts.email, testo),
       ilike(contacts.socialLink, testo),
+      // Il figlio di una volta (contatti di prima, vedi figliConRipiego)…
       ilike(contacts.nomeStudente, testo),
+      // …e tutti i figli della famiglia: cercando "Giulia" si trova la mamma che
+      // ha chiamato per Luca e Giulia, anche se Giulia è il secondo figlio
+      sql`EXISTS (SELECT 1 FROM ${contactFigli} WHERE ${contactFigli.contactId} = ${contacts.id} AND ${ilike(contactFigli.nome, testo)})`,
       ilike(contacts.azienda, testo),
     ]
     // Se si sta cercando un numero, cerchiamo anche la sua forma normalizzata:
@@ -156,8 +166,11 @@ export async function listContacts(q: ListContactsQuery) {
 
   const total = totaleRow?.n ?? 0
 
+  // I figli delle famiglie della pagina: UNA lettura in più per tutti, non una a contatto
+  const figliPerContatto = await leggiFigli(righe)
+
   return {
-    items: righe,
+    items: righe.map((c) => ({ ...c, figli: figliPerContatto.get(c.id) ?? [] })),
     total,
     meta: {
       page:       q.page,
@@ -196,16 +209,23 @@ export async function countContactsDaRicontattare() {
 const nomeCompleto = (idCol: unknown, nome: unknown, cognome: unknown) =>
   sql<string | null>`CASE WHEN ${idCol} IS NULL THEN NULL ELSE ${nome} || ' ' || ${cognome} END`
 
+// La tabella users entra due volte nella stessa lettura: una per chi ha inserito
+// il contatto, una per il tutor creato dalla conversione. Senza un secondo nome
+// ("tutor") Postgres non saprebbe quale delle due persone intendiamo.
+const utenteTutor = alias(users, 'tutor')
+
 export async function getContact(id: string) {
   const [[riga], interazioni] = await Promise.all([
     db.select({
       contatto:     contacts,
       studenteNome: nomeCompleto(students.id, students.firstName, students.lastName),
       creatoDaNome: nomeCompleto(users.id, users.firstName, users.lastName),
+      tutorNome:    nomeCompleto(utenteTutor.id, utenteTutor.firstName, utenteTutor.lastName),
     })
       .from(contacts)
       .leftJoin(students, eq(contacts.studentId, students.id))
       .leftJoin(users, eq(contacts.createdByUserId, users.id))
+      .leftJoin(utenteTutor, eq(contacts.tutorUserId, utenteTutor.id))
       .where(eq(contacts.id, id))
       .limit(1),
 
@@ -229,12 +249,297 @@ export async function getContact(id: string) {
 
   if (!riga) throw new Error('Contatto non trovato')
 
+  // Per i figli serve il contatto già letto (il ripiego parte dai suoi vecchi
+  // campi): questa lettura viene dopo le altre due, non insieme
+  const figli = await leggiFigli([riga.contatto])
+
   return {
     ...riga.contatto,
     studenteNome: riga.studenteNome,
     creatoDaNome: riga.creatoDaNome,
+    tutorNome:    riga.tutorNome,
+    figli:        figli.get(riga.contatto.id) ?? [],
     interazioni,
   }
+}
+
+// ─────────────────────────────────────────────
+// I FIGLI DI UNA FAMIGLIA (voce D2)
+// Una famiglia può chiamare per più figli: ognuno è una riga di contact_figli e
+// diventa alunno per conto suo. I contatti di prima avevano i tre campi sul
+// contatto stesso (un figlio solo): finché non hanno righe, quel figlio si mostra
+// lo stesso, "virtuale" (id null), ricavato dai vecchi campi.
+// ─────────────────────────────────────────────
+
+/** Un figlio come lo vedono lista, scheda e modulo (id null = il figlio "di prima") */
+export interface FiglioLetto {
+  id: string | null
+  nome: string | null
+  classeScuola: string | null
+  materie: string | null
+  studentId: string | null
+  /** "Nome Cognome" dello studente collegato (null se non è ancora alunno) */
+  studenteNome: string | null
+}
+
+type DatiFiglio = Pick<FiglioContattoInput, 'nome' | 'classeScuola' | 'materie'>
+
+/** Solo le famiglie interessate hanno figli: non i candidati tutor, non il Marketing */
+function eFamiglia(c: Pick<RigaContatto, 'tipo' | 'doposcuolaRuolo'>): boolean {
+  return c.tipo === 'DOPOSCUOLA' && c.doposcuolaRuolo === 'STUDENTE'
+}
+
+const figlioVuoto = (f: DatiFiglio) => !f.nome && !f.classeScuola && !f.materie
+
+/** Il nome del figlio in formato "Nome Proprio", come quello del contatto */
+const nomeFiglio = (nome: string | null | undefined) => (nome ? nomeProprio(nome) : null)
+
+/** "Luca  ROSSI" e "luca rossi" sono lo stesso ragazzo: via maiuscole, accenti e spazi doppi */
+function chiaveNome(nome: string | null | undefined): string {
+  return (nome ?? '')
+    .normalize('NFD')
+    // via gli accenti: 'è' scomposta diventa 'e' + segno, il segno si butta
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Le righe da inserire per dei figli nuovi, numerate da `primo` in poi */
+function righeFigliNuove(contactId: string, figli: DatiFiglio[], primo = 0): Array<typeof contactFigli.$inferInsert> {
+  return figli.map((f, i) => ({
+    contactId,
+    nome:         nomeFiglio(f.nome),
+    classeScuola: f.classeScuola ?? null,
+    materie:      f.materie ?? null,
+    ordine:       primo + i,
+  }))
+}
+
+// I vecchi campi del contatto svuotati: si usa quando il figlio "virtuale" è
+// diventato una riga vera (o è stato tolto). Senza svuotarli, alla lettura dopo
+// il ripiego lo farebbe ricomparire.
+const SENZA_CAMPI_VECCHI = { nomeStudente: null, classeScuola: null, materie: null } satisfies ContactChanges
+
+/**
+ * IL RIPIEGO — dai figli salvati di un contatto, i figli da mostrare. Una regola
+ * sola, usata per leggere (lista, scheda) e prima di scrivere: quello che l'utente
+ * vede è sempre quello su cui il server ragiona.
+ *
+ * 1. Nessuna riga ma i vecchi campi valorizzati → UN figlio "virtuale" (id null).
+ *    Perché: fra la migrazione del database e la pubblicazione del codice nuovo
+ *    passano minuti, e intanto il sito vecchio può creare contatti col formato di
+ *    prima. Così quei figli non si perdono mai.
+ * 2. Il contatto è collegato a uno studente che nessuna riga porta → quel
+ *    collegamento va sul primo figlio non ancora alunno. Succede se in quella
+ *    stessa finestra (o da una scheda del browser aperta da prima
+ *    dell'aggiornamento) si è usato il "Crea studente" vecchio, che scriveva solo
+ *    sul contatto. Se tutti i figli sono già alunni resta solo sul contatto: con i
+ *    bottoni del gestionale non può succedere.
+ *
+ * Contatti anonimizzati: nessun figlio (sono nomi di minori).
+ */
+function figliConRipiego(c: RigaContatto, righe: FiglioLetto[]): FiglioLetto[] {
+  if (!eFamiglia(c) || c.anonimizzatoAt) return []
+
+  if (righe.length === 0) {
+    const vecchiCampi = c.nomeStudente || c.classeScuola || c.materie || c.studentId
+    if (!vecchiCampi) return []
+    return [{
+      id:           null,
+      nome:         c.nomeStudente,
+      classeScuola: c.classeScuola,
+      materie:      c.materie,
+      studentId:    c.studentId,
+      studenteNome: null,
+    }]
+  }
+
+  const figli = righe.map((r) => ({ ...r }))
+  if (c.studentId && !figli.some((f) => f.studentId === c.studentId)) {
+    const libero = figli.find((f) => !f.studentId)
+    if (libero) libero.studentId = c.studentId
+  }
+  return figli
+}
+
+/** Le righe salvate di un contatto, nell'ordine in cui vanno mostrate */
+async function righeSalvate(esecutore: Transazione, contactId: string) {
+  return await esecutore.select().from(contactFigli)
+    .where(eq(contactFigli.contactId, contactId))
+    .orderBy(asc(contactFigli.ordine), asc(contactFigli.createdAt))
+}
+
+/** Una riga salvata nella forma che vuole il ripiego (il nome dell'alunno qui non serve) */
+const perRipiego = (r: typeof contactFigli.$inferSelect): FiglioLetto => ({
+  id:           r.id,
+  nome:         r.nome,
+  classeScuola: r.classeScuola,
+  materie:      r.materie,
+  studentId:    r.studentId,
+  studenteNome: null,
+})
+
+/**
+ * I figli di più contatti in UNA lettura (la lista ne mostra 50 insieme: niente
+ * una query per contatto). Restituisce contactId → figli, col ripiego già fatto.
+ */
+async function leggiFigli(contatti: RigaContatto[]): Promise<Map<string, FiglioLetto[]>> {
+  const perContatto = new Map<string, FiglioLetto[]>()
+  const famiglie = contatti.filter((c) => eFamiglia(c) && !c.anonimizzatoAt)
+  if (famiglie.length === 0) return perContatto
+
+  const righe = await db.select({
+    id:           contactFigli.id,
+    contactId:    contactFigli.contactId,
+    nome:         contactFigli.nome,
+    classeScuola: contactFigli.classeScuola,
+    materie:      contactFigli.materie,
+    studentId:    contactFigli.studentId,
+    studenteNome: nomeCompleto(students.id, students.firstName, students.lastName),
+  })
+    .from(contactFigli)
+    .leftJoin(students, eq(contactFigli.studentId, students.id))
+    .where(inArray(contactFigli.contactId, famiglie.map((c) => c.id)))
+    .orderBy(asc(contactFigli.ordine), asc(contactFigli.createdAt))
+
+  const salvatePer = new Map<string, FiglioLetto[]>()
+  for (const { contactId, ...figlio } of righe) {
+    const lista = salvatePer.get(contactId) ?? []
+    lista.push(figlio)
+    salvatePer.set(contactId, lista)
+  }
+  for (const c of famiglie) perContatto.set(c.id, figliConRipiego(c, salvatePer.get(c.id) ?? []))
+
+  // Il nome dello studente per i collegamenti che il ripiego ha preso dal contatto:
+  // una lettura sola per tutti, e solo se ce n'è bisogno (contatti di prima)
+  const tutti = [...perContatto.values()].flat()
+  const senzaNome = [...new Set(tutti.filter((f) => f.studentId && !f.studenteNome).map((f) => f.studentId as string))]
+  if (senzaNome.length > 0) {
+    const nomi = await db.select({
+      id:   students.id,
+      nome: sql<string>`${students.firstName} || ' ' || ${students.lastName}`,
+    }).from(students).where(inArray(students.id, senzaNome))
+    const nomePerId = new Map(nomi.map((n) => [n.id, n.nome]))
+    for (const f of tutti) {
+      if (f.studentId && !f.studenteNome) f.studenteNome = nomePerId.get(f.studentId) ?? null
+    }
+  }
+
+  return perContatto
+}
+
+/** Il contatto con i suoi figli: è la forma che lista, scheda e modulo si aspettano */
+async function conFigli(c: RigaContatto) {
+  const figli = await leggiFigli([c])
+  return { ...c, figli: figli.get(c.id) ?? [] }
+}
+
+/**
+ * Salva i figli arrivati dal modulo "Modifica contatto": è la lista COMPLETA, così
+ * come l'utente la vede. Aggiorna quelli che c'erano, aggiunge i nuovi, cancella i
+ * tolti — ma mai un figlio già diventato alunno: se manca è un errore, se c'è i
+ * suoi dati non si toccano (quelli veri ora stanno sulla scheda dello studente).
+ *
+ * `c` è il contatto COM'ERA prima della modifica, cioè quello che l'utente aveva
+ * davanti aprendo il modulo. Restituisce true se il contatto aveva il figlio
+ * "virtuale" dei contatti di prima: ora è una riga vera (o è stato tolto), e chi
+ * chiama ne svuota i vecchi campi.
+ */
+async function salvaFigli(tx: Transazione, c: RigaContatto, arrivati: FiglioContattoInput[]): Promise<boolean> {
+  const salvati = await righeSalvate(tx, c.id)
+  const salvatiPerId = new Map(salvati.map((r) => [r.id, r]))
+
+  // Gli stessi figli che l'utente ha visto (ripiego compreso): dicono chi è già alunno
+  const visti = figliConRipiego(c, salvati.map(perRipiego))
+  const alunnoDaRipiego = new Map(visti.filter((f) => f.id).map((f) => [f.id as string, f.studentId]))
+  const alunnoDi = (r: { id: string; studentId: string | null }) => alunnoDaRipiego.get(r.id) || r.studentId
+  const virtuale = visti.find((f) => f.id === null) ?? null
+
+  const tenuti = new Set<string>()
+  const modifiche: Array<{ id: string; valori: Partial<typeof contactFigli.$inferInsert> }> = []
+  const nuovi: Array<typeof contactFigli.$inferInsert> = []
+  let virtualeArrivato = false
+  const adesso = new Date()
+
+  for (const f of arrivati) {
+    const ordine = tenuti.size + nuovi.length
+    const riga = f.id ? salvatiPerId.get(f.id) : undefined
+
+    if (riga && !tenuti.has(riga.id)) {
+      const studentId = alunnoDi(riga)
+      if (studentId) {
+        // Già alunno: si aggiornano solo la posizione e, per i contatti di prima,
+        // il collegamento che fin qui stava solo sul contatto
+        tenuti.add(riga.id)
+        if (riga.ordine !== ordine || riga.studentId !== studentId) {
+          modifiche.push({ id: riga.id, valori: { ordine, studentId, updatedAt: adesso } })
+        }
+        continue
+      }
+      // Svuotata del tutto = tolta (la cancellazione è qui sotto)
+      if (figlioVuoto(f)) continue
+      tenuti.add(riga.id)
+      const valori = { nome: nomeFiglio(f.nome), classeScuola: f.classeScuola ?? null, materie: f.materie ?? null, ordine }
+      if (valori.nome !== riga.nome || valori.classeScuola !== riga.classeScuola
+        || valori.materie !== riga.materie || valori.ordine !== riga.ordine) {
+        modifiche.push({ id: riga.id, valori: { ...valori, updatedAt: adesso } })
+      }
+      continue
+    }
+
+    // Riga nuova. Un id che non è di questo contatto (una riga cancellata nel
+    // frattempo da un'altra finestra, o peggio) non tocca mai niente: vale come nuova.
+    // Il figlio virtuale arriva senza id ed è sempre il primo del modulo: la prima
+    // riga senza id prende il suo posto, e con lui il suo collegamento allo studente.
+    if (virtuale && !virtualeArrivato && !f.id) {
+      virtualeArrivato = true
+      if (virtuale.studentId) {
+        // Già alunno: i dati restano quelli di prima, come per le righe salvate
+        nuovi.push({
+          contactId:    c.id,
+          nome:         virtuale.nome,
+          classeScuola: virtuale.classeScuola,
+          materie:      virtuale.materie,
+          studentId:    virtuale.studentId,
+          ordine,
+        })
+        continue
+      }
+    }
+    if (figlioVuoto(f)) continue
+    nuovi.push(righeFigliNuove(c.id, [f], ordine)[0]!)
+  }
+
+  const tolti = salvati.filter((r) => !tenuti.has(r.id))
+  if (tolti.some((r) => alunnoDi(r)) || (virtuale?.studentId && !virtualeArrivato)) {
+    throw new Error('Non puoi togliere un figlio che è già diventato alunno')
+  }
+
+  if (tolti.length > 0) {
+    await tx.delete(contactFigli).where(and(
+      eq(contactFigli.contactId, c.id),
+      inArray(contactFigli.id, tolti.map((r) => r.id)),
+    ))
+  }
+  for (const { id, valori } of modifiche) {
+    await tx.update(contactFigli).set(valori).where(and(eq(contactFigli.id, id), eq(contactFigli.contactId, c.id)))
+  }
+  if (nuovi.length > 0) await tx.insert(contactFigli).values(nuovi)
+
+  return virtuale !== null
+}
+
+/**
+ * I figli di un contatto nuovo. Il modulo di adesso li manda in `figli`; una scheda
+ * del browser aperta da prima dell'aggiornamento manda ancora i tre campi di una
+ * volta. Qui non c'è niente di vecchio da sovrascrivere, quindi quei tre campi
+ * diventano il primo figlio invece di andare persi.
+ */
+function figliDaCreare(data: CreateContactInput): DatiFiglio[] {
+  if (!eFamiglia({ tipo: data.tipo, doposcuolaRuolo: data.doposcuolaRuolo ?? 'STUDENTE' })) return []
+  const figli = data.figli ?? [{ nome: data.nomeStudente, classeScuola: data.classeScuola, materie: data.materie }]
+  return figli.filter((f) => !figlioVuoto(f))
 }
 
 // ─────────────────────────────────────────────
@@ -242,6 +547,9 @@ export async function getContact(id: string) {
 // ─────────────────────────────────────────────
 
 export async function createContact(data: CreateContactInput, userId: string) {
+  const famiglia = eFamiglia({ tipo: data.tipo, doposcuolaRuolo: data.doposcuolaRuolo ?? 'STUDENTE' })
+  const figli = figliDaCreare(data)
+
   const valori: typeof contacts.$inferInsert = {
     tipo:               data.tipo,
     nome:               nomeProprio(data.nome),
@@ -253,9 +561,9 @@ export async function createContact(data: CreateContactInput, userId: string) {
     stato:              data.stato,
     prossimoRicontatto: data.prossimoRicontatto ?? null,
     note:               data.note ?? null,
-    nomeStudente:       data.nomeStudente ?? null,
-    classeScuola:       data.classeScuola ?? null,
-    materie:            data.materie ?? null,
+    // I figli (nome, classe, materie) vanno in contact_figli, qui sotto. Sul
+    // contatto restano solo le materie che un candidato tutor insegna.
+    materie:            famiglia ? null : (data.materie ?? null),
     azienda:            data.azienda ?? null,
     servizioInteresse:  data.servizioInteresse ?? null,
     marketingRuolo:     data.marketingRuolo ?? null,
@@ -267,37 +575,37 @@ export async function createContact(data: CreateContactInput, userId: string) {
   }
 
   const prima = data.primaInterazione
+  // Quando ci si è sentiti la prima volta (se indicato): riempie anche "ultimo contatto"
+  const quando = prima ? new Date(prima.data) : null
 
-  // Caso normale: si scrive solo la rubrica, esattamente come prima
-  if (!prima) {
-    const [creato] = await db.insert(contacts).values(valori).returning()
-    return creato
-  }
-
-  // È stato indicato quando ci si è sentiti la prima volta: rubrica e prima riga
-  // del diario nella stessa operazione (o tutte e due, o nessuna delle due).
-  const quando = new Date(prima.data)
-
-  return await db.transaction(async (tx) => {
-    const [creato] = await tx.insert(contacts)
-      .values({ ...valori, ultimoContattoAt: quando })
+  // Rubrica, figli e prima riga del diario nella stessa operazione: o tutto, o
+  // niente (mai un contatto a metà, senza i figli appena scritti).
+  const creato = await db.transaction(async (tx) => {
+    const [riga] = await tx.insert(contacts)
+      .values(quando ? { ...valori, ultimoContattoAt: quando } : valori)
       .returning()
 
-    if (!creato) throw new Error('Creazione del contatto non riuscita')
+    if (!riga) throw new Error('Creazione del contatto non riuscita')
 
-    await tx.insert(contactInteractions).values({
-      contactId:       creato.id,
-      tipo:            prima.tipo,
-      direzione:       prima.direzione,
-      // Canale non scelto a mano: vale la fonte del contatto
-      canale:          prima.canale ?? data.canaleOrigine,
-      note:            prima.note ?? null,
-      data:            quando,
-      createdByUserId: userId,
-    })
+    if (figli.length > 0) await tx.insert(contactFigli).values(righeFigliNuove(riga.id, figli))
 
-    return creato
+    if (prima && quando) {
+      await tx.insert(contactInteractions).values({
+        contactId:       riga.id,
+        tipo:            prima.tipo,
+        direzione:       prima.direzione,
+        // Canale non scelto a mano: vale la fonte del contatto
+        canale:          prima.canale ?? data.canaleOrigine,
+        note:            prima.note ?? null,
+        data:            quando,
+        createdByUserId: userId,
+      })
+    }
+
+    return riga
   })
+
+  return await conFigli(creato)
 }
 
 /**
@@ -325,8 +633,10 @@ export async function updateContact(id: string, data: UpdateContactInput, userId
   const [esistente] = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1)
   if (!esistente) throw new Error('Contatto non trovato')
 
+  // I figli non sono una colonna del contatto: si salvano a parte (salvaFigli)
+  const { figli, ...campi } = data
   const changes: ContactChanges = { updatedAt: new Date() }
-  for (const [chiave, valore] of Object.entries(data)) {
+  for (const [chiave, valore] of Object.entries(campi)) {
     if (valore !== undefined) (changes as Record<string, unknown>)[chiave] = valore
   }
 
@@ -349,12 +659,43 @@ export async function updateContact(id: string, data: UpdateContactInput, userId
   if (typeof changes.nome === 'string') changes.nome = nomeProprio(changes.nome)
   if (typeof changes.cognome === 'string' && changes.cognome) changes.cognome = nomeProprio(changes.cognome)
 
+  // Famiglia interessata, a modifica fatta? Allora i figli stanno in contact_figli
+  // e i vecchi campi del contatto non si scrivono più. Se arrivano lo stesso li
+  // manda una scheda del browser aperta da prima dell'aggiornamento, con i dati di
+  // allora: si ignorano, per non scrivere dati vecchi sopra ai figli.
+  const famiglia = eFamiglia({
+    tipo:            changes.tipo ?? esistente.tipo,
+    doposcuolaRuolo: changes.doposcuolaRuolo ?? esistente.doposcuolaRuolo,
+  })
+  if (famiglia) {
+    delete changes.nomeStudente
+    delete changes.classeScuola
+    delete changes.materie
+    // Appena diventato una famiglia (era un candidato tutor): le materie scritte sul
+    // contatto erano quelle che insegnava, non di un figlio. Si svuotano, se no il
+    // ripiego le scambierebbe per il figlio di un contatto di prima.
+    if (!eFamiglia(esistente)) Object.assign(changes, SENZA_CAMPI_VECCHI)
+  }
+
   aggiornaConvertitoAt(changes, data.stato, esistente.convertitoAt)
 
-  const [aggiornato] = await db.update(contacts).set(changes).where(eq(contacts.id, id)).returning()
+  // Contatto e figli nella stessa operazione: o tutti e due, o nessuno dei due
+  const aggiornato = await db.transaction(async (tx) => {
+    if (figli !== undefined) {
+      // Chi non è (più) una famiglia, per esempio un contatto passato a "Possibile
+      // tutor", non ha figli: la lista vuota toglie quelli rimasti, ma mai uno già
+      // diventato alunno (salvaFigli si ferma con un errore chiaro).
+      const virtualeConsumato = await salvaFigli(tx, esistente, famiglia ? figli : [])
+      if (virtualeConsumato && famiglia) Object.assign(changes, SENZA_CAMPI_VECCHI)
+    }
+    const [riga] = await tx.update(contacts).set(changes).where(eq(contacts.id, id)).returning()
+    return riga
+  })
 
   // È questa la modifica che lo trasforma in alunno ("Crea studente")? Solo
   // allora si apre la riga nei Rientri: le modifiche successive non la toccano.
+  // Un candidato tutor convertito con "Crea tutor" porta tutorUserId e non
+  // studentId: qui non entra, i Rientri sono l'appello degli alunni.
   const appenaConvertito = Boolean(
     aggiornato
     && aggiornato.stato === 'CONVERTITO'
@@ -365,7 +706,77 @@ export async function updateContact(id: string, data: UpdateContactInput, userId
     await segnaRientroConfermato(aggiornato.studentId, userId)
   }
 
-  return aggiornato ?? null
+  return aggiornato ? await conFigli(aggiornato) : null
+}
+
+// ─────────────────────────────────────────────
+// COLLEGA UN FIGLIO ALLO STUDENTE CREATO — POST /api/contacts/:id/figli/collega
+// "Crea studente" si fa un figlio alla volta: finito il wizard, QUEL figlio si
+// collega allo studente appena nato e il contatto diventa "Convertito".
+// ─────────────────────────────────────────────
+
+export async function collegaFiglio(contactId: string, input: CollegaFiglioInput, userId: string) {
+  const esito = await db.transaction(async (tx) => {
+    const [contatto] = await tx.select().from(contacts).where(eq(contacts.id, contactId)).limit(1)
+    if (!contatto) throw new Error('Contatto non trovato')
+    if (contatto.anonimizzatoAt) throw new Error('Questa scheda è stata svuotata dalla pulizia privacy: non si può più collegare')
+    if (!eFamiglia(contatto)) throw new Error('Solo i possibili studenti del Doposcuola hanno figli da collegare')
+
+    const [studente] = await tx.select({ id: students.id }).from(students).where(eq(students.id, input.studentId)).limit(1)
+    if (!studente) throw new Error('Studente non trovato')
+
+    // Si ragiona sugli stessi figli che l'utente vede (ripiego compreso): figlioId
+    // null è il figlio "di prima" di un contatto vecchio, che non ha ancora una riga
+    const salvati = await righeSalvate(tx, contactId)
+    const figlio = figliConRipiego(contatto, salvati.map(perRipiego))
+      .find((f) => f.id === input.figlioId)
+    if (!figlio) throw new Error('Figlio non trovato in questo contatto')
+    if (figlio.studentId && figlio.studentId !== input.studentId) {
+      throw new Error('Questo figlio è già collegato a un altro alunno')
+    }
+    // Stesso collegamento già salvato (doppio clic, o una seconda chiamata): niente di nuovo
+    const giaCollegato = figlio.id !== null
+      && salvati.find((r) => r.id === figlio.id)?.studentId === input.studentId
+
+    const adesso = new Date()
+    const changes: ContactChanges = { updatedAt: adesso }
+
+    if (figlio.id) {
+      await tx.update(contactFigli)
+        .set({ studentId: input.studentId, updatedAt: adesso })
+        .where(and(eq(contactFigli.id, figlio.id), eq(contactFigli.contactId, contactId)))
+    } else {
+      // Il figlio "di prima" diventa ora una riga vera, già collegata; i vecchi
+      // campi del contatto si svuotano (vedi figliConRipiego)
+      await tx.insert(contactFigli).values({
+        contactId,
+        nome:         figlio.nome,
+        classeScuola: figlio.classeScuola,
+        materie:      figlio.materie,
+        studentId:    input.studentId,
+        ordine:       0,
+      })
+      Object.assign(changes, SENZA_CAMPI_VECCHI)
+    }
+
+    // Il collegamento "unico" di prima resta al primo figlio diventato alunno: c'è
+    // ancora chi legge quel campo (il sito vecchio finché non si aggiorna, i
+    // contatti convertiti da una scheda del browser aperta da prima)
+    if (!contatto.studentId) changes.studentId = input.studentId
+    if (contatto.stato !== 'CONVERTITO') {
+      changes.stato = 'CONVERTITO'
+      aggiornaConvertitoAt(changes, 'CONVERTITO', contatto.convertitoAt)
+    }
+
+    const [aggiornato] = await tx.update(contacts).set(changes).where(eq(contacts.id, contactId)).returning()
+    return { aggiornato, giaCollegato }
+  })
+
+  // Ogni figlio che diventa alunno entra nei Rientri già "Confermato", non solo il
+  // primo: due fratelli iscritti sono due ragazzi che a settembre ci sono
+  if (!esito.giaCollegato) await segnaRientroConfermato(input.studentId, userId)
+
+  return esito.aggiornato ? await conFigli(esito.aggiornato) : null
 }
 
 // ─────────────────────────────────────────────
@@ -437,7 +848,7 @@ export async function importContacts(
       // invece di annullare anche le righe buone già scritte.
       try {
         await tx.transaction(async (sp) => {
-          await sp.insert(contacts).values({
+          const [creato] = await sp.insert(contacts).values({
             tipo:               d.tipo,
             nome:               nomeProprio(d.nome),
             cognome:            d.cognome ? nomeProprio(d.cognome) : null,
@@ -448,8 +859,7 @@ export async function importContacts(
             stato:              d.stato,
             prossimoRicontatto: d.prossimoRicontatto ?? null,
             note:               d.note ?? null,
-            nomeStudente:       d.nomeStudente ?? null,
-            classeScuola:       d.classeScuola ?? null,
+            // Per le famiglie normalizzaRigaImport mette le materie sul figlio (qui null)
             materie:            d.materie ?? null,
             azienda:            d.azienda ?? null,
             servizioInteresse:  d.servizioInteresse ?? null,
@@ -458,7 +868,13 @@ export async function importContacts(
             privacyInformata:   d.privacyInformata,
             createdByUserId:    userId,
             convertitoAt:       d.stato === 'CONVERTITO' ? new Date() : null,
-          })
+          }).returning({ id: contacts.id })
+
+          // Il figlio della riga (colonne nome_studente, classe_scuola, materie),
+          // nello stesso savepoint: se non entra lui, non entra nemmeno il contatto
+          if (creato && d.figli && d.figli.length > 0) {
+            await sp.insert(contactFigli).values(righeFigliNuove(creato.id, d.figli))
+          }
         })
       } catch (err) {
         const dettaglio = err instanceof Error ? err.message.split('\n')[0] : 'errore sconosciuto'
@@ -645,7 +1061,8 @@ export async function findDuplicates(params: { telefono?: string | null; email?:
 
 // ─────────────────────────────────────────────
 // FORM PUBBLICO DEL SITO — /api/contact
-// Crea il contatto (o aggiunge solo una riga di diario se lo conosciamo già).
+// Crea il contatto col suo primo figlio. Se lo conosciamo già aggiunge una riga
+// di diario e, se ci scrive per un figlio nuovo, quel figlio in coda agli altri.
 // ─────────────────────────────────────────────
 
 export async function upsertFromPublicRequest(input: {
@@ -679,6 +1096,13 @@ export async function upsertFromPublicRequest(input: {
     !telefono && !email && !socialLink ? `Recapito indicato: ${grezzo}` : null,
   ].filter(Boolean).join('\n')
 
+  // Il ragazzo per cui ci scrivono (il modulo del sito ne porta uno per invio)
+  const figlioDalSito: DatiFiglio = {
+    nome:         input.nomeStudente.trim().slice(0, 200) || null,
+    classeScuola: input.classeScuola?.trim().slice(0, 200) || null,
+    materie:      input.materie.trim().slice(0, 500) || null,
+  }
+
   return await db.transaction(async (tx) => {
     const adesso = new Date()
 
@@ -709,6 +1133,39 @@ export async function upsertFromPublicRequest(input: {
         changes.convertitoAt = null
       }
       if (!esistente.contactRequestId) changes.contactRequestId = input.requestId
+
+      // Una famiglia che conosciamo già ci scrive per un altro figlio: si aggiunge
+      // in coda ai suoi. Se il nome c'è già (anche scritto diverso: maiuscole,
+      // accenti, spazi doppi) è lo stesso ragazzo e non si duplica; la riga di
+      // diario qui sotto c'è comunque. Un candidato tutor con lo stesso recapito
+      // resta com'è, come prima: solo la riga di diario.
+      if (eFamiglia(esistente)) {
+        const salvati = await righeSalvate(tx, contactId)
+        const visti = figliConRipiego(esistente, salvati.map(perRipiego))
+        const chiave = chiaveNome(figlioDalSito.nome)
+
+        if (!visti.some((f) => chiaveNome(f.nome) === chiave)) {
+          const nuove: Array<typeof contactFigli.$inferInsert> = []
+          const virtuale = visti.find((f) => f.id === null)
+          if (virtuale) {
+            // Il figlio "di prima" diventa una riga vera prima di aggiungergli il
+            // fratello: se no, appena c'è una riga, sparirebbe (è il ripiego)
+            nuove.push({
+              contactId,
+              nome:         virtuale.nome,
+              classeScuola: virtuale.classeScuola,
+              materie:      virtuale.materie,
+              studentId:    virtuale.studentId,
+              ordine:       0,
+            })
+            Object.assign(changes, SENZA_CAMPI_VECCHI)
+          }
+          const primo = salvati.length > 0 ? Math.max(...salvati.map((r) => r.ordine)) + 1 : nuove.length
+          nuove.push(...righeFigliNuove(contactId, [figlioDalSito], primo))
+          await tx.insert(contactFigli).values(nuove)
+        }
+      }
+
       await tx.update(contacts).set(changes).where(eq(contacts.id, contactId))
     } else {
       const [creato] = await tx.insert(contacts).values({
@@ -720,9 +1177,6 @@ export async function upsertFromPublicRequest(input: {
         socialLink,
         canaleOrigine:    'SITO_WEB',
         stato:            'NUOVO',
-        nomeStudente:     input.nomeStudente.slice(0, 200),
-        classeScuola:     input.classeScuola?.slice(0, 200) ?? null,
-        materie:          input.materie.slice(0, 500),
         note:             input.note ?? null,
         contactRequestId: input.requestId,
         // Il form pubblico obbliga la presa visione dell'informativa
@@ -732,6 +1186,9 @@ export async function upsertFromPublicRequest(input: {
 
       if (!creato) throw new Error('Creazione del contatto non riuscita')
       contactId = creato.id
+
+      // Il ragazzo del modulo è il primo figlio della famiglia
+      await tx.insert(contactFigli).values(righeFigliNuove(contactId, [figlioDalSito]))
     }
 
     await tx.insert(contactInteractions).values({

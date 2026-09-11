@@ -1,7 +1,7 @@
 import { and, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import { db } from '../database/client'
-import { contacts, lessons, lessonStudents, packages, students, studentConfirmations, systemConfigs, users } from '../database/schema'
+import { contacts, contactFigli, lessons, lessonStudents, packages, students, studentConfirmations, systemConfigs, users } from '../database/schema'
 import { oggiRomeStr } from '../utils/tutor-time-window'
 import { annoScolasticoDa, inizioAnnoProposto, inizioCampagna } from '#shared/rientri'
 import type { StatoRientro } from '#shared/rientri'
@@ -142,7 +142,7 @@ export async function listRientri(q: ListRientriQuery) {
   const haFattoLezione = sql`EXISTS (SELECT 1 FROM lesson_students ls JOIN lessons l ON l.id = ls.lesson_id WHERE ls.student_id = ${students.id})`
   const dal = inizioCampagna(annoRichiesto)
 
-  const [righe, lezioni, pacchetti, [kpiAlunni], [kpiContatti], anniConRighe] = await Promise.all([
+  const [righe, lezioni, pacchetti, [kpiAlunni], [kpiContatti], [kpiNuovi], anniConRighe] = await Promise.all([
     // 1) L'elenco: alunni attivi + la loro risposta (se già data)
     db.select({
       studentId:    students.id,
@@ -199,20 +199,33 @@ export async function listRientri(q: ListRientriQuery) {
       .leftJoin(studentConfirmations, conferma)
       .where(eq(students.active, true)),
 
-    // 5) Il ponte con i Contatti: nuovi iscritti dell'anno e trattative aperte
+    // 5) Il ponte con i Contatti: le trattative aperte…
     db.select({
-      nuoviDaContatti: conta(sql`
-        ${contacts.stato} = 'CONVERTITO'
-        AND ${contacts.studentId} IS NOT NULL
-        AND ${contacts.convertitoAt} IS NOT NULL
-        AND to_char(${contacts.convertitoAt} AT TIME ZONE 'Europe/Rome', 'YYYY-MM-DD') >= ${dal}
-      `),
       inTrattativa: conta(sql`
         ${contacts.tipo} = 'DOPOSCUOLA'
         AND ${contacts.stato} = 'IN_TRATTATIVA'
         AND ${contacts.archiviatoAt} IS NULL
       `),
     }).from(contacts),
+
+    // 5b) …e i nuovi iscritti arrivati dai Contatti. Si contano gli ALUNNI, non i
+    // contatti: una mamma che ha iscritto due figli sono due nuovi iscritti. Un
+    // alunno viene dai Contatti se un figlio di un contatto è collegato a lui (o,
+    // per i contatti di prima, il contatto stesso); è "di quest'anno" se è stato
+    // creato da inizio campagna. La data dello studente e non quella del contatto:
+    // il contatto ha una data sola, i fratelli possono iscriversi in giorni diversi.
+    db.select({ n: sql<string>`COUNT(*)::text` })
+      .from(students)
+      .where(and(
+        // Solo gli alunni attivi, come i "confermati": la frase sotto il titolo dice
+        // che i nuovi dai Contatti sono già compresi in quelli, e deve restare vero
+        eq(students.active, true),
+        sql`to_char(${students.createdAt} AT TIME ZONE 'Europe/Rome', 'YYYY-MM-DD') >= ${dal}`,
+        or(
+          sql`EXISTS (SELECT 1 FROM ${contactFigli} WHERE ${contactFigli.studentId} = ${students.id})`,
+          sql`EXISTS (SELECT 1 FROM ${contacts} WHERE ${contacts.studentId} = ${students.id})`,
+        ),
+      )),
 
     // 6) Gli anni già presenti nel quaderno: alimentano il menu dello storico
     anniDisponibili(),
@@ -281,7 +294,7 @@ export async function listRientri(q: ListRientriQuery) {
       confermatiSenzaPacchetto: Number(kpiAlunni?.confermatiSenzaPacchetto ?? 0),
       maiPartiti:               Number(kpiAlunni?.maiPartiti ?? 0),
       totaleAttivi:             Number(kpiAlunni?.totaleAttivi ?? 0),
-      nuoviDaContatti:          Number(kpiContatti?.nuoviDaContatti ?? 0),
+      nuoviDaContatti:          Number(kpiNuovi?.n ?? 0),
       inTrattativa:             Number(kpiContatti?.inTrattativa ?? 0),
     },
   }

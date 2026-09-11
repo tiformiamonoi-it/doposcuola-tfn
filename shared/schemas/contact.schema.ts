@@ -77,6 +77,30 @@ const giornoOpz = z
   .nullish()
 
 // ─────────────────────────────────────────────
+// I FIGLI DI UNA FAMIGLIA (solo Doposcuola, "Possibile studente")
+// Una riga per ragazzo. `id` c'è per le righe già salvate e manca per quelle
+// nuove (o per il figlio "di prima" dei contatti vecchi, che non ha ancora una
+// riga sua: vedi figliConRipiego in contact.service.ts).
+// ─────────────────────────────────────────────
+export const MAX_FIGLI_CONTATTO = 10
+
+const FiglioContattoSchema = z.object({
+  id:           z.string().trim().min(1).max(100).nullish(),
+  nome:         testoOpz(200, 'Il nome dello studente non può superare 200 caratteri'),
+  classeScuola: testoOpz(200, 'Classe/scuola non può superare 200 caratteri'),
+  materie:      testoOpz(500, 'Le materie non possono superare 500 caratteri'),
+})
+
+const FigliContattoSchema = z
+  .array(FiglioContattoSchema)
+  .max(MAX_FIGLI_CONTATTO, `Al massimo ${MAX_FIGLI_CONTATTO} figli per contatto`)
+  // Una riga nuova lasciata tutta vuota non è un figlio: si scarta. Quelle già
+  // salvate (con l'id) arrivano sempre al server, che decide: svuotata = tolta.
+  .transform((righe) => righe.filter((r) => r.id || r.nome || r.classeScuola || r.materie))
+
+export type FiglioContattoInput = z.infer<typeof FiglioContattoSchema>
+
+// ─────────────────────────────────────────────
 // CONTATTO — campi comuni a creazione e modifica
 // ─────────────────────────────────────────────
 const ContactFieldsSchema = z.object({
@@ -99,9 +123,15 @@ const ContactFieldsSchema = z.object({
   prossimoRicontatto: giornoOpz,
   note:               testoOpz(2000, 'Le note non possono superare 2000 caratteri'),
 
-  // Solo Doposcuola
+  // Solo Doposcuola. Per le famiglie i figli arrivano in `figli`, uno per riga.
+  // nomeStudente/classeScuola sono i campi di prima (un figlio solo): li manda
+  // ancora solo una scheda del browser aperta prima dell'aggiornamento. Il server
+  // li usa solo per creare un contatto nuovo (vedi figliDaCreare) e li ignora in
+  // modifica, dove riscriverebbero dati vecchi.
+  figli:        FigliContattoSchema.optional(),
   nomeStudente: testoOpz(200, 'Il nome dello studente non può superare 200 caratteri'),
   classeScuola: testoOpz(200, 'Classe/scuola non può superare 200 caratteri'),
+  // Per i candidati tutor: le materie che insegnano
   materie:      testoOpz(500, 'Le materie non possono superare 500 caratteri'),
   // Chi è: famiglia interessata (STUDENTE) o candidato tutor (TUTOR)
   // (.optional e non .nullish: la colonna è NOT NULL, un null deve fermarsi qui con un 422)
@@ -141,6 +171,16 @@ export const CreateContactSchema = ContactFieldsSchema.extend({
 export const UpdateContactSchema = ContactFieldsSchema.partial().extend({
   // Collegamento allo studente creato dalla conversione (null = scollega)
   studentId: z.string().trim().min(1).nullish(),
+  // Lo stesso per un candidato tutor: l'account creato con "Crea tutor" (null = scollega)
+  tutorUserId: z.string().trim().min(1).nullish(),
+})
+
+// POST /api/contacts/:id/figli/collega — "Crea studente" su UN figlio è andato a
+// buon fine: quel figlio si collega allo studente appena creato.
+export const CollegaFiglioSchema = z.object({
+  // null = il figlio "di prima" di un contatto vecchio, che diventa ora una riga vera
+  figlioId:  z.string().trim().min(1).max(100).nullable(),
+  studentId: z.string().trim().min(1, 'Studente mancante').max(100),
 })
 
 // ─────────────────────────────────────────────
@@ -243,6 +283,7 @@ export const DuplicatiQuerySchema = z.object({
 // ─────────────────────────────────────────────
 export type CreateContactInput     = z.infer<typeof CreateContactSchema>
 export type UpdateContactInput     = z.infer<typeof UpdateContactSchema>
+export type CollegaFiglioInput     = z.infer<typeof CollegaFiglioSchema>
 export type CreateInteractionInput = z.infer<typeof CreateInteractionSchema>
 export type ListContactsQuery      = z.infer<typeof ListContactsQuerySchema>
 export type DuplicatiQuery         = z.infer<typeof DuplicatiQuerySchema>

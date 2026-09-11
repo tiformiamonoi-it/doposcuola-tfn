@@ -1,7 +1,7 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm'
 import { db } from '../database/client'
 import { users, students, studentParents } from '../database/schema'
-import { inviaInvitoPassword, inviaInvitoPasswordAUtente, passwordSegnapostoHash } from '../utils/password-token'
+import { annullaLinkAperti, inviaInvitoPassword, inviaInvitoPasswordAUtente, passwordSegnapostoHash } from '../utils/password-token'
 import type { CreatePortalAccessInput } from '#shared/schemas/portal-user.schema'
 
 // Violazione di un vincolo unico Postgres (23505). Con `constraint` si restringe
@@ -36,6 +36,18 @@ export async function getPortalAccess(studentId: string) {
     },
   })
 
+  // Quanti alunni vede ciascun genitore nel portale, questo compreso. Serve alla
+  // finestra "Correggi email": se la mamma ha due figli, la segreteria deve sapere
+  // che l'email che sta correggendo è quella con cui entra per tutti e due.
+  // Una sola query raggruppata per tutti i genitori dell'alunno, niente N+1.
+  const idGenitori = links.map((link) => link.parentUser.id)
+  const conteggi = idGenitori.length === 0 ? [] : await db
+    .select({ parentUserId: studentParents.parentUserId, figli: sql<number>`count(*)::int` })
+    .from(studentParents)
+    .where(inArray(studentParents.parentUserId, idGenitori))
+    .groupBy(studentParents.parentUserId)
+  const figliPerGenitore = new Map(conteggi.map((c) => [c.parentUserId, Number(c.figli)]))
+
   const parents = links.map((link) => ({
     linkId:    link.id,
     relazione: link.relazione,
@@ -44,6 +56,7 @@ export async function getPortalAccess(studentId: string) {
     firstName: link.parentUser.firstName,
     lastName:  link.parentUser.lastName,
     active:    link.parentUser.active,
+    numeroFigli: figliPerGenitore.get(link.parentUser.id) ?? 1,
   }))
 
   return {
@@ -278,6 +291,158 @@ export async function setStudentAccountActive(userId: string, active: boolean) {
 // lo spread di `invito`, così l'interfaccia dice sempre il motivo vero.
 export async function inviaLinkPassword(userId: string) {
   return await inviaInvitoPasswordAUtente(userId)
+}
+
+// CORREGGE L'EMAIL CON CUI SI ENTRA (account STUDENTE o GENITORE di un alunno).
+//
+// L'email di una persona sta in due posti: sull'account (è il nome utente, e
+// l'indirizzo a cui partono i link "scegli la tua password") e sulla scheda
+// dell'alunno. Correggerne uno solo è la trappola: la scheda mostra l'indirizzo
+// giusto, ma i link continuano ad andare a quello sbagliato. Qui si correggono
+// insieme, in una transazione sola: o cambia tutto, o non cambia niente.
+//
+// In più si ANNULLANO i link ancora aperti — anche quando non se ne manda uno
+// nuovo: erano partiti verso il vecchio indirizzo, e se quell'indirizzo era di
+// un'altra persona, lei ha in mano un biglietto per entrare. Da qui in poi è scaduto.
+//
+// La password attuale NON si tocca (stessa scelta di inviaInvitoPasswordAUtente):
+// chi l'aveva già scelta entra con la nuova email e la password di sempre.
+export async function correggiEmailAccount(input: {
+  studentId: string
+  userId: string
+  nuovaEmail: string
+  inviaLink: boolean
+}) {
+  // Stessa forma con cui si salvano e si cercano le email al login: minuscole, senza spazi
+  const nuovaEmail = input.nuovaEmail.trim().toLowerCase()
+  if (!nuovaEmail) throw new Error('Scrivi la nuova email.')
+
+  let esito: { vecchiaEmail: string; schedeAllineate: number }
+  try {
+    esito = await db.transaction(async (tx) => {
+      // Riga dell'account bloccata fino alla fine: se due persone correggono la
+      // stessa email nello stesso istante, la seconda aspetta e rilegge il valore
+      // già corretto, invece di allineare le schede partendo da un'email vecchia.
+      const [account] = await tx
+        .select({ id: users.id, email: users.email, role: users.role })
+        .from(users)
+        .where(eq(users.id, input.userId))
+        .for('update')
+      if (!account) throw new Error('Account non trovato')
+
+      // Da qui si correggono solo gli accessi delle famiglie. L'email dello staff
+      // si cambia dalla scheda del tutor, dove c'è chi ha il diritto di farlo.
+      if (account.role !== 'STUDENTE' && account.role !== 'GENITORE') {
+        throw new Error('Questo è un account dello staff: la sua email si cambia dalla scheda del tutor.')
+      }
+
+      // L'account deve appartenere proprio a QUESTO alunno: la scheda da cui parte
+      // la richiesta è anche quella che viene allineata.
+      let idFigli: string[] = []
+      if (account.role === 'STUDENTE') {
+        const suo = await tx.query.students.findFirst({
+          where: and(eq(students.id, input.studentId), eq(students.studentUserId, account.id)),
+          columns: { id: true },
+        })
+        if (!suo) throw new Error('Questo account non è collegato a questo alunno.')
+      } else {
+        // Tutti i figli che questo genitore vede nel portale: servono subito per il
+        // controllo, e dopo per allineare l'email su tutte le loro schede.
+        const figli = await tx
+          .select({ id: studentParents.studentId })
+          .from(studentParents)
+          .where(eq(studentParents.parentUserId, account.id))
+        idFigli = figli.map((f) => f.id)
+        if (!idFigli.includes(input.studentId)) throw new Error('Questo account non è collegato a questo alunno.')
+      }
+
+      // Confronto con il valore salvato così com'è: se l'account aveva un'email con
+      // qualche maiuscola, riscriverla in minuscolo non è "la stessa" — è proprio
+      // la correzione che le permette di entrare (il login cerca in minuscolo).
+      if (account.email === nuovaEmail) throw new Error('È già questa l\'email di accesso.')
+
+      const altro = await tx.query.users.findFirst({
+        where: and(eq(users.email, nuovaEmail), ne(users.id, account.id)),
+        columns: { id: true },
+      })
+      if (altro) throw new Error('Questa email è già usata da un altro account.')
+
+      const adesso = new Date()
+
+      await tx.update(users)
+        .set({ email: nuovaEmail, updatedAt: adesso })
+        .where(eq(users.id, account.id))
+
+      // Il biglietto partito verso il vecchio indirizzo non vale più
+      await annullaLinkAperti(account.id, tx)
+
+      // Allineamento dell'anagrafica: una correzione sola, mai due versioni che si contraddicono
+      let schedeAllineate = 0
+      if (account.role === 'STUDENTE') {
+        const righe = await tx.update(students)
+          .set({ studentEmail: nuovaEmail, updatedAt: adesso })
+          .where(and(
+            eq(students.id, input.studentId),
+            eq(students.studentUserId, account.id),
+            // Solo se è davvero diversa: così il conteggio dice cosa è cambiato
+            sql`${students.studentEmail} IS DISTINCT FROM ${nuovaEmail}`,
+          ))
+          .returning({ id: students.id })
+        schedeAllineate = righe.length
+      } else {
+        // Il genitore può avere più figli: la vecchia email si corregge su TUTTE le
+        // loro schede, sia come primo sia come secondo genitore. Senza chiedere:
+        // è lo stesso account, e un indirizzo sbagliato è sbagliato ovunque.
+        // Gli alunni NON collegati a questo account non si toccano, nemmeno se per
+        // caso riportano la stessa email: lì non sappiamo di chi sia.
+        const vecchia = account.email.trim().toLowerCase()
+        const primo = await tx.update(students)
+          .set({ parentEmail: nuovaEmail, updatedAt: adesso })
+          .where(and(
+            inArray(students.id, idFigli),
+            sql`lower(trim(${students.parentEmail})) = ${vecchia}`,
+          ))
+          .returning({ id: students.id })
+        const secondo = await tx.update(students)
+          .set({ parent2Email: nuovaEmail, updatedAt: adesso })
+          .where(and(
+            inArray(students.id, idFigli),
+            sql`lower(trim(${students.parent2Email})) = ${vecchia}`,
+          ))
+          .returning({ id: students.id })
+        // Una scheda con la stessa email su tutti e due i genitori conta una volta
+        schedeAllineate = new Set([...primo, ...secondo].map((r) => r.id)).size
+      }
+
+      return { vecchiaEmail: account.email, schedeAllineate }
+    })
+  } catch (err: any) {
+    // Rete di sicurezza sull'indice unico di users.email: un'altra richiesta ha
+    // preso la stessa email tra il controllo e la scrittura.
+    if (isUniqueViolation(err)) throw new Error('Questa email è già usata da un altro account.')
+    throw err
+  }
+
+  const risultato = {
+    ok: true as const,
+    email: nuovaEmail,
+    vecchiaEmail: esito.vecchiaEmail,
+    schedeAllineate: esito.schedeAllineate,
+  }
+
+  if (!input.inviaLink) return risultato
+
+  // Dopo la transazione, come per gli account nuovi: il link parte verso la NUOVA
+  // email (l'account ormai ha quella). motivoEmail/dettaglioEmail ci sono solo
+  // quando la posta non è partita, per dire alla segreteria il perché vero.
+  const invito = await inviaInvitoPasswordAUtente(input.userId)
+  return {
+    ...risultato,
+    linkPassword:   invito.linkPassword,
+    emailInviata:   invito.emailInviata,
+    motivoEmail:    invito.motivoEmail,
+    dettaglioEmail: invito.dettaglioEmail,
+  }
 }
 
 // Aggiorna il flag abilitatoPrenotazioneOnline

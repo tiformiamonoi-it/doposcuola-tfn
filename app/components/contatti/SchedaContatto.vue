@@ -82,11 +82,8 @@
 
           <template v-if="contatto.tipo === 'DOPOSCUOLA'">
             <InfoRow label="Chi è" :value="labelRuoloDoposcuola(contatto.doposcuolaRuolo)" />
-            <template v-if="!candidatoTutor">
-              <InfoRow label="Studente" :value="contatto.nomeStudente" />
-              <InfoRow label="Classe / Scuola" :value="contatto.classeScuola" />
-            </template>
-            <InfoRow :label="candidatoTutor ? 'Materie che insegna' : 'Materie'" :value="contatto.materie" />
+            <!-- I figli di una famiglia hanno un elenco tutto loro, qui sotto -->
+            <InfoRow v-if="candidatoTutor" label="Materie che insegna" :value="contatto.materie" />
           </template>
           <template v-else>
             <InfoRow label="Ruolo" :value="contatto.marketingRuolo ? labelRuoloMarketing(contatto.marketingRuolo) : null" />
@@ -107,6 +104,58 @@
           <InfoRow label="Privacy" :value="contatto.privacyInformata ? 'Informativa comunicata' : 'Informativa NON comunicata'" />
         </dl>
 
+        <!-- ─── FIGLI ─── Una famiglia può aver chiamato per più ragazzi: ognuno
+             diventa alunno per conto suo, uno alla volta. -->
+        <div v-if="mostraFigli" class="space-y-2">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            Figli ({{ figli.length }})
+          </p>
+
+          <p v-if="figli.length === 0" class="text-sm text-slate-400">
+            Nessun figlio indicato. Puoi aggiungerlo con «Modifica».
+          </p>
+
+          <ul v-else class="space-y-2">
+            <li
+              v-for="(f, i) in figli"
+              :key="f.id ?? `figlio-${i}`"
+              class="rounded-xl border border-slate-200 p-3 space-y-1.5"
+            >
+              <p class="text-sm font-medium text-slate-800">{{ f.nome || 'Nome non indicato' }}</p>
+              <p v-if="f.classeScuola || f.materie" class="text-xs text-slate-500">
+                {{ [f.classeScuola, f.materie].filter(Boolean).join(' · ') }}
+              </p>
+
+              <!-- Già diventato alunno: si va alla sua scheda -->
+              <NuxtLink
+                v-if="f.studentId"
+                :to="`/studenti/${f.studentId}`"
+                class="inline-flex items-center gap-1.5 text-sm text-tfn-600 hover:underline"
+              >
+                <UIcon name="i-heroicons-arrow-top-right-on-square" class="w-4 h-4" />
+                Vai alla scheda studente{{ f.studenteNome ? ` (${f.studenteNome})` : '' }}
+              </NuxtLink>
+
+              <!-- Non ancora alunno: si crea da qui, con i dati di QUESTO figlio -->
+              <UButton
+                v-else-if="puoCreareStudente"
+                icon="i-heroicons-academic-cap" size="xs" variant="soft" color="success"
+                :title="`Apri il modulo Nuovo studente già compilato con i dati di ${f.nome || 'questo figlio'}`"
+                @click="apriWizardStudente(f)"
+              >
+                Crea studente
+              </UButton>
+            </li>
+          </ul>
+
+          <!-- Dal secondo figlio in poi i genitori arrivano dalla scheda del fratello:
+               è il "sotto lo stesso genitore" del piano, e nessun accesso nuovo si crea -->
+          <p v-if="figli.length > 1 && figli.some((f) => f.studentId)" class="text-xs text-slate-500">
+            Creando il prossimo studente, i genitori (e il loro accesso al portale) si copiano
+            dalla scheda del fratello già iscritto.
+          </p>
+        </div>
+
         <!-- Diario ancora vuoto: scorciatoia per segnare quando ci si è sentiti la prima volta -->
         <UButton
           v-if="contatto.interazioni.length === 0 && !contatto.anonimizzatoAt"
@@ -122,14 +171,17 @@
           <p class="text-sm text-slate-700 whitespace-pre-line">{{ contatto.note }}</p>
         </div>
 
-        <!-- Collegamento allo studente creato dalla conversione -->
+        <!-- Il collegamento allo studente creato dalla conversione sta ora su OGNI
+             figlio, nell'elenco qui sopra: un contatto può averne più d'uno. -->
+
+        <!-- Il gemello per il candidato tutor: l'account creato con "Crea tutor" -->
         <NuxtLink
-          v-if="contatto.studentId"
-          :to="`/studenti/${contatto.studentId}`"
+          v-if="contatto.tutorUserId"
+          :to="`/tutor/${contatto.tutorUserId}`"
           class="inline-flex items-center gap-1.5 text-sm text-tfn-600 hover:underline"
         >
           <UIcon name="i-heroicons-arrow-top-right-on-square" class="w-4 h-4" />
-          Vai alla scheda studente{{ contatto.studenteNome ? ` (${contatto.studenteNome})` : '' }}
+          Vai alla scheda tutor{{ contatto.tutorNome ? ` (${contatto.tutorNome})` : '' }}
         </NuxtLink>
 
         <!-- Azioni -->
@@ -145,14 +197,17 @@
             Modifica
           </UButton>
 
-          <!-- Conversione: solo Doposcuola, contatto attivo e non ancora collegato a uno studente -->
+          <!-- "Crea studente" non sta più qui: si fa un figlio alla volta, dal suo
+               riquadro nell'elenco dei figli -->
+
+          <!-- Il gemello per il candidato tutor: contatto attivo, non ancora collegato a un account -->
           <UButton
-            v-if="puoCreareStudente"
-            icon="i-heroicons-academic-cap" variant="soft" color="success"
-            title="Apri il modulo Nuovo studente già compilato con questi dati"
-            @click="apriWizardStudente"
+            v-if="puoCreareTutor"
+            icon="i-heroicons-user-plus" variant="soft" color="success"
+            title="Apri il modulo Nuovo tutor già compilato con questi dati: poi parte il link per scegliere la password"
+            @click="apriModalTutor"
           >
-            Crea studente
+            Crea tutor
           </UButton>
 
           <UButton
@@ -239,6 +294,14 @@
     @created="dopoStudenteCreato"
   />
 
+  <!-- Conversione in tutor: il modulo "Nuovo Tutor" si apre già compilato -->
+  <ModalNuovoTutor
+    v-if="modalTutorMontato"
+    v-model:open="modalTutorAperto"
+    :prefill="prefillTutor"
+    @created="dopoTutorCreato"
+  />
+
   <!-- Modifica dati del contatto -->
   <ContattiModalContatto
     v-if="contatto"
@@ -290,7 +353,7 @@ import {
   STATI_ITEMS, nomeContatto, formatGiorno, formatQuando, iconaInterazione,
   ricontattoScaduto, linkTelefono, linkWhatsapp, linkEmail, linkSocial, coloreStato, coloreEsito,
 } from '~/utils/contatti'
-import type { ContattoDettaglio, Interazione } from '~/utils/contatti'
+import type { ContattoDettaglio, FiglioContatto, Interazione } from '~/utils/contatti'
 
 const props = defineProps<{ contactId: string | null }>()
 const emit = defineEmits<{ changed: [] }>()
@@ -322,6 +385,8 @@ watch(aperto, (v) => {
   } else {
     contatto.value = null
     wizardMontato.value = false
+    modalTutorMontato.value = false
+    figlioInCreazione.value = null
   }
 })
 watch(() => props.contactId, () => { if (aperto.value) carica() })
@@ -333,10 +398,19 @@ const indirizzoSocial = computed(() => {
   return c ? linkSocial(c.socialLink, c.canaleOrigine) ?? undefined : undefined
 })
 
-// Candidato tutor: niente studente né classe, e le materie sono quelle che insegna
+// Candidato tutor: niente figli, e le materie sono quelle che insegna
 const candidatoTutor = computed(() => {
   const c = contatto.value
   return Boolean(c && c.tipo === 'DOPOSCUOLA' && c.doposcuolaRuolo === 'TUTOR')
+})
+
+// I figli per cui la famiglia ci ha cercato: l'elenco arriva già pronto dallo
+// sportello (i contatti di prima hanno il loro unico figlio come prima riga)
+const figli = computed<FiglioContatto[]>(() => contatto.value?.figli ?? [])
+
+const mostraFigli = computed(() => {
+  const c = contatto.value
+  return Boolean(c && c.tipo === 'DOPOSCUOLA' && !candidatoTutor.value && !c.anonimizzatoAt)
 })
 
 // La prima volta che ci si è sentiti: il diario arriva dal più recente al più
@@ -373,16 +447,21 @@ async function cambiaStato(nuovo: unknown) {
   }
 }
 
-// ─── Da contatto a studente ───────────────────
-// Il bottone compare solo nel cassetto Doposcuola, se il contatto è attivo e non
-// è già stato collegato a uno studente.
+// ─── Da figlio a studente ─────────────────────
+// Si crea un alunno alla volta, dal riquadro del figlio: il bottone compare solo
+// nel cassetto Doposcuola, per una famiglia, se il contatto è attivo. Che un
+// fratello sia già diventato alunno non blocca più niente.
 const wizardAperto = ref(false)
 // Il wizard si carica solo quando serve davvero (porta con sé la lista dei
 // pacchetti standard): una volta caricato resta, così la finestra di riepilogo
 // "Studente creato" non sparisce quando il contatto diventa Convertito.
 const wizardMontato = ref(false)
+// Il figlio su cui si è premuto "Crea studente": serve dopo, per collegare a LUI
+// lo studente appena nato
+const figlioInCreazione = ref<FiglioContatto | null>(null)
 
-function apriWizardStudente() {
+function apriWizardStudente(f: FiglioContatto) {
+  figlioInCreazione.value = f
   wizardMontato.value = true
   wizardAperto.value = true
 }
@@ -392,32 +471,38 @@ const puoCreareStudente = computed(() => {
   // Un candidato tutor non diventa uno studente: il bottone non ha senso per lui
   return Boolean(
     c && c.tipo === 'DOPOSCUOLA' && c.doposcuolaRuolo === 'STUDENTE'
-    && !c.archiviatoAt && !c.anonimizzatoAt && !c.studentId,
+    && !c.archiviatoAt && !c.anonimizzatoAt,
   )
 })
 
-// Traduce i dati del contatto nei campi del modulo "Nuovo studente".
+// Traduce i dati del contatto e del FIGLIO scelto nei campi di "Nuovo studente".
 const prefillStudente = computed(() => {
   const c = contatto.value
-  if (!c) return null
+  const f = figlioInCreazione.value
+  if (!c || !f) return null
 
   // "Luca Verdi" → nome "Luca", cognome "Verdi". Se c'è solo il nome di battesimo
   // si usa il cognome del referente (di solito il genitore).
-  const pezziStudente = (c.nomeStudente ?? '').trim().split(/\s+/).filter(Boolean)
+  const pezziStudente = (f.nome ?? '').trim().split(/\s+/).filter(Boolean)
   const firstName = pezziStudente[0] ?? ''
   const lastName  = pezziStudente.length > 1
     ? pezziStudente.slice(1).join(' ')
     : (c.cognome ?? '')
 
   // "2ª media / Dante" → classe "2ª media", scuola "Dante"
-  const grezzo = (c.classeScuola ?? '').trim()
+  const grezzo = (f.classeScuola ?? '').trim()
   const taglio = grezzo.search(/[/-]/)
   const classe = taglio >= 0 ? grezzo.slice(0, taglio).trim() : grezzo
   const scuola = taglio >= 0 ? grezzo.slice(taglio + 1).trim() : ''
 
-  const provenienza = ['Dal contatto CRM.', c.materie ? `Materie: ${c.materie}.` : null]
+  const provenienza = ['Dal contatto CRM.', f.materie ? `Materie: ${f.materie}.` : null]
     .filter(Boolean).join(' ')
   const note = [provenienza, c.note].filter(Boolean).join('\n')
+
+  // Un fratello già iscritto? Allora i genitori si copiano dalla SUA scheda, con
+  // l'accesso al portale già collegato: è il "sotto lo stesso genitore" del piano
+  // (voce C5). Nessun account nuovo, nessun link da mandare un'altra volta.
+  const fratelloId = figli.value.find((altro) => altro.id !== f.id && altro.studentId)?.studentId
 
   return {
     firstName,
@@ -428,22 +513,89 @@ const prefillStudente = computed(() => {
     parentPhone: c.telefono ?? '',
     parentEmail: c.email ?? '',
     note,
+    ...(fratelloId ? { fratelloId } : {}),
   }
 })
 
-// Lo studente è stato creato: colleghiamolo al contatto e segniamolo "Convertito".
+// Lo studente è stato creato: si collega a QUEL figlio e il contatto diventa
+// "Convertito" (lo fa lo sportello, che segna anche il rientro di settembre).
 async function dopoStudenteCreato(studentId: string) {
+  const c = contatto.value
+  const f = figlioInCreazione.value
+  if (!c || !f) return
+  try {
+    await $fetch(`/api/contacts/${c.id}/figli/collega`, {
+      method: 'POST',
+      body: { figlioId: f.id, studentId },
+    })
+    toast.add({ title: 'Studente creato e collegato a questo contatto', color: 'success' })
+  } catch (err: any) {
+    toast.add({
+      title: 'Lo studente è stato creato ma il contatto non è stato aggiornato',
+      description: err?.data?.statusMessage ?? 'Segna a mano lo stato «Convertito» in questa scheda.',
+      color: 'error',
+    })
+  }
+  await dopoModifica()
+}
+
+// ─── Da contatto a tutor ──────────────────────
+// Il gemello di "Crea studente" per chi si è proposto come tutor: crea l'account,
+// lo collega al contatto e lo segna "Convertito". Il link "scegli la tua password"
+// lo manda da solo il gestionale, come per ogni tutor nuovo.
+const modalTutorAperto = ref(false)
+// Stessa logica del wizard: montato solo al primo clic, poi resta, così la
+// finestra "Tutor creato" col link non sparisce quando il bottone se ne va.
+const modalTutorMontato = ref(false)
+
+function apriModalTutor() {
+  modalTutorMontato.value = true
+  modalTutorAperto.value = true
+}
+
+const puoCreareTutor = computed(() => {
+  const c = contatto.value
+  return Boolean(
+    c && candidatoTutor.value
+    && !c.archiviatoAt && !c.anonimizzatoAt && !c.tutorUserId,
+  )
+})
+
+// Traduce i dati del contatto nei campi del modulo "Nuovo Tutor".
+const prefillTutor = computed(() => {
+  const c = contatto.value
+  if (!c) return null
+
+  // "Matematica, Fisica; Chimica / Inglese" → una materia per voce. Le materie
+  // del contatto sono testo libero: si divide su virgola, punto e virgola, barra
+  // e a capo, si tolgono gli spazi, si scartano le voci vuote e i doppioni.
+  const materie = [...new Set(
+    (c.materie ?? '').split(/[,;/\r\n]+/).map((m) => m.trim()).filter(Boolean),
+  )]
+
+  return {
+    firstName: c.nome ?? '',
+    lastName:  c.cognome ?? '',
+    // Può mancare (solo telefono o social): nel modulo resta vuota e obbligatoria
+    email:     c.email ?? '',
+    phone:     c.telefono ?? '',
+    materie,
+  }
+})
+
+// Il tutor è stato creato: colleghiamolo al contatto e segniamolo "Convertito".
+async function dopoTutorCreato({ userId }: { userId: string; nome: string }) {
   const c = contatto.value
   if (!c) return
   try {
     await $fetch(`/api/contacts/${c.id}`, {
       method: 'PUT',
-      body: { studentId, stato: 'CONVERTITO' },
+      body: { tutorUserId: userId, stato: 'CONVERTITO' },
     })
-    toast.add({ title: 'Studente creato e contatto segnato come Convertito', color: 'success' })
+    toast.add({ title: 'Tutor creato e contatto segnato come Convertito', color: 'success' })
   } catch {
     toast.add({
-      title: 'Lo studente è stato creato ma il contatto non è stato aggiornato',
+      title: 'Il tutor è stato creato ma il contatto non è stato aggiornato',
       description: 'Segna a mano lo stato «Convertito» in questa scheda.',
       color: 'error',
     })

@@ -5,7 +5,7 @@
 // - anonymizeLostContacts → art. 5.1.e (limitazione della conservazione): pulizia
 //   automatica dei contatti "Persi" da oltre 12 mesi, lanciata dal cron giornaliero
 import { db } from '../database/client'
-import { students, studentParents, studentNotes, bookings, users, packages, payments, packageRecharges, lessons, lessonStudents, contacts, contactInteractions } from '../database/schema'
+import { students, studentParents, studentNotes, bookings, users, packages, payments, packageRecharges, lessons, lessonStudents, contacts, contactInteractions, contactFigli } from '../database/schema'
 import { and, eq, ne, inArray, isNull, lt, sql } from 'drizzle-orm'
 
 export async function anonymizeStudent(id: string) {
@@ -119,6 +119,12 @@ export async function anonymizeLostContacts(mesi = 12) {
     await tx.update(contactInteractions)
       .set({ note: null })
       .where(inArray(contactInteractions.contactId, ids))
+
+    // I figli della famiglia si cancellano del tutto: sono nomi, classi e scuole di
+    // minori, e alle statistiche non servono. (I tre campi di prima sul contatto
+    // si svuotano qui sotto, come sempre.)
+    await tx.delete(contactFigli)
+      .where(inArray(contactFigli.contactId, ids))
 
     await tx.update(contacts).set({
       nome:    'Contatto',

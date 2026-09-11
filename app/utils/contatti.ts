@@ -33,6 +33,26 @@ import { oggiISO } from './format'
 // (le date viaggiano come testo: il JSON non ha un tipo "data")
 // ─────────────────────────────────────────────
 
+/**
+ * Un figlio per cui una famiglia ci ha cercato (solo Doposcuola, "Possibile
+ * studente"): una famiglia può averne più d'uno, e ognuno diventa alunno per conto suo.
+ */
+export interface FiglioContatto {
+  /**
+   * null = il figlio "di prima": un contatto creato prima che i figli diventassero
+   * più d'uno non ha ancora una riga sua, e il server lo ricava dai vecchi campi.
+   * Salvando il contatto (o creando lo studente) diventa una riga vera.
+   */
+  id: string | null
+  nome: string | null
+  classeScuola: string | null
+  materie: string | null
+  /** Lo studente nato da questo figlio con "Crea studente" (null = non ancora alunno) */
+  studentId: string | null
+  /** "Nome Cognome" dello studente collegato */
+  studenteNome: string | null
+}
+
 export interface Contatto {
   id: string
   tipo: TipoContatto
@@ -47,9 +67,10 @@ export interface Contatto {
   prossimoRicontatto: string | null
   ultimoContattoAt: string | null
   note: string | null
-  nomeStudente: string | null
-  classeScuola: string | null
+  /** Solo candidato tutor: le materie che insegna (per le famiglie stanno su ogni figlio) */
   materie: string | null
+  /** Solo famiglie del Doposcuola: i figli, nell'ordine in cui sono stati scritti */
+  figli: FiglioContatto[]
   azienda: string | null
   servizioInteresse: string | null
   marketingRuolo: RuoloMarketing | null
@@ -57,6 +78,8 @@ export interface Contatto {
   doposcuolaRuolo: RuoloDoposcuola
   privacyInformata: boolean
   studentId: string | null
+  /** Candidato tutor convertito: l'account creato con "Crea tutor" */
+  tutorUserId: string | null
   contactRequestId: string | null
   createdByUserId: string | null
   convertitoAt: string | null
@@ -83,6 +106,8 @@ export interface Interazione {
 export interface ContattoDettaglio extends Contatto {
   studenteNome: string | null
   creatoDaNome: string | null
+  /** "Nome Cognome" dell'account tutor collegato (null se non c'è) */
+  tutorNome: string | null
   interazioni: Interazione[]
 }
 
@@ -228,13 +253,39 @@ export function ricontattoScaduto(
 export const nomeContatto = (c: Pick<Contatto, 'nome' | 'cognome'> | null | undefined): string =>
   c ? [c.cognome, c.nome].filter(Boolean).join(' ') : '—'
 
+/** Un figlio in poche parole: "Luca (2ª media)", solo "Luca" o solo "2ª media". */
+export function descriviFiglio(f: Pick<FiglioContatto, 'nome' | 'classeScuola'>): string {
+  const nome = (f.nome ?? '').trim()
+  const classe = (f.classeScuola ?? '').trim()
+  if (nome && classe) return `${nome} (${classe})`
+  return nome || classe
+}
+
+/**
+ * Le materie di tutti i figli in un elenco solo, senza doppioni:
+ * "Matematica, Inglese" + "matematica" → "Matematica, Inglese".
+ */
+export function materieDeiFigli(figli: Pick<FiglioContatto, 'materie'>[]): string {
+  const viste = new Map<string, string>()
+  for (const f of figli) {
+    for (const m of (f.materie ?? '').split(/[,;/\r\n]+/)) {
+      const materia = m.trim()
+      if (materia && !viste.has(materia.toLowerCase())) viste.set(materia.toLowerCase(), materia)
+    }
+  }
+  return [...viste.values()].join(', ')
+}
+
 /** Riga piccola sotto il nome: cambia a seconda della tab. */
 export function sottotitoloContatto(c: Contatto): string {
-  // Un candidato tutor non ha uno studente né una classe: contano le materie che insegna
+  // Un candidato tutor non ha figli: contano le materie che insegna.
+  // Una famiglia: i figli uno dopo l'altro, poi le materie di tutti
+  // ("Luca (2ª media) · Giulia (5ª elem.) · Matematica, Inglese").
+  const figli = c.figli ?? []
   const pezzi = c.tipo === 'DOPOSCUOLA'
     ? (c.doposcuolaRuolo === 'TUTOR'
         ? ['Candidato tutor', c.materie]
-        : [c.nomeStudente, c.classeScuola, c.materie])
+        : [...figli.map(descriviFiglio), materieDeiFigli(figli)])
     : [c.azienda, c.marketingRuolo === 'CLIENTE' ? 'Cliente' : c.marketingRuolo === 'PARTNER' ? 'Partner' : null]
   return pezzi.filter(Boolean).join(' · ')
 }

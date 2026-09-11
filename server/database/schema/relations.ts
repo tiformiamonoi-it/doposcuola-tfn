@@ -6,7 +6,7 @@ import { lessons, lessonStudents, timeSlots } from './lessons'
 import { accountingEntries, tutorPayments, tutorReimbursements } from './accounting'
 import { bookings, bookingSubjects } from './bookings'
 import { studentNotes } from './notes'
-import { contacts, contactInteractions } from './contacts'
+import { contacts, contactInteractions, contactFigli } from './contacts'
 import { studentConfirmations } from './confirmations'
 import { contactRequests, notifiche } from './system'
 
@@ -97,6 +97,8 @@ export const tutorAvailabilitiesRelations = relations(tutorAvailabilities, ({ on
 // Sezione Contatti: la rubrica e il suo diario
 export const contactsRelations = relations(contacts, ({ one, many }) => ({
   interazioni:    many(contactInteractions),
+  // Una famiglia può chiamare per più figli: ognuno diventa alunno per conto suo
+  figli:          many(contactFigli),
   student:        one(students, { fields: [contacts.studentId], references: [students.id] }),
   contactRequest: one(contactRequests, { fields: [contacts.contactRequestId], references: [contactRequests.id] }),
   createdBy:      one(users, { fields: [contacts.createdByUserId], references: [users.id] }),
@@ -105,6 +107,12 @@ export const contactsRelations = relations(contacts, ({ one, many }) => ({
 export const contactInteractionsRelations = relations(contactInteractions, ({ one }) => ({
   contact:   one(contacts, { fields: [contactInteractions.contactId], references: [contacts.id] }),
   createdBy: one(users, { fields: [contactInteractions.createdByUserId], references: [users.id] }),
+}))
+
+// Un figlio di una famiglia → il contatto e, se è già diventato alunno, lo studente
+export const contactFigliRelations = relations(contactFigli, ({ one }) => ({
+  contact: one(contacts, { fields: [contactFigli.contactId], references: [contacts.id] }),
+  student: one(students, { fields: [contactFigli.studentId], references: [students.id] }),
 }))
 
 // Sezione Rientri: il quaderno dell'appello di inizio anno

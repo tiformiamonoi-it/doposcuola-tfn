@@ -23,9 +23,14 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    return createTutor(parsed.data)
+    // `await` indispensabile: senza, l'errore arriverebbe DOPO l'uscita dal try e
+    // "Email già in uso" non comparirebbe mai (capita col "Crea tutor" dai Contatti,
+    // quando il candidato ha già un account da genitore).
+    return await createTutor(parsed.data)
   } catch (err: any) {
-    if (err.message?.includes('unique') || err.code === '23505') {
+    // Il driver mette il codice Postgres a volte sull'errore, a volte in err.cause
+    const codice = err?.code ?? err?.cause?.code
+    if (codice === '23505' || err.message?.includes('unique')) {
       throw createError({ statusCode: 409, statusMessage: 'Email già in uso' })
     }
     throw err

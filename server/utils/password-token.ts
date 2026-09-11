@@ -11,7 +11,7 @@
 import { and, eq, isNull, gt, ne } from 'drizzle-orm'
 import { createHash, randomBytes } from 'node:crypto'
 import bcrypt from 'bcryptjs'
-import { db } from '../database/client'
+import { db, type Db } from '../database/client'
 import { users, passwordTokens } from '../database/schema'
 import { sendEmail, emailInvitoPassword } from './email'
 import type { EsitoInvitoEmail } from '#shared/email'
@@ -54,6 +54,23 @@ export async function passwordSegnapostoHash(): Promise<string> {
 }
 
 /**
+ * Annulla tutti i link "scegli la tua password" ancora aperti di un account.
+ * Non cancella le righe (restano come storico): le segna come già usate, così
+ * chi ha in mano uno di quei link si ritrova un biglietto scaduto.
+ *
+ * Serve in tre momenti: prima di mandare un link nuovo (ne vale uno solo per
+ * volta) e ogni volta che cambia l'email di un account — i link già partiti
+ * erano diretti al VECCHIO indirizzo, che magari era sbagliato o di un'altra
+ * persona. Accetta la transazione in corso, così l'annullamento avviene
+ * insieme al resto oppure non avviene affatto.
+ */
+export async function annullaLinkAperti(userId: string, esecutore: Pick<Db, 'update'> = db): Promise<void> {
+  await esecutore.update(passwordTokens)
+    .set({ usedAt: new Date() })
+    .where(and(eq(passwordTokens.userId, userId), isNull(passwordTokens.usedAt)))
+}
+
+/**
  * Crea un nuovo link "scegli la tua password" per un account.
  * Invalida tutti i link precedenti ancora aperti dello stesso utente: vale
  * sempre e solo l'ultimo mandato, così un vecchio link finito in una chat
@@ -77,9 +94,7 @@ export async function creaLinkPassword(userId: string, scopo: ScopoToken): Promi
 
   await db.transaction(async (tx) => {
     // Un solo link valido per volta
-    await tx.update(passwordTokens)
-      .set({ usedAt: new Date() })
-      .where(and(eq(passwordTokens.userId, userId), isNull(passwordTokens.usedAt)))
+    await annullaLinkAperti(userId, tx)
 
     await tx.insert(passwordTokens).values({
       userId,

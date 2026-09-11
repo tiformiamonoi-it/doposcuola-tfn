@@ -564,6 +564,17 @@ const perRuolo = (c: Contatto) => (
     ? labelRuoloDoposcuola(c.doposcuolaRuolo)
     : (c.marketingRuolo ? labelRuoloMarketing(c.marketingRuolo).replace(/\s*\(.*$/, '') : '')
 )
+// Una famiglia può avere più figli, ma nel file resta UNA riga per contatto, come
+// prima (un contatto = una persona da richiamare): nelle colonne di sempre i figli
+// si mettono uno dopo l'altro separati da " | ", nello stesso ordine ("Luca | Giulia").
+// Un figlio senza classe lascia il suo posto vuoto, così le colonne restano allineate.
+// Per un candidato tutor la colonna Materie resta quella che insegna.
+const perFigli = (c: Contatto, campo: 'nome' | 'classeScuola' | 'materie') => {
+  const figli = c.figli ?? []
+  if (figli.length === 0) return campo === 'materie' ? (c.materie ?? '') : ''
+  const valori = figli.map((f) => (f[campo] ?? '').trim())
+  return valori.some(Boolean) ? valori.join(' | ') : ''
+}
 
 async function esportaCsv() {
   esportando.value = true
@@ -599,9 +610,9 @@ async function esportaCsv() {
       labelStato(c.stato),
       perGiorno(c.prossimoRicontatto),
       perQuando(c.ultimoContattoAt),
-      c.nomeStudente ?? '',
-      c.classeScuola ?? '',
-      c.materie ?? '',
+      perFigli(c, 'nome'),
+      perFigli(c, 'classeScuola'),
+      perFigli(c, 'materie'),
       c.azienda ?? '',
       c.servizioInteresse ?? '',
       perRuolo(c),

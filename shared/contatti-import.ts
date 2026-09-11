@@ -222,6 +222,15 @@ export function normalizzaRigaImport(
 
   if (errori.length > 0) return { ok: false, errori }
 
+  // Famiglia interessata: le tre colonne del figlio (le stesse di sempre nel
+  // template) diventano la sua riga. Una riga del file = un figlio; un eventuale
+  // fratello si aggiunge poi dalla scheda con "+ Aggiungi un altro figlio".
+  // Per un candidato tutor (o un contatto Marketing) le materie restano sul contatto.
+  const famiglia = tipo === 'DOPOSCUOLA' && doposcuolaRuolo === 'STUDENTE'
+  const figli = famiglia && (nomeStudente || classeScuola || materie)
+    ? [{ nome: nomeStudente, classeScuola, materie }]
+    : []
+
   return {
     ok: true,
     dati: {
@@ -235,9 +244,8 @@ export function normalizzaRigaImport(
       stato,
       prossimoRicontatto,
       note,
-      nomeStudente,
-      classeScuola,
-      materie,
+      figli,
+      materie: famiglia ? null : materie,
       azienda,
       servizioInteresse,
       marketingRuolo,

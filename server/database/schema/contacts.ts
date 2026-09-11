@@ -1,4 +1,4 @@
-import { pgTable, text, varchar, boolean, timestamp, date, index } from 'drizzle-orm/pg-core'
+import { pgTable, text, varchar, boolean, timestamp, date, integer, index } from 'drizzle-orm/pg-core'
 import {
   cuid,
   contactTipoEnum,
@@ -40,9 +40,15 @@ export const contacts = pgTable('contacts', {
 
   note: text('note'),
 
-  // Solo Doposcuola
+  // Solo Doposcuola — colonne STORICHE: dal blocco 4 i figli di una famiglia
+  // stanno in contact_figli (qui sotto), uno per riga. Restano solo perché il sito
+  // online, finché non si aggiorna, le usa ancora: toglierle subito lo romperebbe.
+  // Si tolgono nella pulizia finale. Il codice nuovo le legge solo come ripiego
+  // (vedi figliConRipiego in contact.service.ts) e non ci scrive più niente.
   nomeStudente: varchar('nome_studente', { length: 200 }),
   classeScuola: varchar('classe_scuola', { length: 200 }),
+  // Questa invece resta viva per i candidati tutor: le materie che INSEGNANO.
+  // Per le famiglie è storica come le due sopra (le materie stanno su ogni figlio).
   materie:      varchar('materie', { length: 500 }),
 
   // Solo Marketing
@@ -57,6 +63,10 @@ export const contacts = pgTable('contacts', {
   privacyInformata: boolean('privacy_informata').notNull().default(false),
 
   studentId:        text('student_id').references(() => students.id, { onDelete: 'set null' }),
+  // Il gemello di studentId per i candidati tutor: l'account creato con "Crea tutor"
+  // dalla scheda contatto. Se un giorno quell'account venisse cancellato il contatto
+  // resta, solo senza collegamento (set null), esattamente come per lo studente.
+  tutorUserId:      text('tutor_user_id').references(() => users.id, { onDelete: 'set null' }),
   contactRequestId: text('contact_request_id').references(() => contactRequests.id, { onDelete: 'set null' }),
   createdByUserId:  text('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
 
@@ -75,6 +85,39 @@ export const contacts = pgTable('contacts', {
   telefonoIdx:           index('contacts_telefono_idx').on(t.telefono),
   emailIdx:              index('contacts_email_idx').on(t.email),
   archiviatoIdx:         index('contacts_archiviato_idx').on(t.archiviatoAt),
+}))
+
+// I FIGLI DI UNA FAMIGLIA — una riga per ogni ragazzo per cui ci hanno cercato.
+// Prima c'erano tre campi sul contatto e quindi un figlio solo: se una mamma
+// chiamava per due figli bisognava duplicare il contatto o scrivere tutto nelle
+// note. Ogni figlio diventa alunno per conto suo ("Crea studente" riga per riga):
+// per questo il collegamento allo studente sta qui, su ogni figlio.
+// Vale solo per i contatti Doposcuola "Possibile studente".
+export const contactFigli = pgTable('contact_figli', {
+  id:        text('id').primaryKey().$defaultFn(cuid),
+  // Cancellando il contatto spariscono anche i suoi figli (oggi i contatti non si
+  // cancellano mai davvero, ma la regola giusta è questa)
+  contactId: text('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
+
+  // Il nome può mancare: dei contatti di prima a volte si sapeva solo la classe
+  nome:         varchar('nome', { length: 200 }),
+  classeScuola: varchar('classe_scuola', { length: 200 }),
+  materie:      varchar('materie', { length: 500 }),
+
+  // Lo studente nato da questo figlio con "Crea studente". Se un giorno lo studente
+  // venisse cancellato, il figlio resta nel contatto, solo scollegato (set null).
+  studentId: text('student_id').references(() => students.id, { onDelete: 'set null' }),
+
+  // L'ordine in cui sono stati scritti: il primo figlio resta il primo
+  ordine: integer('ordine').notNull().default(0),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  // I figli di un contatto, già nell'ordine giusto (lista e scheda)
+  contactOrdineIdx: index('contact_figli_contact_ordine_idx').on(t.contactId, t.ordine),
+  // "Questo alunno viene dai Contatti?" (card dei Rientri)
+  studentIdx:       index('contact_figli_student_idx').on(t.studentId),
 }))
 
 // IL DIARIO — una riga per ogni chiamata/messaggio scambiato con un contatto.

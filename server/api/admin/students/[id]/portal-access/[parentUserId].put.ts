@@ -2,18 +2,25 @@ import { z } from 'zod'
 import { and, eq } from 'drizzle-orm'
 import { db } from '../../../../../database/client'
 import { studentParents } from '../../../../../database/schema'
-import { inviaLinkPassword } from '../../../../../services/portal-user.service'
+import { correggiEmailAccount, inviaLinkPassword } from '../../../../../services/portal-user.service'
 import { toHttpError } from '../../../../../utils/http-error'
 
 const PutSchema = z.discriminatedUnion('action', [
   // Storicamente 'reset-password'; oggi manda un link per SCEGLIERE la password
   // (l'etichetta resta per non rompere le chiamate già in giro nel frontend)
   z.object({ action: z.literal('reset-password') }),
+  // Correzione dell'email con cui il genitore entra nel portale: vale per tutti
+  // i suoi figli, e si allinea anche sulle loro schede
+  z.object({
+    action:    z.literal('change-email'),
+    email:     z.string().trim().email('Email non valida'),
+    inviaLink: z.boolean(),
+  }),
 ])
 
 // PUT /api/admin/students/:id/portal-access/:parentUserId
-// Azioni su UN singolo genitore collegato all'alunno
-// (per ora: manda il link "scegli la tua password").
+// Azioni su UN singolo genitore collegato all'alunno: manda il link "scegli la
+// tua password", oppure correggi la sua email di accesso.
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
 
@@ -46,11 +53,23 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
+    if (result.data.action === 'change-email') {
+      return await correggiEmailAccount({
+        studentId,
+        userId:     parentUserId,
+        nuovaEmail: result.data.email,
+        inviaLink:  result.data.inviaLink,
+      })
+    }
+
     // motivoEmail/dettaglioEmail valorizzati solo se l'email non è partita
     const { linkPassword, emailInviata, motivoEmail, dettaglioEmail } = await inviaLinkPassword(parentUserId)
     return { ok: true, linkPassword, emailInviata, motivoEmail, dettaglioEmail }
   } catch (err: any) {
     if (err.statusCode) throw err
-    throw toHttpError(err, err.message?.includes('non trovato') ? 404 : 400)
+    const code = (err.message?.includes('non trovato') || err.message?.includes('non è collegato'))
+      ? 404
+      : err.message?.includes('già usata') ? 409 : 400
+    throw toHttpError(err, code)
   }
 })

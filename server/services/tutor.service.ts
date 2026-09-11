@@ -6,7 +6,7 @@ import {
 } from '../database/schema'
 import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
-import { inviaInvitoPassword } from '../utils/password-token'
+import { annullaLinkAperti, inviaInvitoPassword } from '../utils/password-token'
 import { nomeProprio } from '../utils/nomi'
 import { CAT } from '#shared/accounting-categories'
 import type {
@@ -286,6 +286,12 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
   }
 
   const updated = await db.transaction(async (tx) => {
+    // L'email di prima serve solo se il modulo ne porta una: è l'unico modo di
+    // sapere se sta cambiando davvero (il modulo la rimanda anche quando è la stessa).
+    const prima = typeof userChanges.email === 'string'
+      ? await tx.query.users.findFirst({ where: eq(users.id, id), columns: { email: true } })
+      : undefined
+
     const [user] = await tx.update(users)
       .set(userChanges as any)
       // Tutto lo staff è modificabile (serve per cambiare ruolo in entrambe le direzioni)
@@ -293,6 +299,14 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
       .returning()
 
     if (!user) return null
+
+    // Email cambiata: i link "scegli la tua password" ancora aperti erano partiti
+    // verso il VECCHIO indirizzo. Se era sbagliato, o di un'altra persona, chi li
+    // ha ricevuti potrebbe ancora entrare nell'account del tutor: si annullano.
+    // Maiuscole e minuscole non contano, la casella di posta è la stessa.
+    if (prima && prima.email.toLowerCase() !== user.email.toLowerCase()) {
+      await annullaLinkAperti(id, tx)
+    }
 
     await tx.update(tutorProfiles)
       .set(profileChanges as any)

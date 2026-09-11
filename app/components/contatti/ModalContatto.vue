@@ -95,24 +95,74 @@
             <USelect v-model="form.doposcuolaRuolo" :items="RUOLI_DOPOSCUOLA_ITEMS" class="w-full sm:w-64" />
           </UFormField>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <UFormField v-if="!candidatoTutor" label="Nome studente" name="nomeStudente" :error="erroreDi('nomeStudente')">
-              <UInput v-model="form.nomeStudente" placeholder="Luca" class="w-full" />
-            </UFormField>
-            <UFormField v-if="!candidatoTutor" label="Classe / Scuola" name="classeScuola" :error="erroreDi('classeScuola')">
-              <UInput v-model="form.classeScuola" placeholder="2ª media" class="w-full" />
-            </UFormField>
-            <UFormField
-              :label="candidatoTutor ? 'Materie che insegna' : 'Materie'"
-              name="materie" :error="erroreDi('materie')"
+          <!-- Candidato tutor: niente figli, solo le materie che insegna -->
+          <UFormField v-if="candidatoTutor" label="Materie che insegna" name="materie" :error="erroreDi('materie')">
+            <UInput v-model="form.materie" placeholder="Matematica, Fisica" class="w-full" />
+          </UFormField>
+
+          <!-- Possibile studente: una riga per figlio (una mamma può chiamare per due figli) -->
+          <fieldset v-else class="space-y-3">
+            <legend class="text-sm font-medium text-slate-700">Figli</legend>
+            <p class="text-xs text-slate-500 -mt-1">
+              Una riga per ogni figlio per cui vi hanno cercato. Dalla scheda crei poi lo studente, uno alla volta.
+            </p>
+
+            <div
+              v-for="(f, i) in figli"
+              :key="f.chiave"
+              :data-figlio="f.chiave"
+              class="rounded-xl border border-slate-200 p-3 space-y-2"
             >
-              <UInput
-                v-model="form.materie"
-                :placeholder="candidatoTutor ? 'Matematica, Fisica' : 'Matematica, Inglese'"
-                class="w-full"
-              />
-            </UFormField>
-          </div>
+              <div class="flex items-center justify-between gap-2 min-h-7">
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  {{ figli.length > 1 ? `Figlio ${i + 1}` : 'Figlio' }}
+                </p>
+                <!-- Già alunno: non si toglie e non si cambia da qui -->
+                <UBadge v-if="f.studentId" color="success" variant="soft" size="sm">Già alunno</UBadge>
+                <UButton
+                  v-else
+                  icon="i-heroicons-trash" size="xs" variant="ghost" color="error"
+                  title="Togli questo figlio" aria-label="Togli questo figlio"
+                  @click="togliFiglio(i)"
+                />
+              </div>
+
+              <div v-if="f.studentId" class="text-sm">
+                <p class="text-slate-800">
+                  <span class="font-medium">{{ f.nome || 'Nome non indicato' }}</span>
+                  <span v-if="f.classeScuola" class="text-slate-500"> · {{ f.classeScuola }}</span>
+                  <span v-if="f.materie" class="text-slate-500"> · {{ f.materie }}</span>
+                </p>
+                <p class="text-xs text-slate-500 mt-0.5">
+                  È già diventato alunno{{ f.studenteNome ? ` (${f.studenteNome})` : '' }}: i suoi dati si cambiano dalla scheda studente.
+                </p>
+              </div>
+
+              <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <UFormField label="Nome studente" :name="`figlio-${f.chiave}-nome`">
+                  <UInput v-model="f.nome" placeholder="Luca" class="w-full" />
+                </UFormField>
+                <UFormField label="Classe / Scuola" :name="`figlio-${f.chiave}-classe`">
+                  <UInput v-model="f.classeScuola" placeholder="2ª media" class="w-full" />
+                </UFormField>
+                <UFormField label="Materie" :name="`figlio-${f.chiave}-materie`">
+                  <UInput v-model="f.materie" placeholder="Matematica, Inglese" class="w-full" />
+                </UFormField>
+              </div>
+            </div>
+
+            <UButton
+              icon="i-heroicons-plus" size="sm" variant="soft"
+              :disabled="figli.length >= MAX_FIGLI_CONTATTO"
+              @click="aggiungiFiglio"
+            >
+              Aggiungi un altro figlio
+            </UButton>
+            <p v-if="figli.length >= MAX_FIGLI_CONTATTO" class="text-xs text-slate-500">
+              Al massimo {{ MAX_FIGLI_CONTATTO }} figli per contatto.
+            </p>
+            <p v-if="erroreDi('figli')" class="text-sm text-red-600">{{ erroreDi('figli') }}</p>
+          </fieldset>
         </template>
 
         <!-- Campi della tab Marketing -->
@@ -210,7 +260,8 @@ import {
   NON_SPECIFICATO, nomeContatto,
   TIPI_INTERAZIONE_ITEMS, DIREZIONI_ITEMS, adessoPerInput, inputInIso,
 } from '~/utils/contatti'
-import type { Contatto } from '~/utils/contatti'
+import type { Contatto, FiglioContatto } from '~/utils/contatti'
+import { MAX_FIGLI_CONTATTO } from '#shared/schemas/contact.schema'
 
 const props = defineProps<{
   /** Tab attiva: pre-seleziona il tipo quando si crea un contatto nuovo */
@@ -239,8 +290,7 @@ function formVuoto() {
     stato:              'NUOVO',
     prossimoRicontatto: '',
     doposcuolaRuolo:    'STUDENTE',
-    nomeStudente:       '',
-    classeScuola:       '',
+    // Solo candidato tutor (le materie che insegna): i figli stanno in `figli`, qui sotto
     materie:            '',
     azienda:            '',
     servizioInteresse:  '',
@@ -252,8 +302,56 @@ function formVuoto() {
 
 const form = reactive(formVuoto())
 
-// Con "Possibile tutor" i campi dello studente non servono e le materie cambiano senso
+// Con "Possibile tutor" i figli non servono e le materie sono quelle che insegna
 const candidatoTutor = computed(() => tipoForm.value === 'DOPOSCUOLA' && form.doposcuolaRuolo === 'TUTOR')
+
+// ─── I figli (solo "Possibile studente") ─────
+// Una riga per figlio. Quelle già salvate hanno l'id; il figlio "di prima" dei
+// contatti vecchi arriva senza id ma si comporta come gli altri. Le righe già
+// diventate alunno si vedono ma non si cambiano e non si tolgono.
+interface RigaFiglio {
+  /** Chiave stabile per Vue: le righe nuove non hanno ancora un id */
+  chiave: number
+  id: string | null
+  nome: string
+  classeScuola: string
+  materie: string
+  studentId: string | null
+  studenteNome: string | null
+}
+
+let prossimaChiave = 0
+function rigaFiglio(f?: FiglioContatto): RigaFiglio {
+  return {
+    chiave:       prossimaChiave++,
+    id:           f?.id ?? null,
+    nome:         f?.nome ?? '',
+    classeScuola: f?.classeScuola ?? '',
+    materie:      f?.materie ?? '',
+    studentId:    f?.studentId ?? null,
+    studenteNome: f?.studenteNome ?? null,
+  }
+}
+
+// Almeno una riga sempre visibile: è il posto dove scrivere il primo figlio
+const figli = ref<RigaFiglio[]>([rigaFiglio()])
+
+async function aggiungiFiglio() {
+  if (figli.value.length >= MAX_FIGLI_CONTATTO) return
+  const nuova = rigaFiglio()
+  figli.value.push(nuova)
+  // Il cursore va subito sul nome del nuovo figlio (comodo anche da tastiera)
+  await nextTick()
+  document.querySelector<HTMLInputElement>(`[data-figlio="${nuova.chiave}"] input`)?.focus()
+}
+
+// Togliere una riga vale solo dopo "Salva modifiche" (con "Annulla" torna tutto
+// com'era). Togliendo l'unica rimasta, al suo posto ne resta una vuota.
+function togliFiglio(indice: number) {
+  if (figli.value[indice]?.studentId) return
+  if (figli.value.length === 1) figli.value = [rigaFiglio()]
+  else figli.value.splice(indice, 1)
+}
 
 // ─── Riquadro "Primo contatto" (solo in creazione) ───
 // "Quando" vuoto = non si annota niente: il contatto nasce senza diario.
@@ -280,6 +378,9 @@ watch(aperto, (adessoAperto) => {
   if (!adessoAperto) return
   Object.assign(form, formVuoto())
   Object.assign(primo, primoVuoto())
+  figli.value = props.contatto?.figli?.length
+    ? props.contatto.figli.map((f) => rigaFiglio(f))
+    : [rigaFiglio()]
   canaleScelto.value = false
   errorePrimoContatto.value = ''
   erroriServer.value = {}
@@ -298,8 +399,6 @@ watch(aperto, (adessoAperto) => {
       stato:              c.stato ?? 'NUOVO',
       prossimoRicontatto: c.prossimoRicontatto ?? '',
       doposcuolaRuolo:    c.doposcuolaRuolo ?? 'STUDENTE',
-      nomeStudente:       c.nomeStudente ?? '',
-      classeScuola:       c.classeScuola ?? '',
       materie:            c.materie ?? '',
       azienda:            c.azienda ?? '',
       servizioInteresse:  c.servizioInteresse ?? '',
@@ -384,13 +483,28 @@ function corpoDaInviare() {
 
   // Si inviano solo i campi della tab giusta: quelli dell'altra restano com'erano
   const specifici = tipoForm.value === 'DOPOSCUOLA'
-    ? {
-        doposcuolaRuolo: form.doposcuolaRuolo,
-        // Un candidato tutor non ha uno studente né una classe: si svuotano
-        nomeStudente: candidatoTutor.value ? null : vuotoNull(form.nomeStudente),
-        classeScuola: candidatoTutor.value ? null : vuotoNull(form.classeScuola),
-        materie:      vuotoNull(form.materie),
-      }
+    ? (candidatoTutor.value
+        ? {
+            doposcuolaRuolo: form.doposcuolaRuolo,
+            materie:         vuotoNull(form.materie),
+            // Un candidato tutor non ha figli: si tolgono (mai uno già diventato
+            // alunno: in quel caso il server si ferma e lo dice). Si svuotano anche
+            // i due campi di una volta, come prima.
+            figli:           [],
+            nomeStudente:    null,
+            classeScuola:    null,
+          }
+        : {
+            doposcuolaRuolo: form.doposcuolaRuolo,
+            // La lista COMPLETA, così come si vede qui: una riga tolta si cancella.
+            // Le righe già alunno viaggiano lo stesso: il server le lascia com'erano.
+            figli: figli.value.map((f) => ({
+              id:           f.id,
+              nome:         vuotoNull(f.nome),
+              classeScuola: vuotoNull(f.classeScuola),
+              materie:      vuotoNull(f.materie),
+            })),
+          })
     : {
         azienda:           vuotoNull(form.azienda),
         servizioInteresse: vuotoNull(form.servizioInteresse),
@@ -440,6 +554,12 @@ async function salva() {
   if (!form.telefono.trim() && !form.email.trim() && !form.socialLink.trim()) {
     erroreGenerale.value = 'Inserisci almeno un recapito: telefono, email o profilo social. Serve per ricontattare la persona.'
     erroriServer.value = { telefono: 'Manca un recapito' }
+    return
+  }
+  // Diventare "Possibile tutor" vuol dire non avere più figli: se uno è già alunno
+  // il server si fermerebbe, tanto vale dirlo subito e in modo chiaro
+  if (candidatoTutor.value && figli.value.some((f) => f.studentId)) {
+    erroreGenerale.value = 'Questo contatto ha un figlio già diventato alunno: non puoi trasformarlo in «Possibile tutor». Crea un contatto nuovo per il candidato tutor.'
     return
   }
 
