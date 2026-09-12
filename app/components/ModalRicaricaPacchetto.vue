@@ -33,6 +33,14 @@
             </div>
           </UFormField>
         </div>
+
+        <!-- Bollo (F1): compare da solo sopra 77,47 € con fattura, già spuntato -->
+        <SpuntaBollo
+          v-if="ricarica.pagatoSubito > 0"
+          v-model="ricarica.aggiungiBollo"
+          :importo="ricarica.pagatoSubito"
+          :richiede-fattura="ricarica.richiedeFattura"
+        />
       </div>
     </template>
     <template #footer>
@@ -60,6 +68,8 @@ const ricarica = reactive({
   pagatoSubito: 0,
   metodoPagamento: 'CONTANTI',
   richiedeFattura: false,
+  // Bollo da 2 € (F1): vale solo sopra i 77,47 € con fattura, e in quel caso è dovuto
+  aggiungiBollo: true,
 })
 
 watch(isOpen, (val) => {
@@ -68,6 +78,7 @@ watch(isOpen, (val) => {
     ricarica.pagatoSubito = 0
     ricarica.metodoPagamento = 'CONTANTI'
     ricarica.richiedeFattura = false
+    ricarica.aggiungiBollo = true
   }
 })
 
@@ -90,6 +101,7 @@ async function salvaRicarica() {
         importo: ricarica.pagatoSubito,
         metodoPagamento: ricarica.metodoPagamento,
         richiedeFattura: ricarica.richiedeFattura,
+        aggiungiBollo:   ricarica.aggiungiBollo,
       }
     }
     await $fetch(`/api/packages/${props.pacchetto.id}/recharge`, {

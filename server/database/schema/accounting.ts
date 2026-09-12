@@ -61,8 +61,14 @@ export const accountingEntries = pgTable('accounting_entries', {
   fatturaEmessa:   boolean('fattura_emessa').notNull().default(false),
   // Fattura richiesta su movimenti MANUALI (per i pagamenti pacchetto fa fede payments.richiedeFattura)
   richiedeFattura: boolean('richiede_fattura').notNull().default(false),
-  // Gemello dei movimenti accoppiati "Proventi diversi": cancellare uno cancella l'altro (FK cascade)
+  // Gemello dei movimenti accoppiati "Proventi diversi" e "Bollo": cancellare uno cancella l'altro (FK cascade)
   linkedEntryId:   text('linked_entry_id').references((): AnyPgColumn => accountingEntries.id, { onDelete: 'cascade' }),
+  // Bollo (F1): su un DEBITO "bollo da versare" indica QUALE versamento F24 lo ha chiuso.
+  // Serve una colonna sua perché linkedEntryId è già occupato dalla gemella entrata↔debito.
+  // Vuota = bollo ancora aperto (è così che si trovano i bolli da versare).
+  // ON DELETE SET NULL e non CASCADE: se un giorno si cancella l'F24, i bolli devono
+  // tornare "da versare", non sparire insieme a lui.
+  versamentoEntryId: text('versamento_entry_id').references((): AnyPgColumn => accountingEntries.id, { onDelete: 'set null' }),
   note:            text('note'),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -73,4 +79,8 @@ export const accountingEntries = pgTable('accounting_entries', {
   metodoIdx:      index('acc_metodo_idx').on(t.metodoPagamento),
   tutorPaymentIdx:  index('acc_tutor_payment_idx').on(t.tutorPaymentId),
   reimbursementIdx: index('acc_reimbursement_idx').on(t.reimbursementId),
+  // La card "Bolli da versare" cerca sempre la stessa cosa: categoria bollo +
+  // versamento ancora vuoto. Con questo indice la risposta resta immediata anche
+  // quando i bolli registrati saranno migliaia.
+  versamentoIdx:    index('acc_versamento_idx').on(t.versamentoEntryId),
 }))

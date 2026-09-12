@@ -28,6 +28,9 @@
 
         <UCheckbox v-model="pagamento.fattura" label="Richiede fattura" />
 
+        <!-- Bollo (F1): compare da solo sopra 77,47 € con fattura, già spuntato -->
+        <SpuntaBollo v-model="pagamento.bollo" :importo="pagamento.importo" :richiede-fattura="pagamento.fattura" />
+
         <!-- Storico pagamenti del pacchetto -->
         <div v-if="storico.length" class="border-t border-slate-100 pt-3">
           <p class="text-xs font-medium text-slate-500 mb-2">Pagamenti registrati</p>
@@ -140,6 +143,9 @@ const pagamento = reactive({
   tipo:    'SALDO' as string,
   metodo:  'CONTANTI' as string,
   fattura: false,
+  // Bollo da 2 € (F1): la spunta serve solo sopra i 77,47 € con fattura. Parte da
+  // "sì" perché in quel caso il bollo è dovuto; sotto soglia il campo è ignorato.
+  bollo:   true,
 })
 
 const residuo = computed(() => parseFloat(pacchettoCorrente.value?.importoResiduo || '0'))
@@ -321,6 +327,7 @@ watch(isOpen, (val) => {
     pagamento.tipo    = 'SALDO'
     pagamento.metodo  = 'CONTANTI'
     pagamento.fattura = false
+    pagamento.bollo   = true
     editingId.value   = null
     caricaStorico()
   }
@@ -339,6 +346,7 @@ async function salvaPagamento() {
         metodoPagamento: pagamento.metodo,
         dataPagamento:   pagamento.data,
         fatturaRichiesta: pagamento.fattura,
+        aggiungiBollo:    pagamento.bollo,
       },
     })
     toast.add({ title: 'Pagamento registrato', color: 'success', icon: 'i-heroicons-check-circle' })

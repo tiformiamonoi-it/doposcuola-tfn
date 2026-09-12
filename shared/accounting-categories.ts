@@ -11,7 +11,13 @@ export type Categoria = {
 
 // Categorie che il codice scrive da solo (pagamenti, compensi, rimborsi, rettifiche).
 // Vanno protette: non modificabili e non eliminabili.
-export const CATEGORIE_SISTEMA = ['compenso_tutor', 'rimborso_tutor', 'pacchetti', 'rettifica', 'proventi_diversi', 'costi_proventi_diversi'] as const
+export const CATEGORIE_SISTEMA = ['compenso_tutor', 'rimborso_tutor', 'pacchetti', 'rettifica', 'proventi_diversi', 'costi_proventi_diversi', 'bollo_incassato', 'bollo_da_versare', 'versamento_bolli'] as const
+
+// Le tre categorie della marca da bollo (F1). Le scrive solo il codice, mai a mano:
+// 'bollo_incassato'   → ENTRATA di 2 € pagata dal cliente (cassa vera)
+// 'bollo_da_versare'  → DEBITO di 2 € verso lo Stato, in attesa dell'F24
+// 'versamento_bolli'  → USCITA unica dell'F24, che chiude in blocco i bolli inclusi
+export const CATEGORIE_BOLLO = ['bollo_incassato', 'bollo_da_versare', 'versamento_bolli']
 
 // Coppia gemella dei "Proventi diversi" (+X entrata / -X uscita)
 export const CATEGORIE_PROVENTI_DIVERSI = ['proventi_diversi', 'costi_proventi_diversi']
@@ -29,6 +35,12 @@ export const CATEGORIE_DEFAULT: Categoria[] = [
   // entrate (e quindi tasse stimate) e fatturato aumentano. NON neutre di proposito.
   { chiave: 'proventi_diversi',       etichetta: 'Proventi diversi',           neutra: false, sistema: true },
   { chiave: 'costi_proventi_diversi', etichetta: 'Costi per proventi diversi', neutra: false, sistema: true },
+  // Marca da bollo: i 2 € incassati sono cassa vera (entrano nel margine) e il
+  // versamento F24 è l'uscita vera che li restituisce allo Stato. Sul giro completo
+  // il margine torna a zero, quindi NON sono neutre: devono comparire nei conti.
+  { chiave: 'bollo_incassato',  etichetta: 'Bollo incassato dal cliente', neutra: false, sistema: true },
+  { chiave: 'bollo_da_versare', etichetta: 'Bollo da versare allo Stato', neutra: false, sistema: true },
+  { chiave: 'versamento_bolli', etichetta: 'Versamento bolli (F24)',      neutra: false, sistema: true },
   { chiave: 'spese_generali', etichetta: 'Spese Generali',      neutra: false, sistema: false },
   { chiave: 'marketing',      etichetta: 'Marketing',           neutra: false, sistema: false },
   { chiave: 'giroconto',      etichetta: 'Giroconto',           neutra: true,  sistema: false },
@@ -47,6 +59,9 @@ export const CAT = {
   COSTI_PROVENTI_DIVERSI:  'costi_proventi_diversi',
   MARKETING:               'marketing',
   SPESE_GENERALI:          'spese_generali',
+  BOLLO_INCASSATO:         'bollo_incassato',
+  BOLLO_DA_VERSARE:        'bollo_da_versare',
+  VERSAMENTO_BOLLI:        'versamento_bolli',
 } as const
 
 /** Mappa chiave → etichetta, con fallback alla chiave grezza per categorie non in elenco. */

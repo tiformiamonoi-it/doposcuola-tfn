@@ -7,6 +7,7 @@ import {
 import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { annullaLinkAperti, inviaInvitoPassword } from '../utils/password-token'
+import { inCentesimi, inEuro } from '../utils/arrotondamenti'
 import { nomeProprio } from '../utils/nomi'
 import { CAT } from '#shared/accounting-categories'
 import type {
@@ -127,44 +128,53 @@ export async function listTutors(query: TutorQuery) {
 
   let tutoriAttivi    = 0
   let daLiquidare     = 0
-  let totaleDovuto    = 0
+  let totaleDovutoCent = 0
   let sumLiquidazioni = 0
   let countLiquidati  = 0
 
+  // F3 — gli importi da liquidare si contano in CENTESIMI INTERI (vedi
+  // server/utils/arrotondamenti.ts) e si arrotondano una volta sola alla fine.
+  // ⚠️ L'arrotondamento PER DIFETTO all'euro del compenso resta esattamente com'è:
+  // è una regola voluta, non un errore di calcolo. Quello che cambia è solo che i
+  // totali non si trascinano più dietro code di centesimi che non esistono.
   const tutors = tutorsList.map(tutor => {
     const ls = lessonMap.get(tutor.id)
     const ps = payMap.get(tutor.id)
     const ar = arrearsMap.get(tutor.id)
 
-    const compensoCalcolato = Math.floor(parseFloat(ls?.compenso ?? '0'))
-    const pagato            = parseFloat(ps?.pagato ?? '0')
+    // Arrotondamento all'euro per difetto: VOLUTO, si lascia.
+    const compensoCalcolato     = Math.floor(parseFloat(ls?.compenso ?? '0'))
+    const compensoCalcolatoCent = compensoCalcolato * 100
+    const pagatoCent            = inCentesimi(ps?.pagato ?? '0')
     // Pro Bono: il mese è considerato saldato (residuo 0) anche se non transita in contabilità.
-    const compensoResiduo   = ps?.proBono ? 0 : Math.max(0, compensoCalcolato - pagato)
-    const mesiArretrati     = parseInt(ar?.mesi_arretrati ?? '0')
-    const totaleArretrati   = Math.round(parseFloat(ar?.totale_arretrati ?? '0') * 100) / 100
+    const compensoResiduoCent   = ps?.proBono ? 0 : Math.max(0, compensoCalcolatoCent - pagatoCent)
+    const mesiArretrati         = parseInt(ar?.mesi_arretrati ?? '0')
+    // Gli arretrati li ha già sommati Postgres in modo esatto (FLOOR compreso).
+    const totaleArretratiCent   = inCentesimi(ar?.totale_arretrati ?? '0')
 
     // Totale unico "Da liquidare": mese corrente + tutti i mesi arretrati insieme.
-    const totaleDaLiquidare = Number((compensoResiduo + totaleArretrati).toFixed(2))
-    const mesiDaLiquidare   = mesiArretrati + (compensoResiduo > 0.01 ? 1 : 0)
+    const totaleDaLiquidareCent = compensoResiduoCent + totaleArretratiCent
+    // "più di un centesimo": la stessa soglia di prima, letta in centesimi.
+    const mesiDaLiquidare       = mesiArretrati + (compensoResiduoCent > 1 ? 1 : 0)
 
     if (tutor.active) tutoriAttivi++
-    if (totaleDaLiquidare > 0.01) { daLiquidare++; totaleDovuto += totaleDaLiquidare }
+    if (totaleDaLiquidareCent > 1) { daLiquidare++; totaleDovutoCent += totaleDaLiquidareCent }
     if (compensoCalcolato > 0) { sumLiquidazioni += compensoCalcolato; countLiquidati++ }
 
     return {
       ...tutor,
       numLezioniMese:  parseInt(ls?.numLezioni ?? '0'),
       compensoCalcolato,
-      compensoResiduo:  Number(compensoResiduo.toFixed(2)),
+      compensoResiduo:  inEuro(compensoResiduoCent),
       mesiArretrati,
-      totaleArretrati:  Number(totaleArretrati.toFixed(2)),
-      totaleDaLiquidare,
+      totaleArretrati:  inEuro(totaleArretratiCent),
+      totaleDaLiquidare: inEuro(totaleDaLiquidareCent),
       mesiDaLiquidare,
     }
   })
 
   const filtered = query.daLiquidare === 'true'
-    ? tutors.filter(t => t.totaleDaLiquidare > 0.01)
+    ? tutors.filter(t => t.totaleDaLiquidare > 0.01)   // "più di un centesimo", come prima
     : tutors
 
   return {
@@ -172,7 +182,9 @@ export async function listTutors(query: TutorQuery) {
     kpi: {
       tutoriAttivi,
       daLiquidare,
-      totaleDovuto:      Number(totaleDovuto.toFixed(2)),
+      totaleDovuto:      inEuro(totaleDovutoCent),
+      // Media dei compensi già arrotondati all'euro: è una divisione vera, quindi
+      // l'arrotondamento a 2 decimali qui è il primo e unico.
       mediaLiquidazione: countLiquidati > 0 ? Number((sumLiquidazioni / countLiquidati).toFixed(2)) : 0,
     },
   }
@@ -376,14 +388,16 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
     .where(eq(tutorProfiles.userId, tutorId))
     .limit(1)
 
-  // Mappa pagamenti per chiave YYYY-MM (Local Time per evitare shift di fuso orario)
-  const payByMonth = new Map<string, { totale: number; proBono: boolean }>()
+  // Mappa pagamenti per chiave YYYY-MM (Local Time per evitare shift di fuso orario).
+  // F3: i pagamenti dello stesso mese si sommano in CENTESIMI INTERI, così tre
+  // versamenti da 33,33 € fanno esattamente 99,99 € e non 99,98999999999999.
+  const payByMonth = new Map<string, { totaleCent: number; proBono: boolean }>()
   for (const p of paymentRows) {
     const key = ym(new Date(p.mese))
-    const cur = payByMonth.get(key) ?? { totale: 0, proBono: false }
+    const cur = payByMonth.get(key) ?? { totaleCent: 0, proBono: false }
     payByMonth.set(key, {
-      totale:  cur.totale + parseFloat(p.importo),
-      proBono: cur.proBono || p.status === 'PRO_BONO',
+      totaleCent: cur.totaleCent + inCentesimi(p.importo),
+      proBono:    cur.proBono || p.status === 'PRO_BONO',
     })
   }
 
@@ -393,23 +407,28 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
     const meseDate          = new Date(row.mese)
     const meseKey           = ym(meseDate)
     const compensoGrezzo    = parseFloat(row.compenso_grezzo)
-    
+
+    // Arrotondamento all'euro per difetto: VOLUTO, si lascia (per i tutor a fisso
+    // mensile vale invece il forfait, che è già un importo a due decimali).
     let compensoCalcolato = Math.floor(compensoGrezzo)
     if (tutorRec?.modalitaPagamento === 'FORFAIT' && tutorRec.importoForfait) {
       compensoCalcolato = parseFloat(tutorRec.importoForfait as string)
     }
 
-    const pay               = payByMonth.get(meseKey)
-    const pagato            = pay?.totale ?? 0
+    // F3: compenso meno pagato in centesimi interi, arrotondato una volta sola.
+    const compensoCalcolatoCent = inCentesimi(compensoCalcolato)
+    const pay                   = payByMonth.get(meseKey)
+    const pagatoCent            = pay?.totaleCent ?? 0
     // Pro Bono: il mese è considerato saldato (residuo 0) anche se non transita in contabilità.
-    const residuo           = pay?.proBono ? 0 : Math.max(0, compensoCalcolato - pagato)
-    const isMeseCorrente    = meseKey === nowKey
+    const residuoCent           = pay?.proBono ? 0 : Math.max(0, compensoCalcolatoCent - pagatoCent)
+    const isMeseCorrente        = meseKey === nowKey
 
+    // Stesse soglie di prima, lette in centesimi: "un centesimo" invece di "0,01".
     let stato: string
-    if (pay?.proBono)                          stato = 'PRO_BONO'
-    else if (residuo <= 0.01 && pagato > 0)    stato = 'PAGATO'
-    else if (pagato > 0.01 && residuo > 0.01)  stato = 'PARZIALE'
-    else                                       stato = 'DA_PAGARE'
+    if (pay?.proBono)                              stato = 'PRO_BONO'
+    else if (residuoCent <= 1 && pagatoCent > 0)   stato = 'PAGATO'
+    else if (pagatoCent > 1 && residuoCent > 1)    stato = 'PARZIALE'
+    else                                           stato = 'DA_PAGARE'
 
     return {
       mese:             meseKey,
@@ -417,8 +436,8 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
       numLezioni:       parseInt(row.num_lezioni),
       compensoGrezzo:   Number(compensoGrezzo.toFixed(2)),
       compensoCalcolato,
-      pagato:           Number(pagato.toFixed(2)),
-      residuo:          Number(residuo.toFixed(2)),
+      pagato:           inEuro(pagatoCent),
+      residuo:          inEuro(residuoCent),
       stato,
       isMeseCorrente,
     }
@@ -536,6 +555,11 @@ export async function getMonthlyPerformance(tutorId: string, months = 6) {
     ? parseFloat(profiloPerf.importoForfait as string)
     : null
 
+  // F3 — qui il conto è GIÀ fatto nel modo giusto e si lascia com'è: il margine
+  // nasce dai valori grezzi e viene arrotondato una volta sola, alla fine.
+  // Attenzione a non "sistemarlo" portandolo in centesimi interi: il ricavo non è un
+  // importo a due decimali, è una divisione (prezzo ÷ ore) e va tenuto per intero
+  // fino all'ultimo, altrimenti il margine cambierebbe davvero di qualche centesimo.
   return (rows as any[]).map(row => {
     const ricavo   = parseFloat(row.ricavo_totale)
     const compenso = forfait ?? parseFloat(row.compenso_totale)
@@ -653,21 +677,23 @@ export async function payReimbursement(reimbursementId: string, data: PayReimbur
     
     if (!current) throw new Error('Rimborso non trovato')
 
-    const importoTotale  = parseFloat(current.importo as string)
-    const giaPagato      = parseFloat(current.importo_pagato as string)
-    const nuovoPagamento = parseFloat(data.importoPagamento)
-    const nuovoPagato    = giaPagato + nuovoPagamento
-    
-    // Check against overpayment
-    if (nuovoPagato > importoTotale + 0.01) {
-      throw new Error(`Il pagamento (€${nuovoPagamento.toFixed(2)}) eccede l'importo totale rimborsabile (€${(importoTotale - giaPagato).toFixed(2)} rimanenti)`)
+    // F3: somme e differenze in centesimi interi, arrotondate una volta sola quando
+    // si riscrive la colonna o si scrive un messaggio.
+    const importoTotaleCent  = inCentesimi(current.importo as string)
+    const giaPagatoCent      = inCentesimi(current.importo_pagato as string)
+    const nuovoPagamentoCent = inCentesimi(data.importoPagamento)
+    const nuovoPagatoCent    = giaPagatoCent + nuovoPagamentoCent
+
+    // Check against overpayment ("un centesimo di tolleranza", come prima)
+    if (nuovoPagatoCent > importoTotaleCent + 1) {
+      throw new Error(`Il pagamento (€${inEuro(nuovoPagamentoCent).toFixed(2)}) eccede l'importo totale rimborsabile (€${inEuro(importoTotaleCent - giaPagatoCent).toFixed(2)} rimanenti)`)
     }
 
-    const nuovoStato: 'PARZIALE' | 'PAGATO' = nuovoPagato >= importoTotale - 0.01 ? 'PAGATO' : 'PARZIALE'
+    const nuovoStato: 'PARZIALE' | 'PAGATO' = nuovoPagatoCent >= importoTotaleCent - 1 ? 'PAGATO' : 'PARZIALE'
 
     const [updated] = await tx.update(tutorReimbursements)
       .set({
-        importoPagato: nuovoPagato.toFixed(2),
+        importoPagato: inEuro(nuovoPagatoCent).toFixed(2),
         stato:         nuovoStato,
         dataPagamento: nuovoStato === 'PAGATO' ? new Date() : new Date(current.data_pagamento as string ?? Date.now()),
         metodo:        data.metodo,
@@ -679,7 +705,7 @@ export async function payReimbursement(reimbursementId: string, data: PayReimbur
 
     await tx.insert(accountingEntries).values({
       tipo:            'USCITA',
-      importo:         nuovoPagamento.toFixed(2),
+      importo:         inEuro(nuovoPagamentoCent).toFixed(2),
       descrizione:     `Rimborso spese: ${current.descrizione}`,
       categoria:       CAT.RIMBORSO_TUTOR,
       metodoPagamento: data.metodo,
@@ -729,12 +755,15 @@ export async function reduceReimbursementOnEntryDelete(reimbursementId: string, 
   return await db.transaction(async (tx) => {
     const [r] = await tx.select().from(tutorReimbursements).where(eq(tutorReimbursements.id, reimbursementId)).limit(1)
     if (!r) return
-    const nuovoPagato = Math.max(0, parseFloat(r.importoPagato) - parseFloat(importoEntry))
-    const totale      = parseFloat(r.importo)
+    // F3: la sottrazione si fa in centesimi interi e si torna agli euro una volta
+    // sola, al momento di riscrivere la colonna. Stesso risultato di prima, senza
+    // la coda decimale che una sottrazione fra numeri con la virgola si porta dietro.
+    const nuovoPagatoCent = Math.max(0, inCentesimi(r.importoPagato) - inCentesimi(importoEntry))
+    const totaleCent      = inCentesimi(r.importo)
     const stato: 'DA_PAGARE' | 'PARZIALE' | 'PAGATO' =
-      nuovoPagato <= 0.01 ? 'DA_PAGARE' : (nuovoPagato >= totale - 0.01 ? 'PAGATO' : 'PARZIALE')
+      nuovoPagatoCent <= 1 ? 'DA_PAGARE' : (nuovoPagatoCent >= totaleCent - 1 ? 'PAGATO' : 'PARZIALE')
     await tx.update(tutorReimbursements)
-      .set({ importoPagato: nuovoPagato.toFixed(2), stato, updatedAt: new Date() })
+      .set({ importoPagato: inEuro(nuovoPagatoCent).toFixed(2), stato, updatedAt: new Date() })
       .where(eq(tutorReimbursements.id, reimbursementId))
   })
 }

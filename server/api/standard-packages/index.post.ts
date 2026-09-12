@@ -1,18 +1,8 @@
 import { db } from '../../database/client'
 import { standardPackages } from '../../database/schema'
-import { z } from 'zod'
-
-const CreateStandardPackageSchema = z.object({
-  nome:        z.string().min(1).max(200).trim(),
-  descrizione: z.string().max(500).optional().nullable(),
-  tipo:        z.enum(['ORE', 'MENSILE', 'A_CONSUMO']),
-  categoria:   z.string().min(1).max(100).trim(),
-  oreIncluse:        z.number().positive().max(9999),
-  giorniInclusi:     z.number().int().positive().max(365).optional().nullable(),
-  orarioGiornaliero: z.number().positive().max(24).optional().nullable(),
-  prezzoStandard:    z.number().nonnegative().max(99999),
-  tariffaOraria:     z.number().positive().max(9999).optional().nullable(),
-})
+// Le regole di validazione ora vivono in shared/schemas: le stesse identiche regole valgono
+// anche per la modifica (PUT), così creare e correggere un modello non possono divergere.
+import { CreateStandardPackageSchema } from '#shared/schemas/standard-package.schema'
 
 // POST /api/standard-packages — crea nuovo template
 export default defineEventHandler(async (event) => {

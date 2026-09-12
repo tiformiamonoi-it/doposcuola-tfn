@@ -2,10 +2,21 @@ import { db } from '../database/client'
 import { accountingEntries, payments, systemConfigs, users } from '../database/schema'
 import { and, eq, gte, inArray, isNull, lte, notInArray, or, sql } from 'drizzle-orm'
 import { getNeutralKeys } from '../utils/categorie'
-import { CAT, CATEGORIE_PROVENTI_DIVERSI, EMAILS_PROVENTI_DIVERSI } from '#shared/accounting-categories'
+import { inCentesimi, inEuro } from '../utils/arrotondamenti'
+import { CAT, CATEGORIE_BOLLO, CATEGORIE_PROVENTI_DIVERSI, EMAILS_PROVENTI_DIVERSI } from '#shared/accounting-categories'
 import { conFattura, rimuoviSuffissoFattura } from '#shared/fattura'
 import { deletePayment } from './payment.service'
+import { getBolliDaVersareTotali } from './bollo.service'
 import { deleteTutorPayment, reduceReimbursementOnEntryDelete } from './tutor.service'
+
+// ─────────────────────────────────────────────
+// REGOLA DEGLI ARROTONDAMENTI (F3) — vale per TUTTO questo file
+// Le differenze fra importi si fanno dove i numeri sono esatti (in SQL, oppure in
+// centesimi interi) e si arrotonda UNA VOLTA SOLA, alla fine, su ciò che si mostra.
+// Mai arrotondare un numero che dovrà ancora essere sommato o sottratto: è così che
+// nascevano i centesimi impossibili nelle "Rimanenze di cassa".
+// La spiegazione completa, con il perché, sta in server/utils/arrotondamenti.ts.
+// ─────────────────────────────────────────────
 
 // ─────────────────────────────────────────────
 // REGOLA FONDAMENTALE — PENNA INDELEBILE
@@ -64,6 +75,9 @@ export async function getCashFlow(startDate?: Date, endDate?: Date) {
     .where(and(...(conditions as [any, ...any[]])))
     .groupBy(accountingEntries.metodoPagamento)
 
+  // Postgres ha già sommato in modo esatto, un totale per metodo. Qui li rimettiamo
+  // insieme in CENTESIMI INTERI: così il totale generale non eredita nessuna coda
+  // decimale dai cinque totali parziali, e si arrotonda una volta sola alla fine.
   let totaleContanti = 0
   let totaleBonifico = 0
   let totalePos      = 0
@@ -71,21 +85,21 @@ export async function getCashFlow(startDate?: Date, endDate?: Date) {
   let totaleAltro    = 0
 
   for (const row of rows) {
-    const val = parseFloat(row.totale)
-    if (row.metodo === 'CONTANTI')      totaleContanti += val
-    else if (row.metodo === 'BONIFICO') totaleBonifico += val
-    else if (row.metodo === 'POS')      totalePos      += val
-    else if (row.metodo === 'ASSEGNO')  totaleAssegno  += val
-    else                                totaleAltro    += val
+    const cent = inCentesimi(row.totale)
+    if (row.metodo === 'CONTANTI')      totaleContanti += cent
+    else if (row.metodo === 'BONIFICO') totaleBonifico += cent
+    else if (row.metodo === 'POS')      totalePos      += cent
+    else if (row.metodo === 'ASSEGNO')  totaleAssegno  += cent
+    else                                totaleAltro    += cent
   }
 
   return {
-    contanti: Number(totaleContanti.toFixed(2)),
-    bonifico: Number(totaleBonifico.toFixed(2)),
-    pos:      Number(totalePos.toFixed(2)),
-    assegno:  Number(totaleAssegno.toFixed(2)),
-    altro:    Number(totaleAltro.toFixed(2)),
-    totale:   Number((totaleContanti + totaleBonifico + totalePos + totaleAssegno + totaleAltro).toFixed(2)),
+    contanti: inEuro(totaleContanti),
+    bonifico: inEuro(totaleBonifico),
+    pos:      inEuro(totalePos),
+    assegno:  inEuro(totaleAssegno),
+    altro:    inEuro(totaleAltro),
+    totale:   inEuro(totaleContanti + totaleBonifico + totalePos + totaleAssegno + totaleAltro),
   }
 }
 
@@ -206,14 +220,15 @@ export async function getProventiDiversiTotali(startDate: Date, endDate: Date) {
     )
     .groupBy(accountingEntries.tipo)
 
+  // Due totali già esatti da SQL: qui si arrotondano una volta sola, e basta —
+  // nessuno dei due viene poi risommato a qualcos'altro.
   let entrate = 0
-  let uscite = 0
+  let uscite  = 0
   for (const r of rows) {
-    if (r.tipo === 'ENTRATA') entrate = parseFloat(r.totale)
-    else uscite = parseFloat(r.totale)
+    if (r.tipo === 'ENTRATA') entrate = inCentesimi(r.totale)
+    else                      uscite  = inCentesimi(r.totale)
   }
-  const r2 = (n: number) => Number(n.toFixed(2))
-  return { entrate: r2(entrate), uscite: r2(uscite) }
+  return { entrate: inEuro(entrate), uscite: inEuro(uscite) }
 }
 
 export async function createProventiDiversi(data: {
@@ -264,7 +279,12 @@ export async function createProventiDiversi(data: {
 // Esclude movimenti di tipo NOTA (informativi, non incidono sul saldo).
 // ─────────────────────────────────────────────
 
-export async function getNetMargin(startDate: Date, endDate: Date) {
+// Totali in CENTESIMI INTERI (esatti): è la versione che usa chi deve ancora fare
+// dei conti sopra questi numeri — per esempio il break-even e il blocco "doposcuola"
+// della dashboard. Arrotondare qui significherebbe sottrarre numeri già approssimati.
+type TotaliCent = { entrate: number; uscite: number; margine: number }
+
+async function netMarginCent(startDate: Date, endDate: Date): Promise<TotaliCent> {
   // E3: le categorie "neutre" (giroconti, saldo iniziale…) sono escluse dal margine.
   // L'elenco è configurabile da Impostazioni → Categorie.
   // Anche i proventi diversi restano FUORI dai numeri principali: nelle card
@@ -292,22 +312,30 @@ export async function getNetMargin(startDate: Date, endDate: Date) {
   let uscite  = 0
 
   for (const row of rows) {
-    if (row.tipo === 'ENTRATA')       entrate = parseFloat(row.totale)
-    else if (row.tipo === 'USCITA')   uscite  = parseFloat(row.totale)
+    if (row.tipo === 'ENTRATA')       entrate = inCentesimi(row.totale)
+    else if (row.tipo === 'USCITA')   uscite  = inCentesimi(row.totale)
   }
 
-  return {
-    entrate: Number(entrate.toFixed(2)),
-    uscite:  Number(uscite.toFixed(2)),
-    margine: Number((entrate - uscite).toFixed(2)),
-  }
+  return { entrate, uscite, margine: entrate - uscite }
+}
+
+export async function getNetMargin(startDate: Date, endDate: Date) {
+  const c = await netMarginCent(startDate, endDate)
+  return { entrate: inEuro(c.entrate), uscite: inEuro(c.uscite), margine: inEuro(c.margine) }
 }
 
 // ─────────────────────────────────────────────
 // PREVISIONI — Crediti e Debiti manuali
 // ─────────────────────────────────────────────
 export async function getPrevisioni(startDate?: Date, endDate?: Date) {
-  const conditions = [inArray(accountingEntries.tipo, ['CREDITO', 'DEBITO']) as any]
+  const conditions = [
+    inArray(accountingEntries.tipo, ['CREDITO', 'DEBITO']) as any,
+    // Bollo (F1): un bollo già chiuso da un versamento F24 non lo devi più a nessuno.
+    // Resta in archivio come storico, ma sparisce dal totale "Da Pagare (Debiti)",
+    // altrimenti gli stessi 2 € verrebbero contati due volte: una come debito e una
+    // come uscita dell'F24.
+    isNull(accountingEntries.versamentoEntryId) as any,
+  ]
   if (startDate) conditions.push(gte(accountingEntries.data, startDate) as any)
   if (endDate)   conditions.push(lte(accountingEntries.data, endDate) as any)
 
@@ -324,13 +352,13 @@ export async function getPrevisioni(startDate?: Date, endDate?: Date) {
   let debiti = 0
 
   for (const row of rows) {
-    if (row.tipo === 'CREDITO') crediti = parseFloat(row.totale)
-    else if (row.tipo === 'DEBITO')  debiti = parseFloat(row.totale)
+    if (row.tipo === 'CREDITO') crediti = inCentesimi(row.totale)
+    else if (row.tipo === 'DEBITO')  debiti = inCentesimi(row.totale)
   }
 
   return {
-    crediti: Number(crediti.toFixed(2)),
-    debiti:  Number(debiti.toFixed(2)),
+    crediti: inEuro(crediti),
+    debiti:  inEuro(debiti),
   }
 }
 
@@ -339,9 +367,13 @@ export async function getPrevisioni(startDate?: Date, endDate?: Date) {
 // Serve alle card "per metodo": ognuna mostra quanto è entrato e quanto è uscito.
 // ─────────────────────────────────────────────
 
-type EntrateUscite = { entrate: number; uscite: number }
+type EntrateUscite = { entrate: number; uscite: number; saldo: number }
 
-export async function getMovimentiPerMetodo(startDate?: Date, endDate?: Date) {
+// Il conto per metodo fatto da Postgres, in CENTESIMI INTERI: entrate, uscite e —
+// soprattutto — il SALDO, che qui è una sola sottrazione fatta sugli importi esatti
+// del database. Prima il saldo nasceva in JavaScript da due totali già arrotondati:
+// è esattamente lì che comparivano i centesimi impossibili delle rimanenze di cassa.
+async function movimentiPerMetodoCent(startDate?: Date, endDate?: Date): Promise<Record<string, EntrateUscite>> {
   const conditions = [
     inArray(accountingEntries.tipo, ['ENTRATA', 'USCITA']) as any,
     // I proventi diversi non sono cassa reale: fuori da "per metodo" e saldi cassa
@@ -352,34 +384,51 @@ export async function getMovimentiPerMetodo(startDate?: Date, endDate?: Date) {
 
   const rows = await db
     .select({
-      metodo: accountingEntries.metodoPagamento,
-      tipo:   accountingEntries.tipo,
-      totale: sql<string>`COALESCE(SUM(${accountingEntries.importo}::numeric), 0)::text`,
+      metodo:  accountingEntries.metodoPagamento,
+      entrate: sql<string>`COALESCE(SUM(CASE WHEN ${accountingEntries.tipo} = 'ENTRATA' THEN ${accountingEntries.importo}::numeric ELSE 0 END), 0)::text`,
+      uscite:  sql<string>`COALESCE(SUM(CASE WHEN ${accountingEntries.tipo} = 'USCITA'  THEN ${accountingEntries.importo}::numeric ELSE 0 END), 0)::text`,
+      // Entrate meno uscite in una sola passata, sui numeri esatti: niente sottrazioni
+      // fra valori già arrotondati.
+      saldo:   sql<string>`COALESCE(SUM(CASE WHEN ${accountingEntries.tipo} = 'ENTRATA' THEN ${accountingEntries.importo}::numeric ELSE -${accountingEntries.importo}::numeric END), 0)::text`,
     })
     .from(accountingEntries)
     .where(and(...(conditions as [any, ...any[]])))
-    .groupBy(accountingEntries.metodoPagamento, accountingEntries.tipo)
+    .groupBy(accountingEntries.metodoPagamento)
 
-  const vuoto = (): EntrateUscite => ({ entrate: 0, uscite: 0 })
+  const vuoto = (): EntrateUscite => ({ entrate: 0, uscite: 0, saldo: 0 })
   const acc: Record<string, EntrateUscite> = {
     CONTANTI: vuoto(), BONIFICO: vuoto(), POS: vuoto(), ASSEGNO: vuoto(), ALTRO: vuoto(),
   }
 
+  // I movimenti senza metodo indicato finiscono in ALTRO, come da sempre: qui si
+  // possono sommare più righe sulla stessa voce, e sommare interi è esatto.
   for (const row of rows) {
     const metodo = (row.metodo && acc[row.metodo]) ? row.metodo : 'ALTRO'
-    const val = parseFloat(row.totale)
-    if (row.tipo === 'ENTRATA')     acc[metodo]!.entrate += val
-    else if (row.tipo === 'USCITA') acc[metodo]!.uscite  += val
+    acc[metodo]!.entrate += inCentesimi(row.entrate)
+    acc[metodo]!.uscite  += inCentesimi(row.uscite)
+    acc[metodo]!.saldo   += inCentesimi(row.saldo)
   }
 
-  const r2 = (n: number) => Number(n.toFixed(2))
-  const totale: EntrateUscite = { entrate: 0, uscite: 0 }
+  const totale = vuoto()
   for (const k of Object.keys(acc)) {
     totale.entrate += acc[k]!.entrate
     totale.uscite  += acc[k]!.uscite
+    totale.saldo   += acc[k]!.saldo
   }
+  acc.TOTALE = totale
 
-  const conv = (e: EntrateUscite): EntrateUscite => ({ entrate: r2(e.entrate), uscite: r2(e.uscite) })
+  return acc
+}
+
+export async function getMovimentiPerMetodo(startDate?: Date, endDate?: Date) {
+  const acc = await movimentiPerMetodoCent(startDate, endDate)
+
+  // Unico arrotondamento della catena: qui, su ciò che la pagina mostra davvero.
+  const conv = (e: EntrateUscite): EntrateUscite => ({
+    entrate: inEuro(e.entrate),
+    uscite:  inEuro(e.uscite),
+    saldo:   inEuro(e.saldo),
+  })
 
   return {
     contanti: conv(acc.CONTANTI!),
@@ -387,7 +436,7 @@ export async function getMovimentiPerMetodo(startDate?: Date, endDate?: Date) {
     pos:      conv(acc.POS!),
     assegno:  conv(acc.ASSEGNO!),
     altro:    conv(acc.ALTRO!),
-    totale:   conv(totale),
+    totale:   conv(acc.TOTALE!),
   }
 }
 
@@ -395,16 +444,17 @@ export async function getMovimentiPerMetodo(startDate?: Date, endDate?: Date) {
 // SALDI DI CASSA — Rimanenze REALI (sempre dall'inizio attività, non per periodo).
 //   contanti = entrate − uscite in CONTANTI (quanto c'è nel cassetto)
 //   banca    = entrate − uscite di POS + BONIFICO + ASSEGNO (quanto c'è in banca)
+//
+// F3: i due saldi arrivano già fatti da Postgres (uno per metodo) e qui si sommano
+// come centesimi interi. È il punto che generava i "−0,4 centesimi" segnalati:
+// prima si sottraevano fra loro totali già arrotondati, e l'errore restava in fondo.
 // ─────────────────────────────────────────────
 
 export async function getSaldiCassa() {
-  const pm = await getMovimentiPerMetodo() // tutto lo storico
+  const acc = await movimentiPerMetodoCent() // tutto lo storico
 
-  const contanti = Number((pm.contanti.entrate - pm.contanti.uscite).toFixed(2))
-
-  const bancaEntrate = pm.pos.entrate + pm.bonifico.entrate + pm.assegno.entrate
-  const bancaUscite  = pm.pos.uscite  + pm.bonifico.uscite  + pm.assegno.uscite
-  const banca = Number((bancaEntrate - bancaUscite).toFixed(2))
+  const contanti = inEuro(acc.CONTANTI!.saldo)
+  const banca    = inEuro(acc.POS!.saldo + acc.BONIFICO!.saldo + acc.ASSEGNO!.saldo)
 
   return { contanti, banca }
 }
@@ -414,11 +464,15 @@ export async function getSaldiCassa() {
 // Il "resto" (doposcuola) è calcolato lato getDashboard: periodo - marketing.
 // ─────────────────────────────────────────────
 
-export async function getBreakdownMarketing(startDate: Date, endDate: Date) {
-  const rows = await db
+// Versione esatta, in centesimi interi: la dashboard ci sottrae sopra il blocco
+// "doposcuola" (periodo − marketing), quindi questi numeri NON vanno arrotondati prima.
+async function breakdownMarketingCent(startDate: Date, endDate: Date): Promise<TotaliCent> {
+  const [row] = await db
     .select({
-      tipo:   accountingEntries.tipo,
-      totale: sql<string>`COALESCE(SUM(${accountingEntries.importo}::numeric), 0)::text`,
+      entrate: sql<string>`COALESCE(SUM(CASE WHEN ${accountingEntries.tipo} = 'ENTRATA' THEN ${accountingEntries.importo}::numeric ELSE 0 END), 0)::text`,
+      uscite:  sql<string>`COALESCE(SUM(CASE WHEN ${accountingEntries.tipo} = 'USCITA'  THEN ${accountingEntries.importo}::numeric ELSE 0 END), 0)::text`,
+      // Anche qui il margine lo fa Postgres, in una passata sola sugli importi esatti.
+      margine: sql<string>`COALESCE(SUM(CASE WHEN ${accountingEntries.tipo} = 'ENTRATA' THEN ${accountingEntries.importo}::numeric ELSE -${accountingEntries.importo}::numeric END), 0)::text`,
     })
     .from(accountingEntries)
     .where(
@@ -429,16 +483,17 @@ export async function getBreakdownMarketing(startDate: Date, endDate: Date) {
         eq(accountingEntries.categoria, CAT.MARKETING),
       )
     )
-    .groupBy(accountingEntries.tipo)
 
-  let mktE = 0
-  let mktU = 0
-  for (const r of rows) {
-    if (r.tipo === 'ENTRATA') mktE = parseFloat(r.totale)
-    else mktU = parseFloat(r.totale)
+  return {
+    entrate: inCentesimi(row?.entrate),
+    uscite:  inCentesimi(row?.uscite),
+    margine: inCentesimi(row?.margine),
   }
-  const r2 = (n: number) => Number(n.toFixed(2))
-  return { entrate: r2(mktE), uscite: r2(mktU), margine: r2(mktE - mktU) }
+}
+
+export async function getBreakdownMarketing(startDate: Date, endDate: Date) {
+  const c = await breakdownMarketingCent(startDate, endDate)
+  return { entrate: inEuro(c.entrate), uscite: inEuro(c.uscite), margine: inEuro(c.margine) }
 }
 
 // ─────────────────────────────────────────────
@@ -563,24 +618,37 @@ export function mesiCalendario(start: Date, end: Date): number {
 }
 
 export async function getDashboard(startDate: Date, endDate: Date) {
-  const [periodo, perMetodo, saldiCassa, fattureInAttesa, previsioni, marketing, speseFisse, fatturato, proventiDiversi] = await Promise.all([
-    getNetMargin(startDate, endDate),
+  // F3: periodo e marketing arrivano in CENTESIMI ESATTI perché qui sotto ci si fanno
+  // ancora dei conti sopra (il blocco "doposcuola" e il break-even). Si arrotonda solo
+  // alla fine, su ciò che viene restituito all'interfaccia.
+  const [periodoCent, perMetodo, saldiCassa, fattureInAttesa, previsioni, marketingCent, speseFisse, fatturato, proventiDiversi, bolliDaVersare] = await Promise.all([
+    netMarginCent(startDate, endDate),
     getMovimentiPerMetodo(startDate, endDate),
     getSaldiCassa(),
     getPendingInvoices(),
     getPrevisioni(),
-    getBreakdownMarketing(startDate, endDate),
+    breakdownMarketingCent(startDate, endDate),
     getSpeseFisse(),
     getFatturato(),
     getProventiDiversiTotali(startDate, endDate),
+    getBolliDaVersareTotali(),
   ])
 
-  const r2 = (n: number) => Number(n.toFixed(2))
-  // periodo (getNetMargin) esclude già i proventi diversi → nessuna sottrazione qui
+  const periodo = {
+    entrate: inEuro(periodoCent.entrate),
+    uscite:  inEuro(periodoCent.uscite),
+    margine: inEuro(periodoCent.margine),
+  }
+  const marketing = {
+    entrate: inEuro(marketingCent.entrate),
+    uscite:  inEuro(marketingCent.uscite),
+    margine: inEuro(marketingCent.margine),
+  }
+  // periodo (netMarginCent) esclude già i proventi diversi → nessuna sottrazione qui
   const doposcuola = {
-    entrate: r2(periodo.entrate - marketing.entrate),
-    uscite:  r2(periodo.uscite  - marketing.uscite),
-    margine: r2(periodo.margine - marketing.margine),
+    entrate: inEuro(periodoCent.entrate - marketingCent.entrate),
+    uscite:  inEuro(periodoCent.uscite  - marketingCent.uscite),
+    margine: inEuro(periodoCent.margine - marketingCent.margine),
   }
 
   // Costi fissi: ogni spesa pesa solo per i mesi in cui era in vigore.
@@ -591,13 +659,17 @@ export async function getDashboard(startDate: Date, endDate: Date) {
   // nessuno scarto possibile fra l'elenco nel popup e il numero del break-even.
   const costiFissiDettaglio = dettaglioCostiFissiDelPeriodo(speseFisse, startDate, endDate)
   const costiFissiPeriodo   = costiFissiDelPeriodo(speseFisse, startDate, endDate)
-  const breakEven = r2(periodo.margine - costiFissiPeriodo)
+  // Break-even: il margine esatto meno le spese fisse, sottratti in centesimi interi
+  // e arrotondati una volta sola. Prima erano due numeri già arrotondati a sottrarsi
+  // fra loro, ed è lo stesso difetto delle rimanenze di cassa.
+  const breakEven = inEuro(periodoCent.margine - inCentesimi(costiFissiPeriodo))
 
   return {
     periodo,
     perMetodo,
     saldiCassa,
     previsioni,
+    bolliDaVersare,
     fattureInAttesa: { count: fattureInAttesa.length, lista: fattureInAttesa },
     fatturato,
     proventiDiversi,
@@ -636,9 +708,13 @@ export async function deleteAccountingEntry(
   const [entry] = await db.select().from(accountingEntries).where(eq(accountingEntries.id, entryId)).limit(1)
   if (!entry) throw new Error('Movimento non trovato')
 
+  // Bollo (F1) già versato con F24: non si tocca più. Toglierlo adesso lascerebbe
+  // l'uscita dell'F24 a coprire un bollo che non esiste più, e i conti non tornerebbero.
+  await vietaSeBolloGiaVersato(entry)
+
   if (mode === 'storno') {
     const storno = await reverseTransaction(entryId, motivo)
-    // Coppia "Proventi diversi": lo storno deve riguardare entrambe le gambe,
+    // Coppia "Proventi diversi" o "Bollo": lo storno deve riguardare entrambe le gambe,
     // altrimenti il margine si sbilancia
     if (entry.linkedEntryId) await reverseTransaction(entry.linkedEntryId, motivo)
     return storno
@@ -657,9 +733,52 @@ export async function deleteAccountingEntry(
     await db.delete(accountingEntries).where(eq(accountingEntries.id, entryId))
     return { ok: true }
   }
-  // Movimento manuale
+  // Movimento manuale (qui rientrano anche le due righe del bollo, che non hanno
+  // paymentId): cancellandone una il database porta via anche la gemella, per via
+  // del vincolo CASCADE su linkedEntryId. Al pagamento va però restituita la memoria,
+  // altrimenti il suo bollo non si potrebbe più registrare.
   await db.delete(accountingEntries).where(eq(accountingEntries.id, entryId))
+  await riapriBolloDelPagamento(entry)
   return { ok: true }
+}
+
+// ─────────────────────────────────────────────
+// BOLLO (F1) — due guardie che valgono per entrambe le righe della coppia.
+// ─────────────────────────────────────────────
+
+function isRigaBollo(entry: { categoria: string | null }) {
+  return !!entry.categoria && CATEGORIE_BOLLO.includes(entry.categoria)
+}
+
+// Un bollo è "già versato" se il suo DEBITO porta il riferimento a un'uscita F24.
+// Il controllo vale anche partendo dall'ENTRATA: la gemella è a un passo di distanza.
+async function vietaSeBolloGiaVersato(entry: { id: string; categoria: string | null; linkedEntryId: string | null; versamentoEntryId: string | null }) {
+  if (!isRigaBollo(entry)) return
+  if (entry.versamentoEntryId) {
+    throw new Error('Questo bollo è già stato versato con l\'F24: non si può più eliminare.')
+  }
+  if (entry.linkedEntryId) {
+    const [gemella] = await db
+      .select({ versamentoEntryId: accountingEntries.versamentoEntryId })
+      .from(accountingEntries)
+      .where(eq(accountingEntries.id, entry.linkedEntryId))
+      .limit(1)
+    if (gemella?.versamentoEntryId) {
+      throw new Error('Questo bollo è già stato versato con l\'F24: non si può più eliminare.')
+    }
+  }
+}
+
+// Cancellata una riga del bollo, il pagamento torna "senza bollo": così la segreteria
+// può registrarlo di nuovo se l'aveva tolto per sbaglio. Il legame col pagamento è
+// scritto nelle note (bolloPaymentId:…), perché la colonna paymentId è già occupata.
+async function riapriBolloDelPagamento(entry: { categoria: string | null; note: string | null }) {
+  if (!isRigaBollo(entry)) return
+  const paymentId = entry.note?.match(/bolloPaymentId:([A-Za-z0-9_-]+)/)?.[1]
+  if (!paymentId) return
+  await db.update(payments)
+    .set({ bolloRegistratoAt: null, updatedAt: new Date() })
+    .where(eq(payments.id, paymentId))
 }
 
 // ─────────────────────────────────────────────
@@ -693,7 +812,10 @@ export async function updateAccountingEntry(
   }
 
   if (entry.linkedEntryId && hasContentChange) {
-    throw new Error('Movimento accoppiato "Proventi diversi": per correggerlo elimina la coppia e ricreala.')
+    // Vale per le coppie gemelle: "Proventi diversi" e bollo. Modificarne una sola
+    // gamba sbilancerebbe l'altra, quindi la coppia si elimina e si rifà.
+    const etichetta = isRigaBollo(entry) ? 'del bollo' : '"Proventi diversi"'
+    throw new Error(`Movimento accoppiato ${etichetta}: per correggerlo elimina la coppia e ricreala.`)
   }
 
   const changes: Record<string, unknown> = { updatedAt: new Date() }

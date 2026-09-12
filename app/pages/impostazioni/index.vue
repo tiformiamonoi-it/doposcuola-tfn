@@ -66,15 +66,31 @@
               <span v-if="t.descrizione" class="ml-2 text-slate-400">— {{ t.descrizione }}</span>
             </p>
           </div>
-          <UButton
-            icon="i-heroicons-trash"
-            variant="ghost"
-            color="error"
-            size="xs"
-            :loading="eliminando === t.id"
-            title="Archivia template (i pacchetti già creati non cambiano)"
-            @click="eliminaTemplate(t)"
-          />
+          <div class="flex items-center gap-1 shrink-0">
+            <!-- La matita la vede solo l'amministratore: il listino è una decisione economica.
+                 Il server rifiuta comunque la modifica a chiunque altro (403), questo v-if serve
+                 solo a non mostrare un bottone che porterebbe a un errore. -->
+            <UButton
+              v-if="isAdmin"
+              icon="i-heroicons-pencil-square"
+              variant="ghost"
+              color="neutral"
+              size="xs"
+              :aria-label="`Modifica il modello ${t.nome}`"
+              title="Modifica questo modello (i pacchetti già venduti non cambiano)"
+              @click="apriModalModifica(t)"
+            />
+            <UButton
+              icon="i-heroicons-trash"
+              variant="ghost"
+              color="error"
+              size="xs"
+              :loading="eliminando === t.id"
+              :aria-label="`Archivia il modello ${t.nome}`"
+              title="Archivia template (i pacchetti già creati non cambiano)"
+              @click="eliminaTemplate(t)"
+            />
+          </div>
         </div>
       </div>
 
@@ -104,17 +120,31 @@
                 {{ t.oreIncluse }} ore · € {{ parseFloat(t.prezzoStandard).toFixed(2) }}
               </p>
             </div>
-            <UButton
-              icon="i-heroicons-arrow-uturn-left"
-              variant="ghost"
-              color="primary"
-              size="xs"
-              :loading="ripristinando === t.id"
-              title="Rimetti in elenco"
-              @click="ripristinaTemplate(t)"
-            >
-              Ripristina
-            </UButton>
+            <div class="flex items-center gap-1 shrink-0">
+              <!-- Anche un modello archiviato si può correggere: serve a sistemarlo PRIMA di
+                   rimetterlo in elenco, invece di ripristinarlo con il prezzo sbagliato. -->
+              <UButton
+                v-if="isAdmin"
+                icon="i-heroicons-pencil-square"
+                variant="ghost"
+                color="neutral"
+                size="xs"
+                :aria-label="`Modifica il modello archiviato ${t.nome}`"
+                title="Modifica questo modello archiviato"
+                @click="apriModalModifica(t)"
+              />
+              <UButton
+                icon="i-heroicons-arrow-uturn-left"
+                variant="ghost"
+                color="primary"
+                size="xs"
+                :loading="ripristinando === t.id"
+                title="Rimetti in elenco"
+                @click="ripristinaTemplate(t)"
+              >
+                Ripristina
+              </UButton>
+            </div>
           </div>
         </div>
       </div>
@@ -635,10 +665,32 @@
 
     </UTabs>
 
-    <!-- ─── MODAL CREA TEMPLATE ─── -->
-    <UModal v-model:open="modalCreaAperto" title="Nuovo Template Pacchetto">
+    <!-- ─── MODAL CREA / MODIFICA TEMPLATE ─── -->
+    <!-- È una finestra sola per i due casi: così i campi, le etichette e le regole sono per
+         forza identici fra "Aggiungi" e "Modifica", e non possono scivolare col tempo. -->
+    <UModal v-model:open="modalCreaAperto" :title="inModifica ? 'Modifica modello di pacchetto' : 'Nuovo Template Pacchetto'">
       <template #body>
         <div class="space-y-4">
+
+          <!-- L'avviso che il piano chiede: deve essere la prima cosa che si legge, perché
+               spiega l'unica cosa che un non addetto potrebbe fraintendere — qui si cambia
+               il listino di domani, non quello che le famiglie hanno già comprato. -->
+          <UAlert
+            v-if="inModifica"
+            color="warning"
+            variant="subtle"
+            icon="i-heroicons-exclamation-triangle"
+            title="Modificando questo modello cambi il listino da qui in avanti"
+          >
+            <template #description>
+              <p>I pacchetti già venduti agli alunni <strong>NON cambiano</strong>.</p>
+              <p v-if="usiDelTemplateInModifica > 0" class="mt-1">
+                {{ usiDelTemplateInModifica }}
+                {{ usiDelTemplateInModifica === 1 ? 'pacchetto già venduto' : 'pacchetti già venduti' }}
+                con questo modello {{ usiDelTemplateInModifica === 1 ? 'resta come è' : 'restano come sono' }}.
+              </p>
+            </template>
+          </UAlert>
 
           <UFormField label="Nome template" required>
             <UInput v-model="nuovo.nome" placeholder="Es: 10 ore Medie" class="w-full" />
@@ -648,7 +700,7 @@
             <UFormField label="Categoria" required>
               <USelectMenu
                 v-model="nuovo.categoria"
-                :items="['Elementari', 'Medie', 'Superiori', 'Università', 'Concorsi', 'Preparazione Esami', 'Altro']"
+                :items="categorieDisponibili"
                 placeholder="Seleziona..."
                 class="w-full"
               />
@@ -714,7 +766,7 @@
       <template #footer>
         <div class="flex justify-end gap-3">
           <UButton variant="ghost" @click="modalCreaAperto = false">Annulla</UButton>
-          <UButton :loading="salvando" @click="creaTemplate">Salva Template</UButton>
+          <UButton :loading="salvando" @click="salvaTemplate">{{ inModifica ? 'Salva modifiche' : 'Salva Template' }}</UButton>
         </div>
       </template>
     </UModal>
@@ -775,6 +827,12 @@ const toast = useToast()
 const { user: utenteLoggato } = useUserSession()
 const emailAdmin = computed(() => utenteLoggato.value?.email ?? '')
 
+// Chi sta guardando: la matita per correggere i modelli di pacchetto è roba da amministratore.
+// (Oggi questa pagina è già riservata agli ADMIN dal middleware qui sopra, ma il controllo
+// esplicito resta: se un domani le Impostazioni si aprissero al Super Tutor, il listino
+// continuerebbe a non essere modificabile da lui.)
+const isAdmin = computed(() => utenteLoggato.value?.role === 'ADMIN')
+
 type EsitoProvaEmail = {
   ok: boolean
   destinatario: string
@@ -830,14 +888,21 @@ const { data: archiviatiData, refresh: refreshArchiviati } = useLazyFetch('/api/
 const templatesArchiviati = computed(() => archiviatiData.value ?? [])
 const mostraArchiviati = ref(false)
 
-// ─── Modal crea ───
-const modalCreaAperto = ref(false)
-const salvando        = ref(false)
+// ─── Modal crea / modifica ───
+// Una finestra sola per i due casi: se `templateInModifica` è pieno stiamo correggendo un
+// modello esistente, se è vuoto ne stiamo creando uno nuovo.
+const modalCreaAperto     = ref(false)
+const salvando            = ref(false)
+const templateInModifica  = ref<any | null>(null)
+const inModifica          = computed(() => templateInModifica.value !== null)
+// Quanti pacchetti sono già stati venduti con questo modello: il numero arriva già pronto
+// dalla lista (campo `inUso`) e serve a scriverlo nero su bianco dentro l'avviso.
+const usiDelTemplateInModifica = computed(() => templateInModifica.value?.inUso ?? 0)
 
 const nuovo = reactive({
   nome:              '',
   descrizione:       '',
-  tipo:              'ORE' as 'ORE' | 'MENSILE',
+  tipo:              'ORE' as 'ORE' | 'MENSILE' | 'A_CONSUMO',
   categoria:         '',
   oreIncluse:        10,
   giorniInclusi:     12,
@@ -845,6 +910,17 @@ const nuovo = reactive({
   prezzoStandard:    150,
   tariffaOraria:     10,
 })
+
+// Le categorie proposte nella tendina. Se il modello che stiamo modificando ne ha una vecchia,
+// arrivata dai dati importati e non più in elenco, la aggiungiamo in testa: altrimenti aprendo
+// la finestra la categoria sparirebbe dalla tendina e si rischierebbe di salvarla cambiata
+// senza accorgersene.
+const CATEGORIE_STANDARD = ['Elementari', 'Medie', 'Superiori', 'Università', 'Concorsi', 'Preparazione Esami', 'Altro']
+const categorieDisponibili = computed(() =>
+  nuovo.categoria && !CATEGORIE_STANDARD.includes(nuovo.categoria)
+    ? [nuovo.categoria, ...CATEGORIE_STANDARD]
+    : CATEGORIE_STANDARD,
+)
 
 // Per i template MENSILI le ore totali sono SEMPRE giorni × ore/giorno (read-only)
 watch(
@@ -859,11 +935,81 @@ watch(
 )
 
 function apriModalCrea() {
+  templateInModifica.value = null
   Object.assign(nuovo, {
     nome: '', descrizione: '', tipo: 'ORE', categoria: '',
     oreIncluse: 10, giorniInclusi: 12, orarioGiornaliero: 3, prezzoStandard: 150, tariffaOraria: 10
   })
   modalCreaAperto.value = true
+}
+
+// Apre la STESSA finestra, già compilata con i valori del modello scelto.
+function apriModalModifica(t: any) {
+  templateInModifica.value = t
+  Object.assign(nuovo, {
+    nome:        t.nome ?? '',
+    descrizione: t.descrizione ?? '',
+    tipo:        t.tipo ?? 'ORE',
+    categoria:   t.categoria ?? '',
+    // I numeri arrivano dal database come testo ("150.00", per non perdere i centesimi):
+    // vanno riportati a numero, altrimenti i campi con le frecciette non saprebbero che farne.
+    // Dove il valore è vuoto rimettiamo il default della creazione: sono i campi che per
+    // questo tipo di pacchetto non si vedono nemmeno, ma che devono avere un valore sensato
+    // se l'amministratore cambia tipo mentre sta modificando.
+    oreIncluse:        Number(t.oreIncluse ?? 0) || 0,
+    giorniInclusi:     Number(t.giorniInclusi ?? 0) || 12,
+    orarioGiornaliero: Number(t.orarioGiornaliero ?? 0) || 3,
+    prezzoStandard:    Number(t.prezzoStandard ?? 0) || 0,
+    tariffaOraria:     Number(t.tariffaOraria ?? 0) || 10,
+  })
+  modalCreaAperto.value = true
+}
+
+// Chiusa la finestra (Annulla, X o Esc) si torna sempre in modalità "creazione": senza questo,
+// la volta dopo l'avviso arancione comparirebbe anche su un modello nuovo.
+watch(modalCreaAperto, (aperto) => {
+  if (!aperto) templateInModifica.value = null
+})
+
+// Il pacchetto di dati da spedire al server, costruito una volta sola per creazione e modifica:
+// le due strade devono mandare gli stessi campi, altrimenti un modello corretto finirebbe per
+// avere regole diverse da uno appena creato.
+//
+// L'unica differenza è il "vuoto esplicito": in modifica i campi che non c'entrano con il tipo
+// scelto vengono azzerati (null). Serve a un caso concreto — un modello MENSILE trasformato in
+// ORE altrimenti si terrebbe nel database i giorni e le ore/giorno di prima, numeri fantasma
+// che nessuno vede più ma che restano lì.
+function corpoDalForm(perModifica: boolean) {
+  const body: any = {
+    nome:           nuovo.nome,
+    tipo:           nuovo.tipo,
+    categoria:      nuovo.categoria,
+    oreIncluse:     nuovo.oreIncluse,
+    prezzoStandard: nuovo.prezzoStandard,
+  }
+  if (nuovo.descrizione) body.descrizione = nuovo.descrizione
+  else if (perModifica)  body.descrizione = null
+
+  if (nuovo.tipo === 'MENSILE') {
+    if (nuovo.giorniInclusi > 0)     body.giorniInclusi     = nuovo.giorniInclusi
+    if (nuovo.orarioGiornaliero > 0) body.orarioGiornaliero = nuovo.orarioGiornaliero
+  } else if (perModifica) {
+    body.giorniInclusi     = null
+    body.orarioGiornaliero = null
+  }
+
+  if (nuovo.tipo === 'A_CONSUMO') {
+    if (nuovo.tariffaOraria > 0)     body.tariffaOraria     = nuovo.tariffaOraria
+  } else if (perModifica) {
+    body.tariffaOraria = null
+  }
+
+  return body
+}
+
+// Il bottone del footer: decide da solo se sta creando o correggendo.
+function salvaTemplate() {
+  return inModifica.value ? modificaTemplate() : creaTemplate()
 }
 
 async function creaTemplate() {
@@ -873,27 +1019,49 @@ async function creaTemplate() {
   }
   salvando.value = true
   try {
-    const body: any = {
-      nome:           nuovo.nome,
-      tipo:           nuovo.tipo,
-      categoria:      nuovo.categoria,
-      oreIncluse:     nuovo.oreIncluse,
-      prezzoStandard: nuovo.prezzoStandard,
-    }
-    if (nuovo.descrizione) body.descrizione = nuovo.descrizione
-    if (nuovo.tipo === 'MENSILE') {
-      if (nuovo.giorniInclusi > 0)     body.giorniInclusi     = nuovo.giorniInclusi
-      if (nuovo.orarioGiornaliero > 0) body.orarioGiornaliero = nuovo.orarioGiornaliero
-    } else if (nuovo.tipo === 'A_CONSUMO') {
-      if (nuovo.tariffaOraria > 0)     body.tariffaOraria     = nuovo.tariffaOraria
-    }
-
-    await $fetch('/api/standard-packages', { method: 'POST', body })
+    await $fetch('/api/standard-packages', { method: 'POST', body: corpoDalForm(false) })
     toast.add({ title: 'Template creato', color: 'success', icon: 'i-heroicons-check-circle' })
     modalCreaAperto.value = false
     refresh()
   } catch (err: any) {
     toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile creare il template', color: 'error' })
+  } finally {
+    salvando.value = false
+  }
+}
+
+// ─── Modifica template (solo ADMIN: il server rifiuta chiunque altro con un 403 parlante) ───
+async function modificaTemplate() {
+  const t = templateInModifica.value
+  if (!t) return
+
+  if (!nuovo.nome || !nuovo.categoria) {
+    toast.add({ title: 'Compila nome e categoria', color: 'warning', icon: 'i-heroicons-exclamation-circle' })
+    return
+  }
+
+  salvando.value = true
+  try {
+    await $fetch(`/api/standard-packages/${t.id}`, { method: 'PUT', body: corpoDalForm(true) })
+    toast.add({
+      title: 'Modello aggiornato',
+      description: 'Vale per i pacchetti che venderai da adesso: quelli già venduti restano come sono.',
+      color: 'success',
+      icon: 'i-heroicons-check-circle',
+    })
+    modalCreaAperto.value = false
+    // Si ricaricano tutt'e due gli elenchi: la matita c'è anche sui modelli archiviati.
+    refresh()
+    refreshArchiviati()
+  } catch (err: any) {
+    // La finestra resta APERTA di proposito: l'utente legge il motivo, corregge il campo
+    // sbagliato e riprova, senza dover riscrivere tutto da capo.
+    toast.add({
+      title: 'Modifica non salvata',
+      description: err?.data?.statusMessage ?? err?.statusMessage ?? 'Impossibile modificare il modello',
+      color: 'error',
+      icon: 'i-heroicons-exclamation-triangle',
+    })
   } finally {
     salvando.value = false
   }

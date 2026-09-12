@@ -79,6 +79,11 @@ export const payments = pgTable('payments', {
   riferimento:     text('riferimento'),
   note:            text('note'),
 
+  // Bollo (F1): quando è stata registrata la marca da bollo di QUESTO pagamento.
+  // Vuota = bollo mai registrato. È la memoria che impedisce di incassarlo due volte
+  // sullo stesso pagamento, anche se qualcuno rimanda il modulo o clicca due volte.
+  bolloRegistratoAt: timestamp('bollo_registrato_at', { withTimezone: true }),
+
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

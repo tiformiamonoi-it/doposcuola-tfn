@@ -1,9 +1,10 @@
 import { db } from '../database/client'
 import { accountingEntries, packages, payments, students } from '../database/schema'
-import { and, count, desc, eq, sql } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, sql } from 'drizzle-orm'
 import { computePackageStates } from './package.service'
 import { conFattura, rimuoviSuffissoFattura } from '#shared/fattura'
-import { CAT } from '#shared/accounting-categories'
+import { CAT, CATEGORIE_BOLLO } from '#shared/accounting-categories'
+import { registraBolloInTransazione, riferimentoBollo } from './bollo.service'
 import type { CreatePaymentInput, PaymentQuery, UpdatePaymentInput } from '#shared/schemas/payment.schema'
 
 // ─────────────────────────────────────────────
@@ -117,6 +118,22 @@ export async function createPayment(data: CreatePaymentInput) {
         data:            data.dataPagamento,
       })
       .returning()
+
+    // Marca da bollo (F1): se il pagamento supera 77,47 € ed è con fattura, nascono
+    // qui — nella STESSA transazione — le due righe gemelle da 2 € (entrata + debito
+    // verso lo Stato). Il pacchetto resta al suo prezzo: i 2 € sono una riga a parte.
+    // Se la spunta è tolta, o l'importo è sotto soglia, non succede nulla.
+    if (data.aggiungiBollo !== false) {
+      await registraBolloInTransazione(tx, {
+        paymentId:       payment!.id,
+        packageId:       data.packageId,
+        importoPagato:   data.importo,
+        richiedeFattura: data.fatturaRichiesta,
+        metodoPagamento: data.metodoPagamento,
+        data:            data.dataPagamento,
+        riferimento:     riferimentoBollo(`${pkg.studentFirstName} ${pkg.studentLastName}`, pkg.nome),
+      })
+    }
 
     return { payment, entry }
   })
@@ -329,6 +346,27 @@ export async function deletePayment(paymentId: string) {
     const [entry] = await tx.select().from(accountingEntries).where(eq(accountingEntries.paymentId, paymentId)).limit(1)
     if (entry && entry.fatturaEmessa) {
       throw new Error('Impossibile eliminare un pagamento con fattura già emessa')
+    }
+
+    // Marca da bollo (F1): le due righe del bollo non sono agganciate al pagamento
+    // con una colonna (paymentId è UNIQUE ed è già presa dal movimento dell'entrata),
+    // quindi non sparirebbero da sole. Se restassero, resterebbe anche un debito
+    // verso lo Stato per una fattura che non esiste più.
+    const righeBollo = await tx
+      .select({ id: accountingEntries.id, versamentoEntryId: accountingEntries.versamentoEntryId })
+      .from(accountingEntries)
+      .where(and(
+        inArray(accountingEntries.categoria, [...CATEGORIE_BOLLO]),
+        eq(accountingEntries.note, `bolloPaymentId:${paymentId}`),
+      ))
+
+    if (righeBollo.some(r => r.versamentoEntryId)) {
+      throw new Error('Il bollo di questo pagamento è già stato versato con l\'F24: il pagamento non si può più eliminare. Registra semmai uno storno.')
+    }
+    if (righeBollo.length > 0) {
+      // Basta cancellarle: sono gemelle, il vincolo CASCADE porta via anche l'altra
+      // se qui ne dovesse restare fuori una.
+      await tx.delete(accountingEntries).where(inArray(accountingEntries.id, righeBollo.map(r => r.id)))
     }
 
     // Ripristina il saldo del pacchetto (atomico)

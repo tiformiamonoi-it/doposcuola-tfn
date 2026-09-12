@@ -442,6 +442,36 @@
             </div>
           </UCard>
 
+          <!-- F1 — Bolli da versare: i 2 € incassati e non ancora girati allo Stato -->
+          <UCard
+            :class="bolliCount > 0 ? 'bg-orange-50 border-orange-100 cursor-pointer hover:shadow-md transition-shadow' : 'bg-slate-50'"
+            @click="bolliCount > 0 && apriDettaglioBolli()"
+          >
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-xs font-medium uppercase tracking-wide flex items-center gap-1" :class="bolliCount > 0 ? 'text-orange-600' : 'text-slate-400'">
+                  Bolli da versare
+                  <StatHelp text="Le marche da bollo da 2 € già incassate dai clienti e non ancora versate allo Stato con l'F24. Sono soldi che hai in cassa ma che non sono tuoi. Questi stessi euro sono compresi anche in 'Da Pagare (Debiti)'." />
+                </p>
+                <p class="text-2xl font-bold mt-1" :class="bolliCount > 0 ? 'text-orange-700' : 'text-slate-600'">
+                  € {{ fmt(bolliTotale) }}
+                </p>
+                <p class="text-[11px] mt-1" :class="bolliCount > 0 ? 'text-orange-500' : 'text-slate-400'">
+                  {{ bolliCount === 1 ? '1 bollo' : `${bolliCount} bolli` }}<span v-if="bolliCount > 0"> · clicca per il dettaglio</span>
+                </p>
+              </div>
+              <UIcon name="i-heroicons-ticket" class="w-6 h-6" :class="bolliCount > 0 ? 'text-orange-400' : 'text-slate-300'" />
+            </div>
+            <div v-if="bolliCount > 0" class="mt-3">
+              <UButton
+                size="xs" color="warning" variant="soft" icon="i-heroicons-banknotes" block
+                @click.stop="apriVersamentoF24"
+              >
+                Registra versamento F24
+              </UButton>
+            </div>
+          </UCard>
+
         </div>
         </template>
       </UCollapsible>
@@ -817,6 +847,93 @@
       </template>
     </UModal>
 
+    <!-- ─── MODAL F1 — Dettaglio dei bolli ancora da versare ─── -->
+    <UModal v-model:open="modalBolliAperto" title="Bolli da versare">
+      <template #body>
+        <div class="space-y-3">
+          <p class="text-sm text-slate-500">
+            Sono le marche da bollo da 2 € già incassate dalle famiglie e non ancora versate
+            allo Stato. Si versano tutte insieme con un F24: non una alla volta.
+          </p>
+          <div v-if="loadingBolli" class="flex justify-center py-10">
+            <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-slate-400" />
+          </div>
+          <p v-else-if="bolliLista.length === 0" class="text-center py-8 text-sm text-slate-400">
+            Nessun bollo in attesa: il conto è a zero.
+          </p>
+          <UTable
+            v-else
+            :data="bolliLista"
+            :columns="[
+              { accessorKey: 'data',        header: 'Data' },
+              { accessorKey: 'descrizione', header: 'Alunno e pacchetto' },
+              { accessorKey: 'importo',     header: 'Importo' },
+            ]"
+          >
+            <template #data-cell="{ row }">{{ formatData(row.original.data) }}</template>
+            <template #descrizione-cell="{ row }">
+              <span class="text-slate-700">{{ nomeBollo(row.original.descrizione) }}</span>
+            </template>
+            <template #importo-cell="{ row }">
+              <span class="font-medium text-slate-800">€ {{ fmt(parseFloat(row.original.importo)) }}</span>
+            </template>
+          </UTable>
+          <div v-if="bolliLista.length" class="flex items-baseline justify-between border-t border-slate-200 pt-2">
+            <span class="text-sm font-medium text-slate-700">Totale da versare</span>
+            <span class="text-lg font-bold text-orange-700 tabular-nums">€ {{ fmt(bolliTotale) }}</span>
+          </div>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex justify-end gap-2 w-full">
+          <UButton variant="ghost" @click="modalBolliAperto = false;">Chiudi</UButton>
+          <UButton v-if="bolliCount > 0" color="warning" icon="i-heroicons-banknotes" @click="apriVersamentoF24">
+            Registra versamento F24
+          </UButton>
+        </div>
+      </template>
+    </UModal>
+
+    <!-- ─── MODAL F1 — Registra il versamento cumulativo con F24 ─── -->
+    <UModal v-model:open="modalVersamentoAperto" title="Registra versamento F24">
+      <template #body>
+        <div class="space-y-4">
+          <p class="text-sm text-slate-500">
+            Nasce <strong>una sola uscita</strong> con il totale, e tutti i bolli ancora aperti
+            vengono segnati come versati. Da quel momento spariscono da "Bolli da versare"
+            e da "Da Pagare (Debiti)".
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <UFormField label="Data del versamento">
+              <UInput v-model="datiVersamento.data" type="date" class="w-full" />
+            </UFormField>
+            <UFormField label="Metodo">
+              <USelect v-model="datiVersamento.metodo" :items="METODI_MOVIMENTO_ITEMS" class="w-full" />
+            </UFormField>
+          </div>
+          <!-- L'importo non si scrive a mano di proposito: è sempre la somma esatta dei
+               bolli che si stanno chiudendo, altrimenti uscita e debiti non tornerebbero -->
+          <div class="rounded-lg bg-orange-50 border border-orange-100 px-3 py-2.5">
+            <p class="text-xs text-orange-600 uppercase tracking-wide font-medium">Importo del versamento</p>
+            <p class="text-2xl font-bold text-orange-700 mt-0.5">€ {{ fmt(bolliTotale) }}</p>
+            <p class="text-xs text-orange-800 mt-1">
+              {{ bolliCount === 1 ? '1 bollo' : `${bolliCount} bolli` }} da € 2,00 —
+              il totale lo calcola il gestionale e non è modificabile, così l'uscita
+              corrisponde sempre ai bolli che chiude.
+            </p>
+          </div>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex justify-end gap-2 w-full">
+          <UButton variant="ghost" @click="modalVersamentoAperto = false;">Annulla</UButton>
+          <UButton color="warning" :loading="salvandoVersamento" :disabled="bolliCount === 0" @click="confermaVersamentoF24">
+            Conferma versamento
+          </UButton>
+        </div>
+      </template>
+    </UModal>
+
     <!-- ─── MODAL BREAK-EVEN — il conto riga per riga ─── -->
     <UModal v-model:open="modalBreakEvenAperto" title="Come si calcola il break-even">
       <template #body>
@@ -1028,10 +1145,74 @@ async function apriPrevisionale(tipo: 'CREDITO' | 'DEBITO') {
   modalPrevisionale.value   = tipo
   loadingPrevisionali.value = true
   try {
-    const res = await $fetch<{ data: any[] }>('/api/accounting/entries', { query: { tipo, limit: 100 } })
+    // soloAperti: esclude i bolli già chiusi da un versamento F24, esattamente come
+    // fa il totale della card. Elenco e numero grande devono sempre coincidere.
+    const res = await $fetch<{ data: any[] }>('/api/accounting/entries', { query: { tipo, limit: 100, soloAperti: 'true' } })
     entriePrevisionali.value = res.data ?? []
   } finally {
     loadingPrevisionali.value = false
+  }
+}
+
+// ─── F1 — Bolli da versare (card + dettaglio + versamento cumulativo F24) ───
+// Il numero e il totale arrivano già dalla dashboard: la card è pronta senza
+// aspettare una seconda chiamata. L'elenco si carica solo quando si apre il dettaglio.
+const bolliCount  = computed(() => (dash.value as any)?.bolliDaVersare?.count ?? 0)
+const bolliTotale = computed(() => (dash.value as any)?.bolliDaVersare?.totale ?? 0)
+
+const modalBolliAperto = ref(false)
+const bolliLista       = ref<any[]>([])
+const loadingBolli     = ref(false)
+
+// "Bollo — Luca Rossi · Superiori 2026/2027" → "Luca Rossi · Superiori 2026/2027":
+// nella colonna "Alunno e pacchetto" la parola "Bollo" sarebbe solo rumore.
+function nomeBollo(descrizione: string): string {
+  return String(descrizione ?? '').replace(/^Bollo\s+—\s+/, '')
+}
+
+async function apriDettaglioBolli() {
+  modalBolliAperto.value = true
+  loadingBolli.value     = true
+  try {
+    const res = await $fetch<{ lista: any[] }>('/api/accounting/bolli')
+    bolliLista.value = res.lista ?? []
+  } catch {
+    bolliLista.value = []
+  } finally {
+    loadingBolli.value = false
+  }
+}
+
+const modalVersamentoAperto = ref(false)
+const salvandoVersamento    = ref(false)
+const datiVersamento        = reactive({ data: oggiISO(), metodo: 'BONIFICO' })
+
+function apriVersamentoF24() {
+  datiVersamento.data   = oggiISO()
+  datiVersamento.metodo = 'BONIFICO'
+  modalBolliAperto.value     = false
+  modalVersamentoAperto.value = true
+}
+
+async function confermaVersamentoF24() {
+  salvandoVersamento.value = true
+  try {
+    const res = await $fetch<{ bolliChiusi: number; totale: number }>('/api/accounting/bolli/versamento', {
+      method: 'POST',
+      body: { data: datiVersamento.data, metodoPagamento: datiVersamento.metodo },
+    })
+    toast.add({
+      title: 'Versamento registrato',
+      description: `${res.bolliChiusi === 1 ? '1 bollo chiuso' : `${res.bolliChiusi} bolli chiusi`} per € ${fmt(res.totale)}.`,
+      color: 'success',
+      icon: 'i-heroicons-check-circle',
+    })
+    modalVersamentoAperto.value = false
+    refreshAll()
+  } catch (err: any) {
+    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile registrare il versamento', color: 'error' })
+  } finally {
+    salvandoVersamento.value = false
   }
 }
 

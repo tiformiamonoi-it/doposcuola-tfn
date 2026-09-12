@@ -151,6 +151,15 @@
             </div>
           </UFormField>
         </div>
+
+        <!-- Bollo (F1): anche l'acconto è un incasso. Sopra 77,47 € con fattura
+             compare la spunta, già attiva. -->
+        <SpuntaBollo
+          v-if="nuovo.accontoImporto > 0"
+          v-model="nuovo.accontoBollo"
+          :importo="nuovo.accontoImporto"
+          :richiede-fattura="nuovo.accontoFattura"
+        />
       </div>
     </template>
     <template #footer>
@@ -253,6 +262,8 @@ const nuovo = reactive({
   accontoImporto:    0,
   accontoMetodo:     'CONTANTI' as string,
   accontoFattura:    false,
+  // Bollo da 2 € (F1): vale solo sopra i 77,47 € con fattura, e in quel caso è dovuto
+  accontoBollo:      true,
   tariffaOraria:     10,
   standardPackageId: '',
 })
@@ -345,6 +356,7 @@ watch(isOpen, async (aperto) => {
       nuovo.accontoImporto = 0
       nuovo.accontoMetodo = 'CONTANTI'
       nuovo.accontoFattura = false
+      nuovo.accontoBollo = true
 
       // Recuperiamo comunque gli attivi per l'alert
       try {
@@ -361,7 +373,7 @@ watch(isOpen, async (aperto) => {
         dataInizio: initDataInizio,
         dataScadenza: calcolaDataScadenza('ORE', initDataInizio),
         giorniAcquistati: 12, orarioGiornaliero: 3,
-        accontoImporto: 0, accontoMetodo: 'CONTANTI', accontoFattura: false,
+        accontoImporto: 0, accontoMetodo: 'CONTANTI', accontoFattura: false, accontoBollo: true,
         tariffaOraria: 10, standardPackageId: '',
       })
       studenteSelezionato.value = props.studentId ?? ''
@@ -446,6 +458,7 @@ async function doCreaPacchetto() {
         importo:         nuovo.accontoImporto,
         metodoPagamento: nuovo.accontoMetodo,
         richiedeFattura: nuovo.accontoFattura,
+        aggiungiBollo:   nuovo.accontoBollo,
       }
     }
 

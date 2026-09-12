@@ -15,6 +15,10 @@ const querySchema = z.object({
   // Filtro fattura: CON = da emettere + emesse, DA_EMETTERE = richiesta ma non emessa, EMESSE = già emessa
   fattura: z.enum(['CON', 'DA_EMETTERE', 'EMESSE']).optional(),
   metodo: z.enum(['CONTANTI', 'BONIFICO', 'POS', 'ASSEGNO', 'ALTRO']).optional(),
+  // Solo le partite ancora aperte: esclude i bolli già chiusi da un versamento F24.
+  // Lo usa il dettaglio della card "Da Pagare (Debiti)", che deve mostrare esattamente
+  // le voci che compongono il totale della card (getPrevisioni applica lo stesso filtro).
+  soloAperti: z.enum(['true', 'false']).optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -42,6 +46,7 @@ export default defineEventHandler(async (event) => {
     conditions.push(lte(accountingEntries.data, end))
   }
   if (query.categoria) conditions.push(eq(accountingEntries.categoria, query.categoria))
+  if (query.soloAperti === 'true') conditions.push(isNull(accountingEntries.versamentoEntryId))
 
   // Metodo di pagamento. La colonna è facoltativa (può essere vuota) e nella card
   // "Movimenti per metodo" i movimenti senza metodo finiscono in ALTRO

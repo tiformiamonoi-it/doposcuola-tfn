@@ -297,6 +297,13 @@
               <UCheckbox v-model="dati.pacchetto.accontoFattura" label="Richiede fattura" />
             </div>
           </div>
+          <!-- Bollo (F1): compare da solo sopra 77,47 € con fattura, già spuntato -->
+          <SpuntaBollo
+            v-if="dati.pacchetto.accontoImporto > 0"
+            v-model="dati.pacchetto.accontoBollo"
+            :importo="dati.pacchetto.accontoImporto"
+            :richiede-fattura="dati.pacchetto.accontoFattura"
+          />
         </div>
       </div>
 
@@ -614,6 +621,8 @@ const PACCHETTO_VUOTO = {
   oreAcquistate: 10, prezzoTotale: 0, dataInizio: oggiISO(), dataScadenza: '',
   giorniAcquistati: 12, orarioGiornaliero: 3, tariffaOraria: 10,
   accontoImporto: 0, accontoMetodo: 'CONTANTI', accontoFattura: false, standardPackageId: '',
+  // Bollo da 2 € (F1): vale solo sopra i 77,47 € con fattura, e in quel caso è dovuto
+  accontoBollo: true,
 }
 const PORTALE_VUOTO = { crea: false, firstName: '', lastName: '', email: '' }
 
@@ -1167,6 +1176,7 @@ async function salvaTutto() {
             importo: dati.pacchetto.accontoImporto,
             metodoPagamento: dati.pacchetto.accontoMetodo,
             richiedeFattura: dati.pacchetto.accontoFattura,
+            aggiungiBollo:   dati.pacchetto.accontoBollo,
           }
         }
         await $fetch('/api/packages', { method: 'POST', body: pkgBody })

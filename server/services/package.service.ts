@@ -3,7 +3,23 @@ import { accountingEntries, packages, packageRecharges, payments, students, less
 import { and, count, desc, eq, getTableColumns } from 'drizzle-orm'
 import { oggiRomeStr, romeDateStr } from '../utils/tutor-time-window'
 import { CAT } from '#shared/accounting-categories'
+import { serveBollo } from '#shared/bollo'
+import { registraBolloInTransazione, riferimentoBollo } from './bollo.service'
 import type { CreatePackageInput, PackageQuery, RechargePackageInput, UpdatePackageInput } from '#shared/schemas/package.schema'
+
+// ─────────────────────────────────────────────
+// MARCA DA BOLLO SUL PAGAMENTO INIZIALE (F1)
+//
+// L'acconto che si incassa creando o ricaricando un pacchetto è un pagamento a
+// tutti gli effetti: se supera 77,47 € ed è con fattura, vuole il suo bollo da 2 €.
+//
+// La spunta del modulo arriva come opzione a parte e non dentro i dati validati,
+// perché lo schema del pacchetto (shared/schemas/package.schema.ts) è in mano a un
+// altro intervento in corso e non va toccato adesso. Quando quel lavoro sarà chiuso,
+// `aggiungiBollo` potrà entrare in InitialPaymentSchema e questa opzione sparire.
+// Assente = bollo SÌ: sopra soglia con fattura è la regola, non l'eccezione.
+// ─────────────────────────────────────────────
+export type OpzioniPagamentoIniziale = { aggiungiBollo?: boolean }
 
 // ─────────────────────────────────────────────
 // MACCHINA A STATI DEI PACCHETTI
@@ -273,7 +289,7 @@ export async function getPackageById(id: string) {
 // Crea il pacchetto + eventuale pagamento iniziale nella stessa transazione atomica
 // ─────────────────────────────────────────────
 
-export async function createPackage(data: CreatePackageInput) {
+export async function createPackage(data: CreatePackageInput, opzioni?: OpzioniPagamentoIniziale) {
   return await db.transaction(async (tx) => {
     const importoPagato  = data.pagamentoIniziale?.importo ?? 0
     const importoResiduo = data.prezzoTotale - importoPagato
@@ -348,6 +364,26 @@ export async function createPackage(data: CreatePackageInput) {
         paymentId:       payment!.id,
         metodoPagamento: pag.metodoPagamento,
       })
+
+      // Bollo dell'acconto: il nome dell'alunno serve solo per scrivere la
+      // descrizione, quindi lo andiamo a prendere solo se il bollo serve davvero.
+      if (opzioni?.aggiungiBollo !== false && serveBollo(pag.importo, pag.richiedeFattura ?? false)) {
+        const [studente] = await tx
+          .select({ firstName: students.firstName, lastName: students.lastName })
+          .from(students)
+          .where(eq(students.id, data.studentId))
+          .limit(1)
+
+        await registraBolloInTransazione(tx, {
+          paymentId:       payment!.id,
+          packageId:       pkg!.id,
+          importoPagato:   pag.importo,
+          richiedeFattura: pag.richiedeFattura ?? false,
+          metodoPagamento: pag.metodoPagamento,
+          data:            pag.dataPagamento ?? new Date(),
+          riferimento:     riferimentoBollo(`${studente?.firstName ?? ''} ${studente?.lastName ?? ''}`, data.nome),
+        })
+      }
     }
 
     // Per i pacchetti A_CONSUMO la creazione è la PRIMA ricarica: la registriamo nel libretto
@@ -456,7 +492,7 @@ export async function updatePackage(id: string, data: UpdatePackageInput) {
 // Tutto in una transazione atomica. Aggiorna il libretto e ricalcola gli stati.
 // ─────────────────────────────────────────────
 
-export async function rechargePackage(id: string, data: RechargePackageInput) {
+export async function rechargePackage(id: string, data: RechargePackageInput, opzioni?: OpzioniPagamentoIniziale) {
   return await db.transaction(async (tx) => {
     const [pkg] = await tx.select().from(packages).where(eq(packages.id, id)).limit(1)
     if (!pkg) throw new Error('Pacchetto non trovato')
@@ -502,6 +538,25 @@ export async function rechargePackage(id: string, data: RechargePackageInput) {
         paymentId:       payment!.id,
         metodoPagamento: pag.metodoPagamento,
       })
+
+      // Anche la ricarica è un incasso: sopra 77,47 € con fattura vuole il suo bollo.
+      if (opzioni?.aggiungiBollo !== false && serveBollo(pag.importo, pag.richiedeFattura ?? false)) {
+        const [studente] = await tx
+          .select({ firstName: students.firstName, lastName: students.lastName })
+          .from(students)
+          .where(eq(students.id, pkg!.studentId))
+          .limit(1)
+
+        await registraBolloInTransazione(tx, {
+          paymentId:       payment!.id,
+          packageId:       pkg!.id,
+          importoPagato:   pag.importo,
+          richiedeFattura: pag.richiedeFattura ?? false,
+          metodoPagamento: pag.metodoPagamento,
+          data:            pag.dataPagamento ?? data.data,
+          riferimento:     riferimentoBollo(`${studente?.firstName ?? ''} ${studente?.lastName ?? ''}`, pkg!.nome),
+        })
+      }
     }
 
     // Riga nel libretto delle ricariche

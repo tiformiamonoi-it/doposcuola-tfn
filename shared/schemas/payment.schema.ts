@@ -46,6 +46,13 @@ export const CreatePaymentSchema = z.object({
   // Nota: nel DB la colonna si chiama "richiedeFattura" — il mapping avviene nel service
   fatturaRichiesta: z.boolean().default(false),
 
+  // Marca da bollo (F1). Il valore predefinito è "sì" perché sopra 77,47 € con
+  // fattura il bollo è dovuto per legge: è la regola, non l'eccezione. Chi registra
+  // il pagamento può toglierlo togliendo la spunta nel modulo.
+  // Il bollo nasce comunque SOLO se l'importo supera la soglia e la fattura è
+  // richiesta: sotto quelle condizioni questo campo non fa nulla (vedi shared/bollo.ts).
+  aggiungiBollo: z.boolean().default(true),
+
   riferimento: z
     .string()
     .max(200, 'Il riferimento non può superare 200 caratteri')
