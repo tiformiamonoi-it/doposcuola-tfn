@@ -64,6 +64,15 @@
                 <UCheckbox v-model="form.pagamentoIntegrazione.richiedeFattura" label="Richiede Fattura" />
               </UFormField>
             </div>
+
+            <!-- Bollo (F1): compare da solo sopra 77,47 € con fattura, già spuntato.
+                 Anche l'integrazione è un incasso: il bollo è dovuto come altrove. -->
+            <SpuntaBollo
+              v-if="form.pagamentoIntegrazione.importo > 0"
+              v-model="form.pagamentoIntegrazione.aggiungiBollo"
+              :importo="form.pagamentoIntegrazione.importo"
+              :richiede-fattura="form.pagamentoIntegrazione.richiedeFattura"
+            />
           </div>
         </div>
       </div>
@@ -98,7 +107,9 @@ const form = reactive({
     importo: 0,
     metodoPagamento: 'CONTANTI',
     dataPagamento: oggiISO(),
-    richiedeFattura: false
+    richiedeFattura: false,
+    // Bollo (F1): parte da "sì" perché sopra 77,47 € con fattura è dovuto per legge
+    aggiungiBollo: true
   }
 })
 
@@ -119,7 +130,8 @@ watch(() => [isOpen.value, props.pacchetto], ([open, pkg]) => {
       importo: 0,
       metodoPagamento: 'CONTANTI',
       dataPagamento: oggiISO(),
-      richiedeFattura: false
+      richiedeFattura: false,
+      aggiungiBollo: true
     }
   }
 })
@@ -197,7 +209,9 @@ async function salvaModifiche() {
         importo: form.pagamentoIntegrazione.importo,
         metodoPagamento: form.pagamentoIntegrazione.metodoPagamento,
         dataPagamento: new Date(form.pagamentoIntegrazione.dataPagamento),
-        richiedeFattura: form.pagamentoIntegrazione.richiedeFattura
+        richiedeFattura: form.pagamentoIntegrazione.richiedeFattura,
+        // Sopra 77,47 € con fattura il bollo è dovuto: viaggia con il pagamento
+        aggiungiBollo: form.pagamentoIntegrazione.aggiungiBollo
       }
     }
 

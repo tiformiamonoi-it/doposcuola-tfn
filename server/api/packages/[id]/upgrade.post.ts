@@ -1,6 +1,7 @@
 import { UpgradePackageSchema } from '#shared/schemas/package.schema'
 import { CAT } from '#shared/accounting-categories'
 import { getPackageById } from '../../../services/package.service'
+import { registraBolloInTransazione, riferimentoBollo } from '../../../services/bollo.service'
 import { db } from '../../../database/client'
 import { packages, payments, accountingEntries, lessonStudents, lessons } from '../../../database/schema'
 import { eq, desc, and, sql } from 'drizzle-orm'
@@ -169,6 +170,24 @@ export default defineEventHandler(async (event) => {
           metodoPagamento: pag.metodoPagamento as 'CONTANTI' | 'BONIFICO' | 'POS' | 'ASSEGNO',
           data: pag.dataPagamento ?? new Date(),
         })
+
+        // Marca da bollo (F1). Anche l'integrazione è un incasso come gli altri: se
+        // supera 77,47 € ed è con fattura, il bollo è dovuto. Il controllo della
+        // soglia e del doppione lo fa il servizio, qui si passa solo la richiesta.
+        if (pag.aggiungiBollo !== false) {
+          await registraBolloInTransazione(tx, {
+            paymentId,
+            packageId:       id as string,
+            importoPagato:   pag.importo,
+            richiedeFattura: pag.richiedeFattura ?? false,
+            metodoPagamento: pag.metodoPagamento,
+            data:            pag.dataPagamento ?? new Date(),
+            riferimento:     riferimentoBollo(
+              `${existing.studentFirstName ?? ''} ${existing.studentLastName ?? ''}`,
+              existing.nome,
+            ),
+          })
+        }
       }
 
       // Ricalcola gli stati

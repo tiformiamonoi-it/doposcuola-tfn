@@ -24,12 +24,10 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // Marca da bollo (F1) sull'acconto. La spunta viaggia dentro "pagamentoIniziale"
-  // ma la leggiamo qui dal corpo grezzo, perché lo schema del pacchetto è in mano a
-  // un altro intervento in corso e non va toccato adesso (vedi package.service.ts).
-  // Solo un "false" esplicito toglie il bollo: se il campo non c'è, vale la regola
-  // di legge (sopra 77,47 € con fattura il bollo è dovuto).
-  const aggiungiBollo = body?.pagamentoIniziale?.aggiungiBollo !== false
+  // Marca da bollo (F1) sull'acconto: la spunta viaggia dentro "pagamentoIniziale".
+  // Solo un "false" esplicito la toglie — sopra 77,47 € con fattura il bollo è
+  // dovuto per legge, quindi in mancanza di risposta vale la regola.
+  const aggiungiBollo = parsed.data.pagamentoIniziale?.aggiungiBollo !== false
 
   try {
     const pkg = await createPackage(parsed.data, { aggiungiBollo })

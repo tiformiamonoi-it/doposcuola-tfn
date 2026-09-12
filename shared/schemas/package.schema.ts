@@ -47,6 +47,10 @@ export const InitialPaymentSchema = z.object({
   richiedeFattura: z.boolean().default(false),
   riferimento:     z.string().max(200, 'Il riferimento non può superare 200 caratteri').optional(),
   note:            z.string().max(500, 'Le note non possono superare 500 caratteri').optional(),
+  // Marca da bollo (F1): vale solo sopra 77,47 € e con fattura, e in quel caso è
+  // dovuta per legge — quindi il valore di partenza è "sì". Solo un `false`
+  // esplicito la toglie, perché toglierla è la scelta insolita, non la regola.
+  aggiungiBollo:   z.boolean().default(true),
 })
 
 // ─────────────────────────────────────────────
