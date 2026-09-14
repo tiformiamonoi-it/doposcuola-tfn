@@ -83,7 +83,9 @@
         >
           Rinnova pacchetto
         </UButton>
+        <!-- Sul libretto non c'è: si ricarica, e la ricarica registra tutto (Q26) -->
         <UButton
+          v-if="!eLibretto"
           icon="i-heroicons-pencil"
           color="neutral"
           variant="soft"
@@ -272,6 +274,9 @@ const pagamenti = computed(() => pagamentiRes.value?.data ?? [])
 
 const giaSaldato    = computed(() => !!pacchetto.value?.stati?.includes('PAGATO'))
 const puoEliminare  = computed(() => pagamenti.value.length === 0 && lezioni.value.length === 0)
+// Il libretto (pacchetto a consumo) si ricarica e basta: "Modifica pacchetto" qui non
+// compare, perché aggiungeva ore senza scriverle nel libretto (decisione Q26, 14/09/2026).
+const eLibretto = computed(() => pacchetto.value?.tipo === 'A_CONSUMO')
 
 // ─── Azioni della riga in alto quando lo schermo è stretto ───
 // Su telefono i bottoni con l'etichetta lunga sono nascosti e vivono qui dentro.
@@ -284,7 +289,8 @@ const azioniTelefono = computed(() => {
       ? { label: 'Riattiva', icon: 'i-heroicons-play-circle', onSelect: () => chiediToggleSospeso(false) }
       : { label: 'Sospendi', icon: 'i-heroicons-pause-circle', onSelect: () => chiediToggleSospeso(true) },
     { label: 'Rinnova pacchetto', icon: 'i-heroicons-arrow-path-rounded-square', onSelect: () => { modalCreaAperto.value = true } },
-    { label: 'Modifica pacchetto', icon: 'i-heroicons-pencil', onSelect: () => { modalModificaAperto.value = true } },
+    // Sul libretto "Modifica pacchetto" non compare: vedi il commento sul bottone grande (Q26)
+    ...(eLibretto.value ? [] : [{ label: 'Modifica pacchetto', icon: 'i-heroicons-pencil', onSelect: () => { modalModificaAperto.value = true } }]),
   ]
 
   // Fuori dal menù il bottone spento ha un fumetto che spiega il perché, ma sul

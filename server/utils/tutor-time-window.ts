@@ -34,6 +34,17 @@ export function romeDateStr(d: Date): string {
   return romeParts(d).dateStr
 }
 
+// L'ORA CIVILE ITALIANA DI ADESSO, come {ora, minuti}.
+// Esportata perché i limiti di orario del gestionale non sono soltanto quelli del
+// tutor: le assenze delle medie hanno il loro (le 10 del mattino, decisione Q22)
+// e devono leggere l'orologio da QUI, dallo stesso punto e con lo stesso fuso —
+// mai con un `new Date()` per conto proprio, che sul server di Vercel racconta
+// l'ora di Londra e non quella di Trapani.
+export function oraRome(): { ora: number; minuti: number } {
+  const { hour, minute } = romeParts(new Date())
+  return { ora: hour, minuti: minute }
+}
+
 // La disponibilità di OGGI si può modificare solo entro le 9:30 (ora italiana)
 export function disponibilitaOggiAncoraAperta(): boolean {
   const { hour, minute } = romeParts(new Date())

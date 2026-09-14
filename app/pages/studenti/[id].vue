@@ -257,6 +257,54 @@
                   </div>
                 </div>
 
+                <!--
+                  ═══ ASSENZE SEGNALATE (voce G1 del piano) ═══
+                  Serve a una cosa sola: se un ragazzo sparisce per tre settimane te ne
+                  devi accorgere, anche se nessuna di quelle assenze ha scalato un
+                  centesimo dal pacchetto (decisione Q12). È un termometro, non un conto.
+                  Riservato ad ADMIN/SUPER_TUTOR come i consensi: nel motivo le famiglie
+                  scrivono cose di salute.
+                -->
+                <div v-if="isAdmin" class="bg-white rounded-xl shadow-sm ring-1 ring-slate-200">
+                  <div class="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                      <UIcon name="i-heroicons-hand-raised" class="w-5 h-5 text-amber-500" />
+                      <h3 class="font-medium text-slate-800">Assenze segnalate</h3>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <UBadge v-if="assenzeAlunno" color="neutral" variant="subtle" size="xs">
+                        {{ assenzeAlunno.questoMese }} questo mese
+                      </UBadge>
+                      <UBadge v-if="assenzeAlunno && assenzeAlunno.fuoriTempoQuestoMese > 0" color="warning" variant="subtle" size="xs"
+                              title="Segnalate dopo le 10 del mattino, quando la giornata era già organizzata">
+                        {{ assenzeAlunno.fuoriTempoQuestoMese }} fuori tempo
+                      </UBadge>
+                    </div>
+                  </div>
+                  <div class="p-4">
+                    <p v-if="pendingAssenze" class="text-sm text-slate-400">Caricamento delle assenze…</p>
+                    <p v-else-if="!assenzeAlunno || assenzeAlunno.righe.length === 0" class="text-sm text-slate-400 italic">
+                      Nessuna assenza segnalata negli ultimi sei mesi.
+                    </p>
+                    <ul v-else class="space-y-1.5">
+                      <li v-for="a in assenzeAlunno.righe" :key="a.id" class="text-sm flex flex-wrap items-center gap-2">
+                        <span class="font-medium text-slate-700">{{ formatData(a.data) }}</span>
+                        <span v-if="a.motivo" class="text-slate-500 italic">«{{ a.motivo }}»</span>
+                        <UBadge v-if="a.oltreIlTermine" color="warning" variant="subtle" size="xs">fuori tempo</UBadge>
+                        <span class="text-xs text-slate-400 ml-auto">
+                          {{ a.origine === 'PORTALE' ? 'dal portale' : 'in segreteria' }}
+                        </span>
+                      </li>
+                    </ul>
+                    <p v-if="assenzeAlunno && assenzeAlunno.totale > assenzeAlunno.righe.length" class="text-xs text-slate-400 mt-3">
+                      In elenco le {{ assenzeAlunno.righe.length }} più recenti su {{ assenzeAlunno.totale }} degli ultimi sei mesi.
+                    </p>
+                    <p class="text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">
+                      Avvisare non costa niente alla famiglia: un'assenza segnalata <strong>non scala</strong>
+                      ore, giorni o importi dal pacchetto.
+                    </p>
+                  </div>
+                </div>
 
               </div>
             </template>
@@ -2045,6 +2093,24 @@ const { data: datiConsensi, pending: pendingConsensi, refresh: refreshConsensi }
 const consensi = computed<StatoConsensiUI | null>(() => datiConsensi.value?.stato ?? null)
 const storicoConsensi = computed<RigaStoricoUI[]>(() => datiConsensi.value?.storico ?? [])
 const storicoConsensiAperto = ref(false)
+
+// ─── G1: le assenze segnalate di questo alunno ───
+// Non servono a scalare niente (decisione Q12): servono ad accorgersi in tempo di
+// un ragazzo che sta sparendo. Si caricano solo per ADMIN/SUPER_TUTOR, come i
+// consensi: nel motivo le famiglie scrivono cose di salute.
+interface RigaAssenzaUI {
+  id: string
+  data: string
+  motivo: string | null
+  origine: 'PORTALE' | 'GESTIONALE'
+  oltreIlTermine: boolean
+}
+const { data: assenzeAlunno, pending: pendingAssenze } = useLazyFetch<{
+  righe: RigaAssenzaUI[]
+  totale: number
+  questoMese: number
+  fuoriTempoQuestoMese: number
+}>(`/api/admin/students/${id}/assenze`, { lazy: true, immediate: isAdmin.value })
 // Quale interruttore sta salvando: 'IMMAGINI', 'MINORE_14' o 'MARKETING:<idGenitore>'.
 // Uno alla volta: due consensi cambiati insieme con una sola conferma a schermo
 // sarebbero due righe di storico che nessuno ha confermato davvero.

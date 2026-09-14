@@ -489,12 +489,18 @@ function aprirePagamento(row: any) {
 }
 
 function azioniPacchetto(row: any) {
+  // SUL LIBRETTO NIENTE "Modifica pacchetto" (decisione Q26 del 14/09/2026).
+  // Quel tasto aggiunge ore passando dall'upgrade, che NON scrive la riga nel
+  // libretto: il pacchetto diceva 10 ore e l'estratto conto ne contava 5, ed era la
+  // causa numero uno del "conto che non torna". Sul libretto si ricarica, e basta:
+  // una strada sola, che registra tutto. Sugli altri pacchetti resta com'era.
+  const eLibretto = row.tipo === 'A_CONSUMO'
   const azioni = [
     { label: 'Dettagli pacchetto', icon: 'i-heroicons-document-magnifying-glass', onSelect: () => navigateTo(`/pacchetti/${row.id}`) },
-    { label: 'Modifica pacchetto', icon: 'i-heroicons-pencil', onSelect: () => { pacchettoSelezionato.value = row; modalModificaAperto.value = true } },
+    ...(eLibretto ? [] : [{ label: 'Modifica pacchetto', icon: 'i-heroicons-pencil', onSelect: () => { pacchettoSelezionato.value = row; modalModificaAperto.value = true } }]),
     { label: 'Registra pagamento', icon: 'i-heroicons-banknotes', disabled: row.stati?.includes('PAGATO'), onSelect: () => aprirePagamento(row) },
   ]
-  if (row.tipo === 'A_CONSUMO') {
+  if (eLibretto) {
     azioni.push({ label: 'Ricarica', icon: 'i-heroicons-plus-circle', onSelect: () => { pacchettoSelezionato.value = row; modalRicaricaAperto.value = true } })
     azioni.push({ label: 'Libretto', icon: 'i-heroicons-list-bullet', onSelect: () => { pacchettoSelezionato.value = row; modalLibrettoAperto.value = true } })
   }

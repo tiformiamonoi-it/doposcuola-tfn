@@ -18,6 +18,12 @@ export const TARIFFE_MEZZA: Record<TipoLezione, number> = {
   MAXI:    4.00,
 }
 
+// Tariffa oraria di partenza del LIBRETTO (pacchetto a consumo), quando il pacchetto
+// non ne ha una sua. Decisa da Alessandro il 14/09/2026 (Q27): serve perché dal
+// libretto si comprano ORE, e senza una tariffa il gestionale non saprebbe che prezzo
+// scrivere. Resta sempre correggibile a mano al momento della ricarica.
+export const TARIFFA_ORARIA_DEFAULT = 10.00
+
 // Supplemento per materia speciale prenotata fuori dalla sua giornata prefissata
 // (€/giornata). Diventa un aumento del pacchetto solo dopo l'OK di ADMIN/SUPER_TUTOR.
 export const SUPPLEMENTO_SPECIALE = 10.00

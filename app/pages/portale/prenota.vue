@@ -9,6 +9,49 @@
       </UButton>
     </div>
 
+    <!--
+      LA STRADA DELL'ASSENZA (voce G1 del piano).
+      Alle medie il posto c'è sempre: non si prenota, si avvisa quando NON si
+      viene. Il riquadro compare solo quando serve — per le medie, e quando il
+      livello non si capisce (classe vuota o scritta in modo strano), perché lì
+      non si indovina: si mostrano tutte e due le strade.
+      La prenotazione resta comunque sotto, per tutti: è la decisione Q9.
+    -->
+    <div
+      v-if="mostraStradaAssenza"
+      class="rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center gap-3"
+      :class="livelloStudente === 'MEDIE' ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200 bg-slate-50'"
+    >
+      <UIcon
+        name="i-heroicons-hand-raised"
+        class="w-6 h-6 shrink-0"
+        :class="livelloStudente === 'MEDIE' ? 'text-emerald-600' : 'text-slate-400'"
+      />
+      <div class="flex-1 text-sm text-slate-700">
+        <template v-if="livelloStudente === 'MEDIE'">
+          <p class="font-medium text-slate-800">Alle medie il posto c'è sempre.</p>
+          <p class="text-slate-600 mt-0.5">
+            Non serve prenotare giorno per giorno: avvisaci solo quando <strong>non</strong> viene.
+          </p>
+        </template>
+        <template v-else>
+          <p class="font-medium text-slate-800">Non sappiamo in che classe è.</p>
+          <p class="text-slate-600 mt-0.5">
+            Puoi prenotare una lezione qui sotto, oppure — se il posto ce l'ha già tutti i giorni —
+            dirci soltanto quando non viene.
+          </p>
+        </template>
+      </div>
+      <UButton
+        to="/portale/assenze"
+        color="primary"
+        icon="i-heroicons-hand-raised"
+        class="justify-center shrink-0"
+      >
+        Segnala un'assenza
+      </UButton>
+    </div>
+
     <!-- Stepper -->
     <div class="flex items-center gap-2">
       <template v-for="(label, idx) in steps" :key="idx">
@@ -112,17 +155,42 @@
         <span class="font-medium text-slate-800">Quali materie vuoi studiare?</span>
       </template>
 
+      <!-- LA RISPOSTA PRIMA DELLA DOMANDA (G3).
+           Prima la ⭐ stava su tutte le materie speciali, sempre: diceva "questa
+           materia è speciale", che alla famiglia non serve. Quello che conta è
+           QUALE è in programma nel giorno scelto, perché è l'unica senza
+           supplemento — e per scoprirlo bisognava cliccarle una per una. -->
+      <div
+        v-if="materieSpecialiDelGiorno.length"
+        class="mb-3 text-sm rounded-lg p-3 border bg-emerald-50 text-emerald-800 border-emerald-200"
+      >
+        ⭐ In programma {{ formatDateBreve(form.dataDesiderata) }}:
+        <strong>{{ materieSpecialiDelGiorno.join(', ') }}</strong> — senza supplemento.
+      </div>
+
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <button
-          v-for="materia in MATERIE"
+          v-for="materia in materieOrdinate"
           :key="materia"
           class="px-3 py-2 text-sm rounded-lg border transition-colors text-left"
           :class="form.materie.includes(materia)
             ? (isEditMode ? 'border-amber-500 bg-amber-50 text-amber-700 font-medium' : 'border-tfn-500 bg-tfn-50 text-tfn-700 font-medium')
-            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'"
+            : (materieSpecialiDelGiorno.includes(materia)
+                ? 'border-emerald-200 bg-emerald-50/40 text-slate-700 hover:border-emerald-300'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300')"
           @click="toggleMateria(materia)"
         >
-          <span v-if="MATERIE_SPECIALI.includes(materia)">⭐ </span>{{ materia }}
+          <span class="block">
+            <span v-if="materieSpecialiDelGiorno.includes(materia)">⭐ </span>{{ materia }}
+          </span>
+          <!-- La riga piccola è il punto di tutta la modifica: dice cosa comporta
+               scegliere questa materia PROPRIO in questa data. -->
+          <span v-if="materieSpecialiDelGiorno.includes(materia)" class="block text-[11px] text-emerald-700 mt-0.5">
+            in programma oggi
+          </span>
+          <span v-else-if="MATERIE_SPECIALI.includes(materia)" class="block text-[11px] text-amber-600 mt-0.5">
+            + €{{ SUPPLEMENTO_SPECIALE }}<template v-if="prossimaGiornataDi(materia)"> · gratis {{ prossimaGiornataDi(materia) }}</template>
+          </span>
         </button>
       </div>
 
@@ -231,6 +299,7 @@ import { ref, reactive, computed, watchEffect, onMounted } from 'vue'
 import { SUPPLEMENTO_SPECIALE } from '#shared/tariffe'
 import { MATERIE_DEFAULT } from '#shared/materie'
 import { formatImporto } from '~/utils/format'
+import { livelloDaClasse } from '#shared/livello-scolastico'
 
 definePageMeta({
   layout: 'portal',
@@ -248,6 +317,28 @@ const MATERIE_SPECIALI = computed<string[]>(() => (portalConfigs.value as any)?.
 const GIORNATE_SPECIALI = computed<Record<string, string[]>>(() => (portalConfigs.value as any)?.giornate_speciali ?? {})
 
 const materieSpecialiDelGiorno = computed<string[]>(() => GIORNATE_SPECIALI.value[form.dataDesiderata] ?? [])
+// Le materie in programma nel giorno scelto vanno PER PRIME: sono quelle che la
+// famiglia sta cercando, e in un elenco di quaranta voci l'ordine è metà risposta.
+const materieOrdinate = computed<string[]>(() => {
+  const delGiorno = materieSpecialiDelGiorno.value
+  if (delGiorno.length === 0) return MATERIE.value
+  return [
+    ...MATERIE.value.filter((m: string) => delGiorno.includes(m)),
+    ...MATERIE.value.filter((m: string) => !delGiorno.includes(m)),
+  ]
+})
+
+// Per una materia speciale scelta nel giorno sbagliato: QUANDO sarebbe senza
+// supplemento. Dire "+ €10" e basta lascia la famiglia davanti a un prezzo; dire
+// "gratis giovedì 18" le lascia una scelta.
+const prossimaGiornataDi = (materia: string): string | null => {
+  const dal = form.dataDesiderata
+  const giorno = Object.keys(GIORNATE_SPECIALI.value)
+    .filter((data) => data > dal && (GIORNATE_SPECIALI.value[data] ?? []).includes(materia))
+    .sort()[0]
+  return giorno ? formatDateBreve(giorno) : null
+}
+
 const specialiScelte = computed(() => form.materie.filter((m) => MATERIE_SPECIALI.value.includes(m)))
 // Materie speciali scelte che NON sono in programma nella data selezionata → supplemento
 const specialiFuoriData = computed(() => specialiScelte.value.filter((m) => !materieSpecialiDelGiorno.value.includes(m)))
@@ -429,6 +520,20 @@ const studentSelezionato = computed(() => {
   return s ? `${s.firstName} ${s.lastName}` : ''
 })
 
+// ─── G1: il livello scolastico del figlio scelto ───
+// Non è salvato da nessuna parte: si deduce dalla classe scritta in segreteria, e
+// vale `null` quando la classe manca o non si capisce. `null` NON è "superiori":
+// è "non lo sappiamo", ed è per questo che il riquadro qui sopra compare anche in
+// quel caso, mostrando tutte e due le strade invece di sceglierne una a caso.
+const livelloStudente = computed(() => {
+  const s = students.value.find((s: any) => s.id === form.studentId)
+  return livelloDaClasse(s?.classe)
+})
+
+const mostraStradaAssenza = computed(() =>
+  Boolean(form.studentId) && (livelloStudente.value === 'MEDIE' || livelloStudente.value === null),
+)
+
 function toggleMateria(m: string) {
   const idx = form.materie.indexOf(m)
   if (idx === -1) {
@@ -449,6 +554,14 @@ function toggleMateria(m: string) {
   } else {
     form.materie.splice(idx, 1)
   }
+}
+
+// "giovedì 18/9": la data come la direbbe una persona, per le righe piccole
+function formatDateBreve(dateStr: string) {
+  if (!dateStr) return ''
+  const [a, m, g] = dateStr.split('-').map(Number)
+  const d = new Date(a!, (m ?? 1) - 1, g ?? 1)
+  return d.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'numeric' })
 }
 
 function formatDateLong(dateStr: string) {

@@ -80,3 +80,13 @@ export const consensoTipoEnum = pgEnum('consenso_tipo', ['MINORE_14', 'IMMAGINI'
 // cambiamenti della famiglia accendono il campanellino, perché quelli della
 // segreteria li sta facendo proprio chi il campanellino lo guarderebbe.
 export const consensoOrigineEnum = pgEnum('consenso_origine', ['PORTALE', 'GESTIONALE'])
+
+// Assenze segnalate (tabella `assenze`, voce G1): da dove è arrivata la segnalazione.
+// PORTALE    = l'ha scritta la famiglia (o il ragazzo) dal portale
+// GESTIONALE = l'ha registrata la segreteria, di solito dopo una telefonata
+// Stessa distinzione dei consensi, e per la stessa ragione: chi legge deve poter
+// capire se l'informazione arriva dalla famiglia o dal racconto di una chiamata.
+// È un enum SUO e non quello dei consensi, anche se oggi i valori coincidono:
+// due cose diverse che condividono un elenco finiscono sempre per litigare il
+// giorno in cui una delle due ha bisogno di un valore in più.
+export const assenzaOrigineEnum = pgEnum('assenza_origine', ['PORTALE', 'GESTIONALE'])

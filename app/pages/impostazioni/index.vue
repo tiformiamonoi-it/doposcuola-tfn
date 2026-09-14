@@ -200,7 +200,7 @@
             <div class="space-y-3">
               <div class="flex gap-2">
                 <UInput v-model="nuovaMateria" placeholder="Nuova materia..." class="flex-1" @keyup.enter="aggiungiMateria" />
-                <UButton icon="i-heroicons-plus" @click="aggiungiMateria" />
+                <UButton icon="i-heroicons-plus" aria-label="Aggiungi questa materia alla lista" @click="aggiungiMateria" />
               </div>
               <div class="flex flex-wrap gap-2">
                 <UBadge
@@ -225,9 +225,37 @@
                 ⭐ = materia <strong>speciale</strong>: si prenota nelle giornate del calendario qui accanto;
                 fuori da quelle giornate scatta il supplemento di €{{ SUPPLEMENTO_SPECIALE }}.
               </p>
+
+              <!--
+                Il catalogo delle superiori in un colpo solo. Sta in fondo alla card e non
+                in cima perché è una cosa che si fa una volta sola: chi apre questa scheda
+                tutti i giorni deve trovarci per primo il campo "Nuova materia".
+              -->
+              <div class="pt-3 border-t border-slate-200 space-y-2">
+                <UButton
+                  icon="i-heroicons-squares-plus"
+                  color="neutral"
+                  variant="subtle"
+                  block
+                  :disabled="salvandoConfigs"
+                  @click="aggiungiMaterieStandard"
+                >
+                  Aggiungi le materie standard
+                </UButton>
+                <p class="text-xs text-slate-400">
+                  Carica in una volta sola le <strong>{{ MATERIE_SUPERIORI.length }} materie delle superiori</strong>
+                  — tutti gli indirizzi, dal liceo al professionale.
+                  <template v-if="materieMancanti.length">
+                    Qui ne mancano <strong>{{ materieMancanti.length }}</strong>.
+                  </template>
+                  <template v-else>Ci sono già tutte.</template>
+                  Aggiunge solo quelle che mancano: non crea doppioni e non toglie mai niente.
+                  Salva da sé, poi togli con la ✕ quelle che non ti servono.
+                </p>
+              </div>
             </div>
             <template #footer>
-              <UButton @click="salvaConfigs" :loading="salvandoConfigs">Salva Modifiche</UButton>
+              <UButton @click="salvaConfigs()" :loading="salvandoConfigs">Salva Modifiche</UButton>
             </template>
           </UCard>
 
@@ -289,7 +317,7 @@
             </div>
 
             <template #footer>
-              <UButton @click="salvaConfigs" :loading="salvandoConfigs">Salva Modifiche</UButton>
+              <UButton @click="salvaConfigs()" :loading="salvandoConfigs">Salva Modifiche</UButton>
             </template>
           </UCard>
 
@@ -319,7 +347,7 @@
               </p>
             </div>
             <template #footer>
-              <UButton @click="salvaConfigs" :loading="salvandoConfigs">Salva Modifiche</UButton>
+              <UButton @click="salvaConfigs()" :loading="salvandoConfigs">Salva Modifiche</UButton>
             </template>
           </UCard>
 
@@ -340,7 +368,7 @@
               </UFormField>
             </div>
             <template #footer>
-              <UButton @click="salvaConfigs" :loading="salvandoConfigs">Salva Modifiche</UButton>
+              <UButton @click="salvaConfigs()" :loading="salvandoConfigs">Salva Modifiche</UButton>
             </template>
           </UCard>
 
@@ -364,7 +392,7 @@
               </p>
             </div>
             <template #footer>
-              <UButton @click="salvaConfigs" :loading="salvandoConfigs">Salva Modifiche</UButton>
+              <UButton @click="salvaConfigs()" :loading="salvandoConfigs">Salva Modifiche</UButton>
             </template>
           </UCard>
         </div>
@@ -490,7 +518,7 @@
             </UTable>
           </div>
           <template #footer>
-            <UButton @click="salvaConfigs" :loading="salvandoConfigs">Salva Modifiche</UButton>
+            <UButton @click="salvaConfigs()" :loading="salvandoConfigs">Salva Modifiche</UButton>
           </template>
         </UCard>
       </template>
@@ -598,7 +626,7 @@
           </div>
 
           <template #footer>
-            <UButton @click="salvaConfigs" :loading="salvandoConfigs">Salva Modifiche</UButton>
+            <UButton @click="salvaConfigs()" :loading="salvandoConfigs">Salva Modifiche</UButton>
           </template>
         </UCard>
       </template>
@@ -804,6 +832,7 @@
     :description="confirmDescription"
     :confirm-label="confirmLabel"
     :confirm-color="confirmColor"
+    :loading="confirmLoading"
     @confirm="eseguiConferma"
   />
 </template>
@@ -811,6 +840,7 @@
 <script setup lang="ts">
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
 import { SUPPLEMENTO_SPECIALE, TARIFFE_DEFAULT } from '#shared/tariffe'
+import { MATERIE_SUPERIORI, materieDaAggiungere } from '#shared/materie'
 import { annoScolasticoDa, inizioAnnoProposto } from '#shared/rientri'
 import { addMonths, format, getDay, getDaysInMonth, setDate, startOfMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -877,7 +907,7 @@ async function provaInvioEmail() {
 }
 
 // ─── ConfirmDialog: stato e logica in app/composables/useConfirm.ts ───
-const { confirmOpen, confirmTitle, confirmDescription, confirmLabel, confirmColor, chiediConferma, eseguiConferma } = useConfirm()
+const { confirmOpen, confirmTitle, confirmDescription, confirmLabel, confirmColor, confirmLoading, chiediConferma, eseguiConferma } = useConfirm()
 
 // ─── Fetch templates ───
 const { data: templatesData, pending: pendingTemplates, refresh } = useLazyFetch('/api/standard-packages')
@@ -1369,6 +1399,75 @@ function rimuoviMateria(idx: number) {
   )
 }
 
+// ─── "Aggiungi le materie standard" ───
+//
+// PERCHE' un bottone e non una modifica fatta direttamente nel database: il
+// database è quello vero, condiviso, con dentro le prenotazioni delle famiglie.
+// Un bottone lo si preme quando si vuole, il risultato si vede subito e se non
+// piace si tolgono le voci a mano. Rischio zero.
+//
+// Il bottone AGGIUNGE soltanto: non rinomina, non riordina e soprattutto non
+// toglie mai niente. Se il Centro ha già "Storia dell'arte" scritta a modo suo,
+// resta la sua — il confronto ignora maiuscole, accenti e spazi doppi, quindi
+// non nasce il doppione "Storia dell'Arte" accanto a quella che c'era già.
+const materieMancanti = computed(() => materieDaAggiungere(materie.value))
+
+function aggiungiMaterieStandard() {
+  const mancanti = materieMancanti.value
+
+  // Niente da fare: si dice e si sta fermi. Aprire una finestra di conferma per
+  // poi non scrivere niente lascerebbe il dubbio di aver combinato qualcosa.
+  if (mancanti.length === 0) {
+    toast.add({
+      title: 'Ci sono già tutte',
+      description: `Le ${MATERIE_SUPERIORI.length} materie standard sono tutte nella tua lista: non c'è niente da aggiungere.`,
+      color: 'info',
+      icon: 'i-heroicons-information-circle',
+    })
+    return
+  }
+
+  const gia = MATERIE_SUPERIORI.length - mancanti.length
+
+  chiediConferma(
+    {
+      title: `Aggiungo ${mancanti.length} ${mancanti.length === 1 ? 'materia nuova' : 'materie nuove'}`,
+      // L'elenco per intero, non "…e altre 30": è l'unico momento in cui si può
+      // dire "no, questa non la voglio" prima che finisca nel portale.
+      description:
+        (gia === 0 ? 'Non tolgo niente da quello che c\'è già.\n\n'
+        : gia === 1 ? '1 ce l\'hai già e non la tocco. Non tolgo niente.\n\n'
+        : `${gia} ce le hai già e non le tocco. Non tolgo niente.\n\n`)
+        + `Sto per aggiungere:\n${mancanti.join(' · ')}\n\n`
+        + 'Dopo puoi togliere con la ✕ quelle che non ti servono.',
+      confirmLabel: 'Aggiungi e salva',
+      attendi: true,
+    },
+    async () => {
+      const prima = [...materie.value]
+      materie.value = [...materie.value, ...mancanti]
+
+      // Stessa strada di sempre: si salva tutta la scheda con salvaConfigs().
+      try {
+        await salvaConfigs({ silenzioso: true, rilancia: true })
+      } catch (e) {
+        // Salvataggio fallito: si rimette la lista com'era, altrimenti la pagina
+        // mostrerebbe materie che nel database non ci sono, e il secondo tentativo
+        // dalla finestra rimasta aperta le aggiungerebbe una seconda volta.
+        materie.value = prima
+        throw e
+      }
+
+      toast.add({
+        title: `${mancanti.length} ${mancanti.length === 1 ? 'materia aggiunta' : 'materie aggiunte'}`,
+        description: `Ora la lista ne ha ${materie.value.length} in tutto. Le famiglie le vedono subito nel portale.`,
+        color: 'success',
+        icon: 'i-heroicons-check-circle',
+      })
+    }
+  )
+}
+
 const nuovaSpesa = reactive({ nome: '', importo: 0, dal: '', al: '' })
 function aggiungiSpesa() {
   if (nuovaSpesa.nome && nuovaSpesa.importo > 0) {
@@ -1421,7 +1520,19 @@ function statoSpesa(s: { dal: string; al: string }): { label: string; color: 'su
 }
 
 const salvandoConfigs = ref(false)
-async function salvaConfigs() {
+
+// L'UNICA strada per scrivere le configurazioni di questa pagina.
+//
+// `silenzioso` non salta niente del salvataggio: spegne solo il messaggio
+// "Impostazioni salvate", perché chi chiama (il bottone "Aggiungi le materie
+// standard") ha un messaggio suo più utile, col conteggio. Due messaggi verdi
+// uno sull'altro si leggono peggio di uno solo.
+//
+// `rilancia` serve a chi deve poter rimettere le cose com'erano se il
+// salvataggio fallisce: senza, l'errore resterebbe solo un messaggio rosso e il
+// codice che ha chiamato crederebbe di aver salvato. I bottoni "Salva Modifiche"
+// non lo usano: a loro il messaggio rosso basta.
+async function salvaConfigs(opzioni?: { silenzioso?: boolean; rilancia?: boolean }): Promise<void> {
   salvandoConfigs.value = true
   try {
     await $fetch('/api/settings/configs', {
@@ -1443,10 +1554,11 @@ async function salvaConfigs() {
         anno_scolastico_inizio:   inizioAnnoScolastico.value.trim(),
       }
     })
-    toast.add({ title: 'Impostazioni salvate', color: 'success' })
+    if (!opzioni?.silenzioso) toast.add({ title: 'Impostazioni salvate', color: 'success' })
     refreshConfigs()
   } catch(e: any) {
     toast.add({ title: 'Errore al salvataggio', color: 'error' })
+    if (opzioni?.rilancia) throw e
   } finally {
     salvandoConfigs.value = false
   }

@@ -77,9 +77,20 @@
                 <p class="text-base font-semibold text-slate-900 capitalize">{{ giorno.giornoNomeLungo }}</p>
                 <UBadge v-if="isToday(giorno.dateStr)" color="primary" variant="subtle" size="xs" class="uppercase tracking-wide">Oggi</UBadge>
               </div>
-              <div class="flex items-center gap-3 text-xs text-slate-500 mt-1">
+              <div class="flex items-center gap-3 text-xs text-slate-500 mt-1 flex-wrap">
                 <span class="flex items-center gap-1"><UIcon name="i-heroicons-academic-cap" class="w-3.5 h-3.5" /> <strong class="text-slate-700">{{ giorno.numeroLezioni }}</strong> lezioni</span>
                 <span class="flex items-center gap-1"><UIcon name="i-heroicons-users" class="w-3.5 h-3.5" /> <strong class="text-slate-700">{{ giorno.numeroStudenti }}</strong> studenti</span>
+                <!-- G1: chi ha avvisato che NON viene. Si vede senza aprire il
+                     giorno: la mattina deve saltare all'occhio, prima che il
+                     ragazzo manchi. -->
+                <span
+                  v-if="giorno.assenze.length"
+                  class="flex items-center gap-1 text-amber-600"
+                  :title="`${giorno.assenze.length} alunni hanno avvisato che oggi non vengono`"
+                >
+                  <UIcon name="i-heroicons-hand-raised" class="w-3.5 h-3.5" />
+                  <strong>{{ giorno.assenze.length }}</strong> assenti
+                </span>
               </div>
             </div>
           </div>
@@ -124,6 +135,69 @@
 
         <!-- Corpo Giorno Espanso -->
         <div v-if="isDayExpanded(giorno.dateStr)" class="border-t border-slate-100">
+
+          <!--
+            ═══ ASSENZE SEGNALATE (voce G1 del piano) ═══
+            Chi ha detto che non viene. Sta PRIMA della griglia oraria apposta: la
+            mattina è la prima cosa da guardare, perché è l'unica che cambia i piani.
+            Le assenze non scalano niente dal pacchetto (Q12): qui non ci sono
+            numeri da quadrare, solo nomi da sapere in anticipo.
+          -->
+          <div class="px-4 py-3 border-b border-slate-100" :class="giorno.assenze.length ? 'bg-amber-50/50' : 'bg-white'">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h4 class="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                <UIcon name="i-heroicons-hand-raised" class="w-4 h-4 text-amber-500" />
+                Assenze segnalate
+                <UBadge v-if="giorno.assenze.length" color="warning" variant="subtle" size="xs">
+                  {{ giorno.assenze.length }}
+                </UBadge>
+              </h4>
+              <UButton
+                size="xs"
+                color="neutral"
+                variant="soft"
+                icon="i-heroicons-phone"
+                @click.stop="apriRegistraAssenza(giorno.dateStr)"
+              >
+                Registra assenza
+              </UButton>
+            </div>
+
+            <p v-if="giorno.assenze.length === 0" class="text-xs text-slate-400 mt-2">
+              Nessuno ha avvisato: al momento sono attesi tutti.
+            </p>
+
+            <ul v-else class="mt-2 space-y-1.5">
+              <li
+                v-for="a in giorno.assenze"
+                :key="a.id"
+                class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm bg-white border border-amber-200 rounded-lg px-3 py-2"
+              >
+                <span class="font-medium text-slate-800">{{ a.nomeAlunno }}</span>
+                <span v-if="a.classe" class="text-xs text-slate-500">{{ a.classe }}</span>
+                <span v-if="a.motivo" class="text-xs text-slate-600 italic">«{{ a.motivo }}»</span>
+
+                <UBadge v-if="a.oltreIlTermine" color="warning" variant="solid" size="xs" title="Segnalata dopo le 10 del mattino: la giornata era già organizzata">
+                  Fuori tempo
+                </UBadge>
+                <UBadge v-if="a.origine === 'GESTIONALE'" color="neutral" variant="subtle" size="xs" title="Registrata in segreteria (di solito una telefonata)">
+                  Al telefono
+                </UBadge>
+
+                <span class="text-xs text-slate-400 ml-auto">
+                  segnalata {{ formatDataOra(a.segnalataAt) }}<template v-if="a.segnalataDa"> — {{ a.segnalataDa }}</template>
+                </span>
+                <UButton
+                  icon="i-heroicons-trash"
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  :aria-label="`Togli l'assenza di ${a.nomeAlunno}`"
+                  @click.stop="chiediCancellazioneAssenza(a)"
+                />
+              </li>
+            </ul>
+          </div>
 
           <!-- Caso: giornata di chiusura o domenica (senza lezioni) -->
           <div v-if="(giorno.isChiusura || giorno.isDomenica) && giorno.numeroLezioni === 0" class="p-10 text-center flex flex-col items-center">
@@ -277,6 +351,23 @@
       confirm-color="primary"
       @confirm="eseguiApprovazioneGiorno"
     />
+
+    <!-- G1: l'assenza registrata al telefono, e la conferma prima di toglierne una -->
+    <ModalRegistraAssenza
+      v-model:open="modaleAssenzaAperta"
+      :date="modaleAssenzaData"
+      @refresh="refreshAssenze"
+    />
+
+    <ConfirmDialog
+      v-model:open="assenzaConfirmOpen"
+      :title="assenzaConfirmTitle"
+      :description="assenzaConfirmDescription"
+      :confirm-label="assenzaConfirmLabel"
+      :confirm-color="assenzaConfirmColor"
+      :loading="assenzaConfirmLoading"
+      @confirm="eseguiConfermaAssenza"
+    />
   </div>
 </template>
 
@@ -290,9 +381,26 @@ import { ricavoOrarioPacchetto } from '#shared/tariffe'
 import ModalNuovaLezione from '~/components/calendario/ModalNuovaLezione.vue'
 import ModalLezioneRapida from '~/components/calendario/ModalLezioneRapida.vue'
 import ModalGestisciSlot from '~/components/calendario/ModalGestisciSlot.vue'
+import ModalRegistraAssenza from '~/components/calendario/ModalRegistraAssenza.vue'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
+import { formatDataOra } from '~/utils/format'
 
 definePageMeta({ middleware: ['admin-or-super'] })
+
+// Una riga dell'elenco "Assenze segnalate" così come la manda /api/admin/assenze
+interface AssenzaCalendario {
+  id: string
+  studentId: string
+  nomeAlunno: string
+  classe: string | null
+  data: string
+  motivo: string | null
+  origine: 'PORTALE' | 'GESTIONALE'
+  /** Segnalata dopo le 10 del mattino: la giornata era già organizzata */
+  oltreIlTermine: boolean
+  segnalataAt: string
+  segnalataDa: string | null
+}
 
 const toast = useToast()
 
@@ -368,8 +476,30 @@ const { data: lezioniRes, pending, refresh } = useFetch('/api/lessons', {
   }),
 })
 
+// ═══ ASSENZE SEGNALATE (voce G1) ═══
+// Chi ha avvisato che NON viene. Sono una cosa diversa dalle lezioni — non hanno
+// tutor né slot, e non scalano niente dal pacchetto (decisione Q12) — quindi
+// arrivano da un indirizzo tutto loro, riservato alla segreteria: nel motivo le
+// famiglie scrivono «ha la febbre», e /api/lessons è aperto anche ai tutor.
+// NON si filtrano per tutor: un ragazzo che non viene non viene per nessuno.
+const { data: assenzeRes, refresh: refreshAssenze } = useFetch<AssenzaCalendario[]>('/api/admin/assenze', {
+  lazy: true,
+  query: computed(() => ({ da: dateInizio.value, a: dateFine.value })),
+})
+
+const assenzePerGiorno = computed(() => {
+  const mappa = new Map<string, AssenzaCalendario[]>()
+  for (const a of assenzeRes.value ?? []) {
+    const elenco = mappa.get(a.data)
+    if (elenco) elenco.push(a)
+    else mappa.set(a.data, [a])
+  }
+  return mappa
+})
+
 function refreshData() {
   refresh()
+  refreshAssenze()
 }
 
 // ==========================================
@@ -452,6 +582,8 @@ const giorniWithTutorRecap = computed(() => {
       ricavo: Number(ricavoGiorno.toFixed(2)),
       tutorsRecap,
       lezioniBase: lezioniGiorno,
+      // Chi ha avvisato che oggi non viene (voce G1)
+      assenze: assenzePerGiorno.value.get(dateStr) ?? [],
       isDomenica: dateObj.getDay() === 0,
       isChiusura: dateChiusure.value.includes(dateStr),
       tema: coloreGiorno(dateStr)
@@ -465,7 +597,10 @@ const giorniVisibili = computed(() => {
     if (isToday(g.dateStr)) return true
     if (g.isDomenica) return false
     if (g.isChiusura) return false
-    if (g.lezioniBase.length === 0) return false
+    // Un giorno con assenze segnalate ma senza lezioni ancora create non va
+    // nascosto: è proprio il caso di domani mattina, quando le famiglie hanno già
+    // avvisato e la griglia dei tutor non è stata ancora riempita.
+    if (g.lezioniBase.length === 0 && g.assenze.length === 0) return false
     return true
   })
 })
@@ -636,6 +771,57 @@ const modaleRapidaData = ref<string | null>(null)
 function openLezioneRapida(dateStr: string) {
   modaleRapidaData.value = dateStr
   modaleRapidaAperto.value = true
+}
+
+// ═══ ASSENZE: registrarne una al telefono, o toglierla ═══
+const modaleAssenzaAperta = ref(false)
+const modaleAssenzaData = ref<string | null>(null)
+function apriRegistraAssenza(dateStr: string) {
+  modaleAssenzaData.value = dateStr
+  modaleAssenzaAperta.value = true
+}
+
+// La conferma ha il suo stato separato da quella dell'approvazione della
+// giornata: due finestre che condividono gli stessi ref finirebbero per
+// mostrare il titolo di una e fare il mestiere dell'altra.
+const {
+  confirmOpen: assenzaConfirmOpen,
+  confirmTitle: assenzaConfirmTitle,
+  confirmDescription: assenzaConfirmDescription,
+  confirmLabel: assenzaConfirmLabel,
+  confirmColor: assenzaConfirmColor,
+  confirmLoading: assenzaConfirmLoading,
+  chiediConferma: chiediConfermaAssenza,
+  eseguiConferma: eseguiConfermaAssenza,
+} = useConfirm()
+
+function chiediCancellazioneAssenza(a: AssenzaCalendario) {
+  chiediConfermaAssenza(
+    {
+      title: 'Togliere questa assenza?',
+      description: `${a.nomeAlunno} risulterà di nuovo atteso il ${format(new Date(a.data), 'd MMMM', { locale: it })}.\n\n`
+        + 'Usa questo tasto per correggere un errore: se il ragazzo alla fine viene davvero, va bene lo stesso.',
+      confirmLabel: 'Togli l\'assenza',
+      confirmColor: 'error',
+      attendi: true,
+    },
+    () => cancellaAssenza(a),
+  )
+}
+
+async function cancellaAssenza(a: AssenzaCalendario) {
+  try {
+    await $fetch(`/api/admin/assenze/${a.id}`, { method: 'DELETE' })
+    toast.add({ title: 'Assenza tolta', description: `${a.nomeAlunno} è di nuovo atteso.`, color: 'success' })
+    await refreshAssenze()
+  } catch (err: any) {
+    toast.add({
+      title: 'Errore',
+      description: err?.data?.statusMessage ?? 'Impossibile togliere l\'assenza',
+      color: 'error',
+    })
+    throw err // la finestra resta aperta per riprovare
+  }
 }
 
 const modaleGestisciAperto = ref(false)

@@ -10,6 +10,7 @@ import { contacts, contactInteractions, contactFigli } from './contacts'
 import { studentConfirmations } from './confirmations'
 import { contactRequests, notifiche } from './system'
 import { consensi } from './consensi'
+import { assenze } from './assenze'
 
 export const usersRelations = relations(users, ({ one, many }) => ({
   tutorProfile:    one(tutorProfiles, { fields: [users.id], references: [tutorProfiles.userId] }),
@@ -48,6 +49,10 @@ export const studentsRelations = relations(students, ({ one, many }) => ({
   // Il registro dei consensi dell'alunno (minore di 14 anni, immagini). Il
   // marketing NON è qui: è della persona, non del figlio — vedi consensi.ts.
   consensi:    many(consensi),
+  // I giorni in cui la famiglia ha avvisato che NON viene (voce G1). Serve alla
+  // scheda dell'alunno: se un ragazzo sparisce per tre settimane te ne devi
+  // accorgere, anche se nessuna assenza ha scalato niente dal pacchetto.
+  assenze:     many(assenze),
 }))
 
 export const packagesRelations = relations(packages, ({ one, many }) => ({
@@ -144,4 +149,13 @@ export const notificheRelations = relations(notifiche, ({ one }) => ({
 // join esplicita con due alias di users, dove si vede a occhio quale nome è quale.
 export const consensiRelations = relations(consensi, ({ one }) => ({
   student: one(students, { fields: [consensi.studentId], references: [students.id] }),
+}))
+
+// Assenze segnalate → l'alunno che non viene, e chi l'ha detto.
+// Qui, a differenza dei consensi, la colonna verso users è UNA SOLA
+// (segnalataDaUserId): niente ambiguità, e l'elenco della mattina può chiedere il
+// nome di chi ha avvisato senza scrivere una join a mano.
+export const assenzeRelations = relations(assenze, ({ one }) => ({
+  student:     one(students, { fields: [assenze.studentId], references: [students.id] }),
+  segnalataDa: one(users,    { fields: [assenze.segnalataDaUserId], references: [users.id] }),
 }))

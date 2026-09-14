@@ -16,6 +16,18 @@ export const studentNotes = pgTable('student_notes', {
   // Le note INTERNA e quelle scritte da ADMIN/SUPER_TUTOR nascono già approvate.
   approvataAt: timestamp('approvata_at', { withTimezone: true }),
 
+  // Quando la famiglia è stata avvisata per email che questa nota è nel portale
+  // (riepilogo serale delle 20, vedi note-digest.service.ts). null = mai avvisata.
+  //
+  // PERCHE' una colonna e non un semplice "guarda se è già girato oggi": il cron
+  // può partire due volte (riavvio della funzione su Vercel, doppia chiamata,
+  // prova manuale della segreteria) e la famiglia non deve ricevere due email
+  // per la stessa comunicazione. Segnando la NOTA — e non la giornata — la
+  // garanzia vale a prescindere da quante volte il riepilogo gira: la seconda
+  // volta non trova più niente da dire e non manda niente.
+  // È lo stesso rimedio, allo stesso problema, di packages.avvisoOreInviatoAt.
+  avvisoInviatoAt: timestamp('avviso_inviato_at', { withTimezone: true }),
+
   lessonId: text('lesson_id').references(() => lessons.id, { onDelete: 'set null' }),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

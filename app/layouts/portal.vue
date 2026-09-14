@@ -92,6 +92,8 @@
 </template>
 
 <script setup lang="ts">
+import { livelloDaClasse } from '#shared/livello-scolastico'
+
 const route = useRoute()
 const { user } = useUserSession()
 
@@ -102,22 +104,45 @@ const prenotazioneAbilitata = computed(() =>
   students.value.some((s: any) => s.abilitatoPrenotazioneOnline)
 )
 
-const allNavItems = [
+// LA VOCE "ASSENZE" NON C'È PER TUTTI (voce G1 del piano).
+//
+// La prenotazione al contrario nasce per le MEDIE: lì il posto c'è sempre e
+// l'unica cosa da dire è quando NON si viene. Per una famiglia di soli ragazzi
+// delle superiori quel bottone non servirebbe a niente e ruberebbe spazio sulla
+// striscia in fondo allo schermo, che su un telefono è già piena.
+//
+// Compare quindi solo se almeno un figlio è alle medie OPPURE se il livello non
+// si capisce (classe vuota o scritta in modo strano): in quel caso non si
+// indovina — si mostra la voce e sarà la famiglia a sapere se le serve.
+const mostraAssenze = computed(() =>
+  students.value.some((s: any) => {
+    const l = livelloDaClasse(s.classe)
+    return l === 'MEDIE' || l === null
+  }),
+)
+
+const allNavItems = computed(() => [
   { icon: 'i-heroicons-home',          label: 'Home',    route: '/portale',          always: true },
+  { icon: 'i-heroicons-hand-raised',   label: 'Assenze', route: '/portale/assenze',  always: mostraAssenze.value },
   { icon: 'i-heroicons-calendar-days', label: 'Prenota', route: '/portale/prenota',  always: false },
   { icon: 'i-heroicons-document-text', label: 'Note',    route: '/portale/note',     always: true },
   { icon: 'i-heroicons-tag',           label: 'Sconti',  route: '/portale/sconti',   always: true },
   { icon: 'i-heroicons-user',          label: 'Profilo', route: '/portale/profilo',  always: true },
-]
+])
 
 // STUDENTE: account solo-prenotazioni → niente Note; Prenota sempre visibile
 // (il permesso dello studente è l'account stesso, non il flag della famiglia)
 const isStudente = computed(() => user.value?.role === 'STUDENTE')
 
 const visibleNavItems = computed(() =>
-  allNavItems
+  allNavItems.value
     .filter(item => !(isStudente.value && item.route === '/portale/note'))
-    .filter(item => item.always || prenotazioneAbilitata.value || isStudente.value)
+    // "Assenze" segue la sua regola (mostraAssenze, messo dentro `always`), non
+    // quella della prenotazione online: un ragazzo delle medie che la famiglia non
+    // ha abilitato a prenotare deve comunque poter dire che oggi non viene.
+    .filter(item => item.route === '/portale/assenze'
+      ? item.always
+      : (item.always || prenotazioneAbilitata.value || isStudente.value))
 )
 
 function isActive(path: string) {

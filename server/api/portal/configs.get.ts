@@ -1,6 +1,7 @@
 import { db } from '../../database/client'
 import { systemConfigs } from '../../database/schema'
 import { inArray } from 'drizzle-orm'
+import { MATERIE_DEFAULT } from '#shared/materie'
 
 export default defineEventHandler(async () => {
   const rows = await db
@@ -17,12 +18,13 @@ export default defineEventHandler(async () => {
     materie = []
   }
 
-  // Fallback se non configurate
+  // Fallback se non configurate. La lista NON si riscrive qui: fino a ieri questa
+  // riga era una copia a mano di MATERIE_DEFAULT, e due copie della stessa cosa
+  // prima o poi divergono in silenzio — il portale avrebbe mostrato alle famiglie
+  // materie diverse da quelle del gestionale senza che nessuno se ne accorgesse.
+  // Una sola fonte: #shared/materie.
   if (materie.length === 0) {
-    materie = [
-      'Matematica', 'Fisica', 'Chimica', 'Italiano', 'Inglese',
-      'Storia', 'Geografia', 'Latino', 'Greco', 'Scienze', 'Informatica',
-    ]
+    materie = [...MATERIE_DEFAULT]
   }
 
   // Materie speciali + calendario unico delle giornate (per prenotazione e home portale)
