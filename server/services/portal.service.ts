@@ -39,7 +39,25 @@ export async function getPortalStudents(linkedStudentIds: string[]) {
 }
 
 // Note con visibilità FAMIGLIA (e approvate) per gli studenti collegati al GENITORE.
-// L'autore non viene mai esposto alla famiglia: risulta sempre "Segreteria".
+//
+// CHI FIRMA (decisione di Alessandro del 14/09/2026)
+// Un TUTOR normale firma "Segreteria": la famiglia non deve sapere quale tutor ha
+// scritto quella frase, e comunque la nota passa dall'approvazione della
+// segreteria prima di partire. Un SUPER_TUTOR o un ADMIN firmano invece con il
+// loro nome vero: sono loro a parlare, e una comunicazione che arriva da una
+// persona con un nome pesa diversamente da un avviso anonimo.
+//
+// La firma si decide QUI e non nella pagina: se il nome vero uscisse dal server
+// e fosse la pagina a nasconderlo, arriverebbe comunque nel browser di chi non
+// deve vederlo — basta aprire gli strumenti del browser per leggerlo.
+//
+// L'ORDINE è quello in cui le note sono diventate VISIBILI alla famiglia
+// (approvataAt), non quello in cui sono state scritte. Prima l'elenco andava per
+// data di scrittura mentre il pallino delle non lette contava le approvazioni:
+// una nota scritta due settimane fa e approvata oggi accendeva il pallino ma
+// finiva in mezzo all'elenco, e il genitore in cima non trovava niente di nuovo.
+// Il filtro qui sopra pretende approvataAt non nullo, quindi ogni nota che esce
+// da questa funzione ha per forza quella data: nessun caso scoperto.
 export async function getPortalNotes(linkedStudentIds: string[]) {
   if (linkedStudentIds.length === 0) return []
 
@@ -49,18 +67,30 @@ export async function getPortalNotes(linkedStudentIds: string[]) {
         eq(studentNotes.visibilita, 'FAMIGLIA'),
         isNotNull(studentNotes.approvataAt)
       ),
-    orderBy: [desc(studentNotes.createdAt)],
+    orderBy: [desc(studentNotes.approvataAt)],
     with: {
       student: {
         columns: { firstName: true, lastName: true }
+      },
+      author: {
+        columns: { firstName: true, lastName: true, role: true }
       }
     }
   })
 
-  return result.map((n) => ({
-    ...n,
-    author: { firstName: 'Segreteria', lastName: '', role: null },
-  }))
+  return result.map((n) => {
+    // Nel dubbio si firma "Segreteria": un ruolo che non riconosciamo non deve
+    // mai far uscire un nome per sbaglio.
+    const conNome = n.author?.role === 'ADMIN' || n.author?.role === 'SUPER_TUTOR'
+    const nome = `${n.author?.firstName ?? ''} ${n.author?.lastName ?? ''}`.trim()
+
+    return {
+      ...n,
+      author: conNome && nome
+        ? { firstName: n.author!.firstName, lastName: n.author!.lastName, role: null }
+        : { firstName: 'Segreteria', lastName: '', role: null },
+    }
+  })
 }
 
 // Quante note approvate sono arrivate dopo l'ultima visita alla pagina Note (badge nav famiglia)

@@ -284,13 +284,22 @@ export async function createProventiDiversi(data: {
 // della dashboard. Arrotondare qui significherebbe sottrarre numeri già approssimati.
 type TotaliCent = { entrate: number; uscite: number; margine: number }
 
-async function netMarginCent(startDate: Date, endDate: Date): Promise<TotaliCent> {
-  // E3: le categorie "neutre" (giroconti, saldo iniziale…) sono escluse dal margine.
-  // L'elenco è configurabile da Impostazioni → Categorie.
-  // Anche i proventi diversi restano FUORI dai numeri principali: nelle card
-  // compaiono solo come riga separata "+X" (e solo per gli account autorizzati).
+// Le categorie che NON entrano nel margine del periodo.
+// E3: le categorie "neutre" (giroconti, saldo iniziale…) sono escluse dal margine.
+// L'elenco è configurabile da Impostazioni → Categorie.
+// Anche i proventi diversi restano FUORI dai numeri principali: nelle card
+// compaiono solo come riga separata "+X" (e solo per gli account autorizzati).
+//
+// Sta in una funzione sua perché ora serve in due posti: al margine (qui sotto) e al
+// conto del break-even, che deve sapere quali uscite sono già fuori dai totali e
+// quindi non ha senso "sostituire" una seconda volta.
+async function categorieEscluseDalMargine(): Promise<string[]> {
   const neutre = await getNeutralKeys()
-  const escluse = [...neutre, ...CATEGORIE_PROVENTI]
+  return [...neutre, ...CATEGORIE_PROVENTI]
+}
+
+async function netMarginCent(startDate: Date, endDate: Date): Promise<TotaliCent> {
+  const escluse = await categorieEscluseDalMargine()
 
   const rows = await db
     .select({
@@ -507,8 +516,13 @@ export async function getBreakdownMarketing(startDate: Date, endDate: Date) {
 // Una spesa SENZA date vale sempre (è il comportamento storico: i numeri non cambiano
 // finché non si compilano le date). Con le date, invece, chiudere una spesa non tocca
 // più i mesi già passati: l'affitto pagato fino a giugno resta nei conti fino a giugno.
+//
+// `categoria` (facoltativa) è la chiave della categoria contabile che questa spesa
+// SOSTITUISCE nel break-even. Serve a non contare due volte lo stesso affitto: una
+// volta come movimento registrato in contabilità e una seconda come spesa prevista.
+// Vuota/assente = spesa non collegata, si comporta come prima.
 // ─────────────────────────────────────────────
-export type SpesaFissa = { nome: string; importo: number; dal: string | null; al: string | null }
+export type SpesaFissa = { nome: string; importo: number; dal: string | null; al: string | null; categoria: string | null }
 
 // 'YYYY-MM-DD' → data locale a mezzanotte (nessuno slittamento di fuso)
 function giornoDaStringa(s: string): Date | null {
@@ -529,11 +543,15 @@ export async function getSpeseFisse(): Promise<SpesaFissa[]> {
     const raw = JSON.parse(row.value)
     if (!Array.isArray(raw)) return []
 
+    // Lettura RETROCOMPATIBILE: le spese salvate prima di questa modifica non hanno
+    // il campo `categoria`. Devono leggersi come "non collegata" (null), senza che
+    // cambi un solo numero finché Alessandro non sceglie lui le categorie.
     return raw.map((s: any) => ({
-      nome:    String(s?.nome ?? ''),
-      importo: Number(s?.importo) || 0,
-      dal:     typeof s?.dal === 'string' && s.dal ? s.dal : null,
-      al:      typeof s?.al  === 'string' && s.al  ? s.al  : null,
+      nome:      String(s?.nome ?? ''),
+      importo:   Number(s?.importo) || 0,
+      dal:       typeof s?.dal === 'string' && s.dal ? s.dal : null,
+      al:        typeof s?.al  === 'string' && s.al  ? s.al  : null,
+      categoria: typeof s?.categoria === 'string' && s.categoria ? s.categoria : null,
     }))
   } catch {
     return []
@@ -564,6 +582,9 @@ export type DettaglioCostoFisso = {
   importoMensile: number
   mesi: number
   totalePeriodo: number
+  // Categoria contabile che questa spesa sostituisce (null = non collegata).
+  // Serve al popup del break-even per dire quali voci rischiano il doppio conteggio.
+  categoria: string | null
 }
 
 // Costo fisso di un periodo VOCE PER VOCE: ogni spesa pesa solo per i mesi in cui era
@@ -585,6 +606,7 @@ export function dettaglioCostiFissiDelPeriodo(spese: SpesaFissa[], start: Date, 
       importoMensile: Number(s.importo.toFixed(2)),
       mesi:           Math.round(mesi * 100) / 100,
       totalePeriodo:  Number((s.importo * mesi).toFixed(2)),
+      categoria:      s.categoria,
     })
   }
   return righe
@@ -617,11 +639,126 @@ export function mesiCalendario(start: Date, end: Date): number {
   return mesi
 }
 
+// ─────────────────────────────────────────────
+// SPESE PREVISTE AL POSTO DEI MOVIMENTI VERI — il cuore del break-even corretto
+//
+// Il difetto che questo blocco chiude: l'affitto veniva contato DUE VOLTE. Una volta
+// come movimento di uscita registrato in contabilità, e una seconda come spesa fissa
+// configurata in Impostazioni. Il break-even ne usciva molto peggiore del vero.
+//
+// La cura: ogni spesa fissa può dichiarare QUALE categoria contabile sostituisce.
+// Nel break-even i movimenti di quella categoria non si contano, e al loro posto si
+// conta la cifra prevista. Il MARGINE non cambia mai: quella resta la cassa vera.
+//
+// La sottigliezza da non sbagliare: una categoria si esclude SOLO nei mesi in cui la
+// spesa che la copre era davvero in vigore. Le uscite di marketing di gennaio, quando
+// il contratto con l'agenzia non era ancora partito, sono spese vere e devono restare
+// nel conto — altrimenti il break-even migliorerebbe per finta.
+// ─────────────────────────────────────────────
+
+// Un tratto di calendario in cui una categoria è "coperta" da una spesa prevista.
+type FinestraCopertura = { da: Date; a: Date }
+
+// Un giorno civile vale fino all'ultimo istante: senza questo, i movimenti registrati
+// NEL giorno in cui una spesa si chiude resterebbero fuori dalla finestra.
+function fineGiornata(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
+}
+
+// Per ogni categoria coperta, i tratti di periodo in cui va esclusa.
+// Più spese fisse possono puntare alla stessa categoria (es. "Affitto Banca" e
+// "Affitto spese accessorie"): i loro importi previsti si sommano, ma i movimenti veri
+// vanno tolti UNA VOLTA SOLA. Le finestre sovrapposte vengono quindi fuse in una sola.
+export function finestreDiCopertura(spese: SpesaFissa[], start: Date, end: Date): Map<string, FinestraCopertura[]> {
+  const perCategoria = new Map<string, FinestraCopertura[]>()
+
+  for (const s of spese) {
+    if (!s.categoria) continue // spesa non collegata: non sostituisce nessun movimento
+
+    const dal = s.dal ? giornoDaStringa(s.dal) : null
+    const al  = s.al  ? giornoDaStringa(s.al)  : null
+
+    // Stessa intersezione usata per contare i mesi (dettaglioCostiFissiDelPeriodo):
+    // il tratto coperto è periodo ∩ validità della spesa.
+    const da    = dal && dal > start ? dal : start
+    const fineAl = al ? fineGiornata(al) : null
+    const a     = fineAl && fineAl < end ? fineAl : end
+    if (a < da) continue // la spesa non tocca il periodo scelto
+
+    const lista = perCategoria.get(s.categoria) ?? []
+    lista.push({ da, a })
+    perCategoria.set(s.categoria, lista)
+  }
+
+  for (const [categoria, lista] of perCategoria) {
+    lista.sort((x, y) => x.da.getTime() - y.da.getTime())
+    const unite: FinestraCopertura[] = []
+    for (const f of lista) {
+      const ultima = unite[unite.length - 1]
+      if (ultima && f.da <= ultima.a) {
+        // si toccano o si sovrappongono: diventano un tratto solo
+        if (f.a > ultima.a) ultima.a = f.a
+      } else {
+        unite.push({ da: f.da, a: f.a })
+      }
+    }
+    perCategoria.set(categoria, unite)
+  }
+
+  return perCategoria
+}
+
+// Quanto si è speso DAVVERO, categoria per categoria, dentro le finestre di copertura.
+// È la cifra che il break-even toglie dalle uscite vere prima di sottrarre il previsto.
+// Un'unica query: le finestre diventano rami in OR, quindi un movimento coperto da due
+// spese diverse viene comunque contato una volta sola.
+async function usciteSostituiteCent(
+  finestre: Map<string, FinestraCopertura[]>,
+  escluse: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>()
+
+  // Le categorie neutre (giroconti, saldo iniziale) e i proventi diversi non entrano
+  // già nelle uscite del margine: lì non c'è niente da sostituire, e toglierle qui
+  // vorrebbe dire sottrarre due volte lo stesso importo, al contrario.
+  const rami = [...finestre.entries()]
+    .filter(([categoria, lista]) => lista.length > 0 && !escluse.includes(categoria))
+    .map(([categoria, lista]) => and(
+      eq(accountingEntries.categoria, categoria),
+      or(...lista.map((f) => and(gte(accountingEntries.data, f.da), lte(accountingEntries.data, f.a)))),
+    ))
+
+  if (!rami.length) return out // nessuna spesa collegata: niente query, niente cambiamenti
+
+  const rows = await db
+    .select({
+      categoria: accountingEntries.categoria,
+      totale:    sql<string>`COALESCE(SUM(${accountingEntries.importo}::numeric), 0)::text`,
+    })
+    .from(accountingEntries)
+    .where(and(eq(accountingEntries.tipo, 'USCITA'), or(...rami)))
+    .groupBy(accountingEntries.categoria)
+
+  for (const r of rows) {
+    if (r.categoria) out.set(r.categoria, inCentesimi(r.totale))
+  }
+  return out
+}
+
+// Una riga del blocco "di cui sostituite dalle spese previste" nel popup del break-even.
+export type RigaSostituzione = {
+  categoria:   string   // chiave contabile (l'etichetta la mette la pagina)
+  previsto:    number   // quanto dicono le spese fisse per il periodo coperto
+  speso:       number   // quanto è uscito davvero, nello stesso periodo coperto
+  differenza:  number   // speso − previsto (positivo = sta sforando)
+  sforamento:  boolean
+}
+
 export async function getDashboard(startDate: Date, endDate: Date) {
   // F3: periodo e marketing arrivano in CENTESIMI ESATTI perché qui sotto ci si fanno
   // ancora dei conti sopra (il blocco "doposcuola" e il break-even). Si arrotonda solo
   // alla fine, su ciò che viene restituito all'interfaccia.
-  const [periodoCent, perMetodo, saldiCassa, fattureInAttesa, previsioni, marketingCent, speseFisse, fatturato, proventiDiversi, bolliDaVersare] = await Promise.all([
+  const [periodoCent, perMetodo, saldiCassa, fattureInAttesa, previsioni, marketingCent, speseFisse, fatturato, proventiDiversi, bolliDaVersare, categorieEscluse] = await Promise.all([
     netMarginCent(startDate, endDate),
     getMovimentiPerMetodo(startDate, endDate),
     getSaldiCassa(),
@@ -632,6 +769,7 @@ export async function getDashboard(startDate: Date, endDate: Date) {
     getFatturato(),
     getProventiDiversiTotali(startDate, endDate),
     getBolliDaVersareTotali(),
+    categorieEscluseDalMargine(),
   ])
 
   const periodo = {
@@ -659,10 +797,52 @@ export async function getDashboard(startDate: Date, endDate: Date) {
   // nessuno scarto possibile fra l'elenco nel popup e il numero del break-even.
   const costiFissiDettaglio = dettaglioCostiFissiDelPeriodo(speseFisse, startDate, endDate)
   const costiFissiPeriodo   = costiFissiDelPeriodo(speseFisse, startDate, endDate)
-  // Break-even: il margine esatto meno le spese fisse, sottratti in centesimi interi
-  // e arrotondati una volta sola. Prima erano due numeri già arrotondati a sottrarsi
-  // fra loro, ed è lo stesso difetto delle rimanenze di cassa.
-  const breakEven = inEuro(periodoCent.margine - inCentesimi(costiFissiPeriodo))
+
+  // ── Break-even: le spese PREVISTE al posto dei movimenti veri che quelle spese coprono ──
+  // entrate − (uscite vere NON sostituite) − spese fisse previste del periodo.
+  // Il margine (entrate − uscite vere) resta com'è: quello è la cassa, e non si tocca.
+  const finestre       = finestreDiCopertura(speseFisse, startDate, endDate)
+  const sostituiteCent = await usciteSostituiteCent(finestre, categorieEscluse)
+
+  // Il PREVISTO per categoria nasce dalle stesse righe che l'utente legge nel popup:
+  // così l'elenco e il totale non possono mai discordare di un centesimo. Due spese
+  // sulla stessa categoria si sommano qui (l'esclusione dei movimenti, invece, è già
+  // avvenuta una volta sola dentro finestreDiCopertura).
+  const previstoPerCategoria = new Map<string, number>()
+  for (const r of costiFissiDettaglio) {
+    if (!r.categoria) continue
+    previstoPerCategoria.set(r.categoria, (previstoPerCategoria.get(r.categoria) ?? 0) + inCentesimi(r.totalePeriodo))
+  }
+
+  // Una riga anche per le categorie coperte ma senza nessun movimento nel periodo:
+  // "previsto € 50, speso davvero € 0" è un'informazione, non un buco.
+  const righeSostituzione: RigaSostituzione[] = [...previstoPerCategoria.entries()]
+    .map(([categoria, previstoCent]) => {
+      const spesoCent = sostituiteCent.get(categoria) ?? 0
+      return {
+        categoria,
+        previsto:   inEuro(previstoCent),
+        speso:      inEuro(spesoCent),
+        differenza: inEuro(spesoCent - previstoCent),
+        // Speso davvero sopra il previsto: è lì che si sta sforando. Si SEGNALA soltanto,
+        // il break-even continua a contare il previsto (è la decisione presa).
+        sforamento: spesoCent > previstoCent,
+      }
+    })
+    .sort((a, b) => b.speso - a.speso)
+
+  // Somma in centesimi interi: un solo arrotondamento, alla fine.
+  let sostituiteTotaleCent = 0
+  for (const v of sostituiteCent.values()) sostituiteTotaleCent += v
+
+  const usciteRestantiCent = periodoCent.uscite - sostituiteTotaleCent
+  const breakEven = inEuro(periodoCent.entrate - usciteRestantiCent - inCentesimi(costiFissiPeriodo))
+
+  // Spese fisse ancora scollegate: se Alessandro le registra anche in contabilità,
+  // vengono contate due volte. Non si indovina la categoria al posto suo: si segnala.
+  const speseNonCollegate = costiFissiDettaglio
+    .filter((r) => !r.categoria)
+    .map((r) => ({ nome: r.nome || 'Spesa senza nome', totalePeriodo: r.totalePeriodo }))
 
   return {
     periodo,
@@ -679,6 +859,13 @@ export async function getDashboard(startDate: Date, endDate: Date) {
       periodo: costiFissiPeriodo,
       mesi: Math.round(mesiNelPeriodo * 10) / 10,
       dettaglio: costiFissiDettaglio,
+    },
+    // Il conto del break-even, aperto: cosa è stato tolto dalle uscite vere e perché.
+    sostituzioni: {
+      totale:         inEuro(sostituiteTotaleCent),
+      usciteRestanti: inEuro(usciteRestantiCent),
+      righe:          righeSostituzione,
+      nonCollegate:   speseNonCollegate,
     },
     breakEven,
   }

@@ -28,17 +28,17 @@
       riconosciamo il livello è `null` e qui NON si indovina: si mostrano tutte e
       due le strade e si lascia scegliere alla famiglia, che lo sa meglio di noi.
     -->
-    <UCard v-if="studentIdScelto" :class="livelloScelto === 'MEDIE' ? 'border border-emerald-200 bg-emerald-50/50' : ''">
+    <UCard v-if="studentIdScelto" :class="postoFissoScelto ? 'border border-emerald-200 bg-emerald-50/50' : ''">
       <div class="flex items-start gap-3">
         <UIcon
-          :name="livelloScelto === 'MEDIE' ? 'i-heroicons-hand-raised' : 'i-heroicons-information-circle'"
+          :name="postoFissoScelto ? 'i-heroicons-hand-raised' : 'i-heroicons-information-circle'"
           class="w-5 h-5 mt-0.5 shrink-0"
-          :class="livelloScelto === 'MEDIE' ? 'text-emerald-600' : 'text-slate-400'"
+          :class="postoFissoScelto ? 'text-emerald-600' : 'text-slate-400'"
         />
         <div class="text-sm text-slate-700 space-y-2">
-          <template v-if="livelloScelto === 'MEDIE'">
+          <template v-if="postoFissoScelto">
             <p>
-              <strong>{{ nomeScelto }} è alle medie: il posto ce l'ha sempre.</strong>
+              <strong>{{ nomeScelto }} è alle {{ livelloScelto === 'ELEMENTARI' ? 'elementari' : 'medie' }}: il posto ce l'ha sempre.</strong>
               Non serve prenotare giorno per giorno — basta avvisarci quando non viene.
             </p>
             <p class="text-slate-500">
@@ -49,8 +49,8 @@
           <template v-else-if="livelloScelto === null">
             <p>
               <strong>Nella scheda di {{ nomeScelto }} non risulta la classe</strong>, quindi non
-              sappiamo dirti se per lui funziona il posto fisso (medie) o la prenotazione
-              (superiori). Puoi fare tutte e due le cose da qui.
+              sappiamo dirti se per lui funziona il posto fisso (elementari e medie) o la
+              prenotazione (superiori). Puoi fare tutte e due le cose da qui.
             </p>
             <p class="text-slate-500">
               Se ce lo dici, la segreteria completa la scheda e questa pagina si sistema da sola.
@@ -66,8 +66,8 @@
           <!-- Decisione Q9: il bottone per prenotare resta SEMPRE, per tutti. -->
           <UButton
             to="/portale/prenota"
-            :color="livelloScelto === 'MEDIE' ? 'neutral' : 'primary'"
-            :variant="livelloScelto === 'MEDIE' ? 'outline' : 'solid'"
+            :color="postoFissoScelto ? 'neutral' : 'primary'"
+            :variant="postoFissoScelto ? 'outline' : 'solid'"
             size="sm"
             icon="i-heroicons-calendar-days"
           >
@@ -325,7 +325,7 @@
 // ⚠️ Segnalare un'assenza NON scala ore, giorni o importi dal pacchetto
 // (decisione Q12). Avvisare deve essere gratis, altrimenti nessuno avvisa.
 import { ref, computed } from 'vue'
-import { livelloDaClasse } from '#shared/livello-scolastico'
+import { livelloDaClasse, postoFisso } from '#shared/livello-scolastico'
 import { ORA_LIMITE_ASSENZA, ORA_LIMITE_ASSENZA_TESTO } from '#shared/assenze'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
 
@@ -360,6 +360,10 @@ const nomeScelto = computed(() => studenteScelto.value?.firstName ?? 'tuo figlio
 // Il livello NON è salvato: si deduce dalla classe, e può essere `null`
 // ("non lo sappiamo"), che è diverso da "non sono le medie".
 const livelloScelto = computed(() => livelloDaClasse(studenteScelto.value?.classe))
+// Elementari e medie stanno insieme: in tutte e due il posto è già suo tutti i
+// giorni, quindi l'unica cosa da dire è quando NON viene. Prima qui si guardava
+// solo le medie e un genitore delle elementari non aveva modo di avvisare.
+const postoFissoScelto = computed(() => postoFisso(livelloScelto.value))
 
 function nomeDi(studentId: string) {
   const s = studenti.value.find((x) => x.id === studentId)

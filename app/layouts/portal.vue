@@ -69,7 +69,7 @@
         v-for="item in visibleNavItems"
         :key="item.route"
         :to="item.route"
-        class="flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors"
+        class="flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 transition-colors"
         :class="isActive(item.route) ? 'text-tfn-600' : 'text-slate-400'"
       >
         <span class="relative">
@@ -81,7 +81,7 @@
             {{ noteUnseenCount }}
           </span>
         </span>
-        <span class="text-[10px] font-medium">{{ item.label }}</span>
+        <span class="text-[10px] font-medium leading-tight w-full px-0.5 text-center truncate">{{ item.label }}</span>
       </NuxtLink>
     </nav>
 
@@ -92,7 +92,7 @@
 </template>
 
 <script setup lang="ts">
-import { livelloDaClasse } from '#shared/livello-scolastico'
+import { livelloDaClasse, postoFisso } from '#shared/livello-scolastico'
 
 const route = useRoute()
 const { user } = useUserSession()
@@ -106,18 +106,26 @@ const prenotazioneAbilitata = computed(() =>
 
 // LA VOCE "ASSENZE" NON C'È PER TUTTI (voce G1 del piano).
 //
-// La prenotazione al contrario nasce per le MEDIE: lì il posto c'è sempre e
-// l'unica cosa da dire è quando NON si viene. Per una famiglia di soli ragazzi
-// delle superiori quel bottone non servirebbe a niente e ruberebbe spazio sulla
-// striscia in fondo allo schermo, che su un telefono è già piena.
+// La prenotazione al contrario nasce per chi NON prenota: elementari e medie.
+// Lì il posto c'è sempre e l'unica cosa da dire è quando NON si viene. Per una
+// famiglia di soli ragazzi delle superiori quel bottone non servirebbe a niente
+// e ruberebbe spazio sulla striscia in fondo allo schermo, che su un telefono è
+// già piena.
 //
-// Compare quindi solo se almeno un figlio è alle medie OPPURE se il livello non
-// si capisce (classe vuota o scritta in modo strano): in quel caso non si
-// indovina — si mostra la voce e sarà la famiglia a sapere se le serve.
+// ⚠️ LE ELEMENTARI C'ERANO RIMASTE FUORI: qui si guardava solo 'MEDIE', così un
+// genitore di un bambino delle elementari non aveva NESSUN modo di avvisare che
+// oggi non viene. Non prenotare e non poter nemmeno disdire è il peggiore dei
+// due mondi. Ora vale la stessa regola di sempre, scritta una volta sola in
+// shared/livello-scolastico.ts.
+//
+// Compare quindi se almeno un figlio ha il posto fisso (elementari o medie)
+// OPPURE se il livello non si capisce (classe vuota o scritta in modo strano):
+// in quel caso non si indovina — si mostra la voce e sarà la famiglia a sapere
+// se le serve.
 const mostraAssenze = computed(() =>
   students.value.some((s: any) => {
     const l = livelloDaClasse(s.classe)
-    return l === 'MEDIE' || l === null
+    return postoFisso(l) || l === null
   }),
 )
 
@@ -125,7 +133,11 @@ const allNavItems = computed(() => [
   { icon: 'i-heroicons-home',          label: 'Home',    route: '/portale',          always: true },
   { icon: 'i-heroicons-hand-raised',   label: 'Assenze', route: '/portale/assenze',  always: mostraAssenze.value },
   { icon: 'i-heroicons-calendar-days', label: 'Prenota', route: '/portale/prenota',  always: false },
-  { icon: 'i-heroicons-document-text', label: 'Note',    route: '/portale/note',     always: true },
+  // "Comunicazioni", non più "Note": le firma a volte la segreteria e a volte
+  // una persona con nome e cognome, quindi "note del tutor" era falso già nel
+  // menù. Sulla striscia in fondo al telefono la parola è lunga: il `truncate`
+  // qui sotto le impedisce di sfondare la casella su uno schermo stretto.
+  { icon: 'i-heroicons-document-text', label: 'Comunicazioni', route: '/portale/note', always: true },
   { icon: 'i-heroicons-tag',           label: 'Sconti',  route: '/portale/sconti',   always: true },
   { icon: 'i-heroicons-user',          label: 'Profilo', route: '/portale/profilo',  always: true },
 ])

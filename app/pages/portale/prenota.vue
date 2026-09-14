@@ -11,25 +11,27 @@
 
     <!--
       LA STRADA DELL'ASSENZA (voce G1 del piano).
-      Alle medie il posto c'è sempre: non si prenota, si avvisa quando NON si
-      viene. Il riquadro compare solo quando serve — per le medie, e quando il
-      livello non si capisce (classe vuota o scritta in modo strano), perché lì
-      non si indovina: si mostrano tutte e due le strade.
+      Alle elementari e alle medie il posto c'è sempre: non si prenota, si avvisa
+      quando NON si viene. Il riquadro compare solo quando serve — per loro, e
+      quando il livello non si capisce (classe vuota o scritta in modo strano),
+      perché lì non si indovina: si mostrano tutte e due le strade.
       La prenotazione resta comunque sotto, per tutti: è la decisione Q9.
     -->
     <div
       v-if="mostraStradaAssenza"
       class="rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center gap-3"
-      :class="livelloStudente === 'MEDIE' ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200 bg-slate-50'"
+      :class="postoFissoStudente ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200 bg-slate-50'"
     >
       <UIcon
         name="i-heroicons-hand-raised"
         class="w-6 h-6 shrink-0"
-        :class="livelloStudente === 'MEDIE' ? 'text-emerald-600' : 'text-slate-400'"
+        :class="postoFissoStudente ? 'text-emerald-600' : 'text-slate-400'"
       />
       <div class="flex-1 text-sm text-slate-700">
-        <template v-if="livelloStudente === 'MEDIE'">
-          <p class="font-medium text-slate-800">Alle medie il posto c'è sempre.</p>
+        <template v-if="postoFissoStudente">
+          <p class="font-medium text-slate-800">
+            Alle {{ livelloStudente === 'ELEMENTARI' ? 'elementari' : 'medie' }} il posto c'è sempre.
+          </p>
           <p class="text-slate-600 mt-0.5">
             Non serve prenotare giorno per giorno: avvisaci solo quando <strong>non</strong> viene.
           </p>
@@ -299,7 +301,7 @@ import { ref, reactive, computed, watchEffect, onMounted } from 'vue'
 import { SUPPLEMENTO_SPECIALE } from '#shared/tariffe'
 import { MATERIE_DEFAULT } from '#shared/materie'
 import { formatImporto } from '~/utils/format'
-import { livelloDaClasse } from '#shared/livello-scolastico'
+import { livelloDaClasse, postoFisso } from '#shared/livello-scolastico'
 
 definePageMeta({
   layout: 'portal',
@@ -532,8 +534,13 @@ const livelloStudente = computed(() => {
   return livelloDaClasse(s?.classe)
 })
 
+// Elementari e medie insieme: né gli uni né gli altri prenotano, il posto è già
+// loro tutti i giorni. Prima qui c'erano solo le medie, e alle elementari questa
+// strada non veniva nemmeno mostrata.
+const postoFissoStudente = computed(() => postoFisso(livelloStudente.value))
+
 const mostraStradaAssenza = computed(() =>
-  Boolean(form.studentId) && (livelloStudente.value === 'MEDIE' || livelloStudente.value === null),
+  Boolean(form.studentId) && (postoFissoStudente.value || livelloStudente.value === null),
 )
 
 function toggleMateria(m: string) {

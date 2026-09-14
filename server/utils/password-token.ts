@@ -152,6 +152,9 @@ export async function verificaToken(token: string): Promise<{
  * Consuma il link e imposta la password scelta dall'utente.
  * Tutto dentro una transazione: o cambia la password E il link viene bruciato,
  * oppure non succede niente. Non esiste lo stato intermedio.
+ *
+ * Fallisce (Error 'Link non valido') se il link è inesistente, scaduto, già
+ * usato, oppure se l'account nel frattempo è stato disattivato.
  */
 export async function consumaToken(token: string, nuovaPassword: string): Promise<{ userId: string }> {
   if (!token) throw new Error('Link non valido')
@@ -171,6 +174,18 @@ export async function consumaToken(token: string, nuovaPassword: string): Promis
     })
 
     if (!riga) throw new Error('Link non valido')
+
+    // Account disattivato o sospeso: il link NON vale, esattamente come già
+    // stabilisce verificaToken() quando la pagina si apre. Il controllo è qui
+    // (e non solo lì) perché la pagina si può saltare: chi chiamasse l'API
+    // direttamente si ritroverebbe altrimenti con la password cambiata su un
+    // account chiuso. Si controlla PRIMA di bruciare il gettone, così il link
+    // resta buono se un domani la segreteria riattiva quell'account.
+    const account = await tx.query.users.findFirst({
+      where: eq(users.id, riga.userId),
+      columns: { active: true },
+    })
+    if (!account?.active) throw new Error('Link non valido')
 
     const adesso = new Date()
 

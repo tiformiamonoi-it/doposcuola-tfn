@@ -109,14 +109,20 @@
                   Break-even
                   <!-- Il "?" è già un bottone: fermiamo il click qui, altrimenti aprirebbe anche il popup del calcolo -->
                   <span @click.stop>
-                    <StatHelp text="Margine meno i costi fissi del periodo (affitto, utenze…). Se è positivo, l'attività si sta ripagando da sola." />
+                    <StatHelp text="Entrate meno le uscite vere, ma con le spese previste (affitto, utenze…) al posto dei movimenti che quelle spese coprono: così l'affitto non viene contato due volte. Se è positivo, l'attività si sta ripagando da sola." />
                   </span>
                 </p>
                 <p class="text-2xl font-bold mt-1" :class="dash.breakEven >= 0 ? 'text-emerald-700' : 'text-rose-700'">
                   € {{ fmt(dash.breakEven) }}
                 </p>
                 <p class="text-[11px] mt-1" :class="dash.breakEven >= 0 ? 'text-emerald-400' : 'text-rose-400'">
-                  Margine − € {{ fmt(dash.costiFissi.periodo) }} costi fissi
+                  Con € {{ fmt(dash.costiFissi.periodo) }} di spese previste
+                </p>
+                <!-- Avviso ambra: una spesa prevista non collegata a nessuna categoria
+                     rischia di essere contata due volte (prevista + movimento vero) -->
+                <p v-if="speseNonCollegate.length" class="text-[11px] mt-1 text-amber-600 flex items-center gap-1">
+                  <UIcon name="i-heroicons-exclamation-triangle" class="w-3.5 h-3.5 shrink-0" />
+                  {{ speseNonCollegate.length === 1 ? '1 spesa non collegata' : `${speseNonCollegate.length} spese non collegate` }}
                 </p>
                 <!--
                   Accessibilità: la card intera si può cliccare col mouse, ma chi naviga
@@ -949,13 +955,54 @@
               <dd class="font-medium text-red-700 tabular-nums whitespace-nowrap">− € {{ fmt(dash.periodo.uscite) }}</dd>
             </div>
 
-            <div class="border-t border-slate-200 pt-2 flex items-baseline justify-between gap-4">
-              <dt class="font-medium text-slate-700">Margine</dt>
-              <dd class="font-semibold text-slate-900 tabular-nums whitespace-nowrap">= € {{ fmt(dash.periodo.margine) }}</dd>
+            <!--
+              Il passaggio che prima mancava, ed è il motivo per cui il break-even
+              sembrava disastroso: l'affitto (e le altre spese previste) veniva contato
+              una volta come movimento vero e una seconda come spesa fissa. Qui i
+              movimenti che le spese previste sostituiscono tornano indietro.
+            -->
+            <div v-if="righeSostituzione.length" class="flex items-baseline justify-between gap-4">
+              <dt class="text-slate-600 pl-3">di cui sostituite dalle spese previste</dt>
+              <dd class="font-medium text-green-700 tabular-nums whitespace-nowrap">+ € {{ fmt(sostituzioni.totale) }}</dd>
+            </div>
+          </dl>
+
+          <!-- Categoria per categoria: quanto era previsto e quanto è uscito davvero -->
+          <ul v-if="righeSostituzione.length" class="mt-2 space-y-1 pl-3 border-l-2 border-slate-100">
+            <li
+              v-for="riga in righeSostituzione"
+              :key="riga.categoria"
+              class="text-xs"
+              :class="riga.sforamento ? 'rounded-md bg-amber-50 px-2 py-1 -ml-2' : ''"
+            >
+              <div class="flex items-baseline justify-between gap-3">
+                <span class="min-w-0" :class="riga.sforamento ? 'text-amber-900 font-medium' : 'text-slate-600'">
+                  {{ labelCategoria(riga.categoria) }}
+                </span>
+                <span class="tabular-nums whitespace-nowrap" :class="riga.sforamento ? 'text-amber-900' : 'text-slate-500'">
+                  previsto € {{ fmt(riga.previsto) }} · speso davvero € {{ fmt(riga.speso) }}
+                </span>
+              </div>
+              <p v-if="riga.sforamento" class="mt-0.5 text-amber-700 flex items-start gap-1">
+                <UIcon name="i-heroicons-exclamation-triangle" class="w-3.5 h-3.5 shrink-0 mt-px" />
+                <span>
+                  Qui stai spendendo <strong>€ {{ fmt(riga.differenza) }} in più</strong> di quanto avevi previsto.
+                  Il break-even resta calcolato sul previsto: questo è solo un avviso.
+                </span>
+              </p>
+            </li>
+          </ul>
+
+          <dl class="space-y-2 mt-2">
+            <!-- Senza nessuna spesa collegata questa riga ripeterebbe le uscite tali e
+                 quali: si mostra solo quando c'è davvero qualcosa di sostituito. -->
+            <div v-if="righeSostituzione.length" class="border-t border-slate-200 pt-2 flex items-baseline justify-between gap-4">
+              <dt class="font-medium text-slate-700">Uscite che restano</dt>
+              <dd class="font-semibold text-slate-900 tabular-nums whitespace-nowrap">= € {{ fmt(sostituzioni.usciteRestanti) }}</dd>
             </div>
 
             <div class="flex items-baseline justify-between gap-4">
-              <dt class="text-slate-600">Spese fisse del periodo</dt>
+              <dt class="text-slate-600">Spese fisse previste del periodo</dt>
               <dd class="font-medium text-red-700 tabular-nums whitespace-nowrap">− € {{ fmt(dash.costiFissi.periodo) }}</dd>
             </div>
           </dl>
@@ -970,6 +1017,8 @@
               <span class="min-w-0">
                 <span class="text-slate-600">{{ voce.nome || 'Spesa senza nome' }}</span>
                 <span class="text-slate-400"> — € {{ fmt(voce.importoMensile) }} al mese × {{ etichettaMesi(voce.mesi) }}</span>
+                <span v-if="voce.categoria" class="text-slate-400"> · al posto di “{{ labelCategoria(voce.categoria) }}”</span>
+                <UIcon v-else name="i-heroicons-exclamation-triangle" class="w-3.5 h-3.5 text-amber-500 ml-1 align-text-bottom" title="Non collegata a nessuna categoria" />
               </span>
               <span class="tabular-nums whitespace-nowrap">€ {{ fmt(voce.totalePeriodo) }}</span>
             </li>
@@ -977,6 +1026,20 @@
           <p v-else class="mt-2 pl-3 border-l-2 border-slate-100 text-xs text-slate-400">
             Nessuna spesa fissa attiva in questo periodo (si impostano in Impostazioni → Spese fisse).
           </p>
+
+          <!-- Spese previste ancora scollegate: il doppio conteggio è ancora lì, e va detto -->
+          <div v-if="speseNonCollegate.length" class="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">
+            <p class="font-medium flex items-start gap-1">
+              <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 shrink-0 mt-px text-amber-600" />
+              <span>Non collegata a nessuna categoria: se la registri anche in contabilità, viene contata due volte.</span>
+            </p>
+            <p class="mt-1 pl-5">
+              {{ speseNonCollegate.map((s) => s.nome).join(' · ') }}
+            </p>
+            <p class="mt-1 pl-5 text-amber-700">
+              Si collega in <strong>Impostazioni → Spese fisse</strong>, colonna “Categoria che sostituisce”.
+            </p>
+          </div>
 
           <div class="mt-3 pt-2 border-t-2 border-slate-300 flex items-baseline justify-between gap-4">
             <span class="font-bold uppercase tracking-wide text-slate-700">Break-even</span>
@@ -1219,13 +1282,27 @@ async function confermaVersamentoF24() {
 // ─── E7 — Popup con il calcolo del break-even, voce per voce ───
 const modalBreakEvenAperto = ref(false)
 
-// Quante entrate servirebbero per chiudere il periodo in pari: tutte le uscite del
-// periodo più le spese fisse. Non è un numero nuovo, è lo stesso conto letto al
-// contrario: entrate − (uscite + spese fisse) = break-even.
+// Il blocco "di cui sostituite": le spese previste che prendono il posto dei movimenti
+// veri, così l'affitto non viene contato due volte. Lo calcola il server.
+const sostituzioni = computed(() => {
+  const s = (dash.value as any)?.sostituzioni
+  return {
+    totale:         (s?.totale ?? 0) as number,
+    usciteRestanti: (s?.usciteRestanti ?? dash.value?.periodo?.uscite ?? 0) as number,
+    righe:          (s?.righe ?? []) as { categoria: string; previsto: number; speso: number; differenza: number; sforamento: boolean }[],
+    nonCollegate:   (s?.nonCollegate ?? []) as { nome: string; totalePeriodo: number }[],
+  }
+})
+const righeSostituzione  = computed(() => sostituzioni.value.righe)
+const speseNonCollegate  = computed(() => sostituzioni.value.nonCollegate)
+
+// Quante entrate servirebbero per chiudere il periodo in pari: le uscite che RESTANO
+// (quelle non sostituite) più le spese previste. Non è un numero nuovo, è lo stesso
+// conto letto al contrario: entrate − (uscite che restano + spese previste) = break-even.
 const entrateNecessarie = computed(() => {
   const d = dash.value
   if (!d) return 0
-  return Number(((d.periodo.uscite ?? 0) + (d.costiFissi.periodo ?? 0)).toFixed(2))
+  return Number((sostituzioni.value.usciteRestanti + (d.costiFissi.periodo ?? 0)).toFixed(2))
 })
 
 // "1 mese", "2 mesi", "1,5 mesi": i periodi non sempre coincidono con mesi interi

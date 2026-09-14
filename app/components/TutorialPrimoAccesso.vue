@@ -53,7 +53,7 @@ const STEPS_PER_RUOLO: Record<string, { icona: string; titolo: string; testo: st
   GENITORE: [
     { icona: 'i-heroicons-home', titolo: 'La tua Home', testo: 'Appena entri vedi i pacchetti dei tuoi figli: quante ore restano e quando scadono, più le lezioni prenotate.' },
     { icona: 'i-heroicons-calendar-days', titolo: 'Prenotare una lezione', testo: 'Se la prenotazione online è attiva, da "Prenota" scegli giorno e materie. Puoi prenotare o spostare la lezione di oggi solo entro le 11:30, e annullarla entro le 12:30.' },
-    { icona: 'i-heroicons-document-text', titolo: 'Note del tutor', testo: 'In "Note" trovi gli aggiornamenti che i tutor condividono con la famiglia sull\'andamento di tuo figlio.' },
+    { icona: 'i-heroicons-document-text', titolo: 'Comunicazioni', testo: 'In "Comunicazioni" trovi gli aggiornamenti che il centro condivide con la famiglia sull\'andamento di tuo figlio.' },
     { icona: 'i-heroicons-user', titolo: 'Il tuo profilo', testo: 'Da "Profilo" cambi la password e trovi i documenti (privacy e termini). Le comunicazioni del centro arrivano alla tua email.' },
   ],
   STUDENTE: [

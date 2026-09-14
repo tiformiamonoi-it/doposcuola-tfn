@@ -2,10 +2,9 @@ import { z } from 'zod'
 import { eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { db } from '../../database/client'
-import { users, students, studentParents } from '../../database/schema'
-import { TERMS_VERSION, PRIVACY_STUDENTE_VERSION } from '#shared/legal'
+import { users } from '../../database/schema'
 import { rateLimitExceeded } from '../../utils/rate-limit'
-import { dichiarazioniMinoriMancanti } from '../../services/consensi.service'
+import { apriSessioneAccesso } from '../../utils/accesso'
 
 const loginSchema = z.object({
   email:    z.string().email('Email non valida'),
@@ -37,54 +36,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, message: 'Credenziali non valide' })
   }
 
-  // GENITORE: figli collegati via student_parents (supporto fratelli e più genitori).
-  // STUDENTE: sé stesso.
-  let linkedStudentIds: string[] | undefined
-  if (user.role === 'GENITORE') {
-    const linked = await db.query.studentParents.findMany({
-      where: eq(studentParents.parentUserId, user.id),
-      columns: { studentId: true },
-    })
-    linkedStudentIds = linked.map((s) => s.studentId)
-  } else if (user.role === 'STUDENTE') {
-    const linked = await db.query.students.findMany({
-      where: eq(students.studentUserId, user.id),
-      columns: { id: true },
-    })
-    linkedStudentIds = linked.map((s) => s.id)
-  }
-
-  // GENITORE: termini + privacy; STUDENTE: privacy studente
-  const termsAccepted = user.role === 'GENITORE'
-    ? user.termsAcceptedVersion === TERMS_VERSION
-    : user.role === 'STUDENTE'
-      ? user.termsAcceptedVersion === PRIVACY_STUDENTE_VERSION
-      : true
-
-  // I figli sotto i 14 anni per cui manca ancora l'autorizzazione del genitore
-  // (blocco 5). Si calcola qui, all'ingresso, e viaggia dentro la sessione: la
-  // schermata che la chiede si apre prima che le API del portale siano aperte,
-  // quindi non potrebbe andarsela a prendere da sola.
-  const dichiarazioniMinori = user.role === 'GENITORE'
-    ? await dichiarazioniMinoriMancanti(linkedStudentIds ?? [])
-    : undefined
-
-  await salvaSessioneUtente(event, {
-    id:                 user.id,
-    email:              user.email,
-    firstName:          user.firstName,
-    lastName:           user.lastName,
-    role:               user.role,
-    linkedStudentIds,
-    mustChangePassword: user.mustChangePassword,
-    termsAccepted,
-    dichiarazioniMinori,
-    tutorialVisto: user.tutorialVisto,
-  }, body.ricordami)
-
-  let redirectTo = ['GENITORE', 'STUDENTE'].includes(user.role) ? '/portale' : (user.role === 'TUTOR' ? '/area-tutor' : '/')
-  if (user.mustChangePassword) redirectTo = '/cambio-password'
-  else if (!termsAccepted || (dichiarazioniMinori?.length ?? 0) > 0) redirectTo = '/portale/accetta-termini'
+  // La sessione (figli collegati, documenti da accettare, dove andare) si prepara
+  // in un posto solo: utils/accesso.ts. La usa anche il link "scegli la tua
+  // password", così le due strade d'ingresso non possono divergere.
+  const { redirectTo } = await apriSessioneAccesso(event, user, body.ricordami)
 
   return { ok: true, redirectTo }
 })

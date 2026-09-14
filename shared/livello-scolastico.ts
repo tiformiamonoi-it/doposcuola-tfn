@@ -66,3 +66,24 @@ export function etichettaLivello(l: LivelloScolastico): string {
     case 'ALTRO':      return 'Concorsi / Adulti'
   }
 }
+
+/**
+ * Il posto è già suo tutti i giorni? (elementari e medie)
+ *
+ * PERCHE' ESISTE QUESTA FUNZIONE invece di scrivere `livello === 'MEDIE'` in
+ * giro per le pagine: la regola è UNA SOLA ("chi non prenota deve poter dire
+ * quando non viene") e finché stava scritta a mano in tre posti diversi bastava
+ * dimenticarne uno perché una famiglia delle elementari restasse senza il modo
+ * di avvisare — ed è esattamente quello che è successo.
+ *
+ * Elementari e medie non si prenotano: i bambini e i ragazzi vengono nei loro
+ * giorni e il posto c'è sempre. L'unica cosa che manca alla segreteria è sapere
+ * quando NON vengono.
+ *
+ * ⚠️ `null` (classe vuota o scritta in modo strano) NON è "sì" e NON è "no": è
+ * "non lo sappiamo", e chi chiama deve trattarlo a parte — di solito mostrando
+ * tutte e due le strade invece di indovinarne una.
+ */
+export function postoFisso(livello: LivelloScolastico | null): boolean {
+  return livello === 'ELEMENTARI' || livello === 'MEDIE'
+}

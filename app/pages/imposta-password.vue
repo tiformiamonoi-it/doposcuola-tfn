@@ -16,14 +16,19 @@
           <p class="mt-2">Controllo il link…</p>
         </div>
 
-        <!-- Fatto -->
+        <!-- Fatto: password salvata E persona già dentro, la portiamo a destinazione -->
         <div v-else-if="fatto" class="space-y-4 text-center">
           <UIcon name="i-heroicons-check-circle" class="w-10 h-10 text-emerald-500 mx-auto" />
           <h1 class="font-heading text-lg font-bold text-slate-900">Password salvata</h1>
           <p class="text-sm text-slate-600">
-            Da ora entri nel gestionale con la password che hai appena scelto.
+            Sei già dentro: ti stiamo aprendo la tua pagina, non devi inserire di nuovo nulla.
           </p>
-          <UButton block to="/login">Vai all'accesso</UButton>
+          <p class="text-xs text-slate-500">
+            La prossima volta entrerai con la tua email e la password che hai appena scelto.
+          </p>
+          <!-- Rete di sicurezza: se il passaggio automatico non parte (connessione
+               lenta, browser che blocca), il pulsante fa la stessa cosa a mano. -->
+          <UButton block :to="destinazione">Continua</UButton>
         </div>
 
         <!-- Link non valido -->
@@ -101,6 +106,11 @@
 // PAGINA PUBBLICA: ci si arriva dal link ricevuto per email o su WhatsApp,
 // quindi SENZA essere collegati. Nessun middleware di autenticazione, come
 // /login, /prenota, /termini e /privacy.
+//
+// Salvata la password, però, la persona è DENTRO: il server apre la sessione
+// nella stessa risposta e ci dice dove accompagnarla. Non si passa più dal
+// modulo di accesso — era il motivo della telefonata "ho fatto la password ma
+// non sono dentro".
 import { REGOLE_PASSWORD } from '#shared/schemas/password.schema'
 
 definePageMeta({ layout: false })
@@ -117,6 +127,10 @@ const conferma = ref('')
 const errore = ref('')
 const salvando = ref(false)
 const fatto = ref(false)
+// Dove il server ci dice di andare dopo l'ingresso (portale, area tutor,
+// accettazione dei documenti…). È lo stesso valore che riceve il modulo di
+// accesso: qui non si decide niente a mano.
+const destinazione = ref('/')
 
 onMounted(async () => {
   if (!token.value) {
@@ -149,11 +163,21 @@ async function salva() {
   }
   salvando.value = true
   try {
-    await $fetch('/api/auth/imposta-password', {
+    const res = await $fetch<{ ok: boolean; redirectTo: string }>('/api/auth/imposta-password', {
       method: 'POST',
       body: { token: token.value, password: password.value },
     })
+    // Il server ha già aperto la sessione: qui la rileggiamo (così l'app sa chi
+    // siamo) e accompagniamo la persona dove va. Stessa sequenza del modulo di
+    // accesso in login.vue: prima la sessione, poi lo spostamento — al contrario
+    // il gate di /portale ci troverebbe ancora "non collegati" e ci rimbalzerebbe.
+    destinazione.value = res.redirectTo || '/'
     fatto.value = true
+
+    const { fetch: aggiornaSessione } = useUserSession()
+    await aggiornaSessione()
+
+    await navigateTo(destinazione.value)
   } catch (e: any) {
     errore.value = e?.data?.statusMessage ?? 'Non è stato possibile salvare la password. Riprova.'
   } finally {

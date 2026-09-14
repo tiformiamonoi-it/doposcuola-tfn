@@ -460,11 +460,25 @@
           </template>
           <div class="space-y-4">
             <p class="text-xs text-slate-500">
-              Le spese fisse (affitto, utenze…) vengono sottratte al margine per calcolare il <strong>break-even</strong> in Contabilità.
+              Le spese fisse (affitto, utenze…) servono a calcolare il <strong>break-even</strong> in Contabilità.
               Le date <strong>Dal</strong> e <strong>Al</strong> sono facoltative: servono a non riscrivere il passato.
               Se smetti di pagare una spesa usa <strong>“Chiudi da oggi”</strong> — i mesi già passati restano come erano.
               Il cestino, invece, la cancella anche dallo storico.
             </p>
+            <p class="text-xs text-slate-500">
+              <strong>Categoria che sostituisce</strong>: se questa spesa la registri anche in contabilità,
+              indica qui la sua categoria. Il break-even userà la cifra prevista al posto dei movimenti,
+              invece di contarli tutti e due. Vale solo per i mesi indicati in <strong>Dal</strong> e <strong>Al</strong>.
+            </p>
+
+            <!-- Avviso ambra: finché una spesa resta scollegata, il doppio conteggio c'è ancora -->
+            <div v-if="speseSenzaCategoria.length" class="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">
+              <p class="font-medium flex items-start gap-1">
+                <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 shrink-0 mt-px text-amber-600" />
+                <span>Non collegata a nessuna categoria: se la registri anche in contabilità, viene contata due volte.</span>
+              </p>
+              <p class="mt-1 pl-5">{{ speseSenzaCategoria.map((s) => s.nome || 'Spesa senza nome').join(' · ') }}</p>
+            </div>
 
             <div class="flex flex-wrap items-end gap-3">
               <UFormField label="Descrizione spesa" class="flex-1 min-w-[12rem]">
@@ -479,10 +493,13 @@
               <UFormField label="Al (opzionale)" class="w-44">
                 <UInput v-model="nuovaSpesa.al" type="date" class="w-full" />
               </UFormField>
+              <UFormField label="Categoria che sostituisce" class="w-56" help="Lascia (nessuna) se non la registri in contabilità">
+                <USelect v-model="nuovaSpesa.categoria" :items="opzioniCategoriaSpesa" class="w-full" />
+              </UFormField>
               <UButton icon="i-heroicons-plus" @click="aggiungiSpesa">Aggiungi</UButton>
             </div>
 
-            <UTable :data="speseFisse" :columns="[{ accessorKey: 'nome', header: 'Spesa' }, { accessorKey: 'importo', header: 'Importo (€)' }, { id: 'validita', header: 'Valida dal / al' }, { id: 'stato', header: 'Stato' }, { id: 'azioni', header: '' }]">
+            <UTable :data="speseFisse" :columns="[{ accessorKey: 'nome', header: 'Spesa' }, { accessorKey: 'importo', header: 'Importo (€)' }, { id: 'validita', header: 'Valida dal / al' }, { id: 'categoria', header: 'Categoria che sostituisce' }, { id: 'stato', header: 'Stato' }, { id: 'azioni', header: '' }]">
               <template #importo-cell="{ row }">
                 <span class="font-medium">€ {{ row.original.importo.toFixed(2) }}</span>
               </template>
@@ -491,6 +508,18 @@
                   <UInput v-model="row.original.dal" type="date" size="xs" class="w-36" title="Da quando si paga (vuoto = da sempre)" />
                   <span class="text-slate-300">→</span>
                   <UInput v-model="row.original.al" type="date" size="xs" class="w-36" title="Fino a quando si è pagata (vuoto = ancora attiva)" />
+                </div>
+              </template>
+              <template #categoria-cell="{ row }">
+                <div class="flex items-center gap-1.5">
+                  <USelect v-model="row.original.categoria" :items="opzioniCategoriaSpesa" size="xs" class="w-48"
+                    title="La categoria contabile i cui movimenti vengono sostituiti da questa spesa prevista" />
+                  <UIcon
+                    v-if="!row.original.categoria"
+                    name="i-heroicons-exclamation-triangle"
+                    class="w-4 h-4 text-amber-500 shrink-0"
+                    title="Non collegata a nessuna categoria: se la registri anche in contabilità, viene contata due volte."
+                  />
                 </div>
               </template>
               <template #stato-cell="{ row }">
@@ -1212,7 +1241,7 @@ const configs = computed(() => configsData.value ?? {})
 
 const materie = ref<string[]>([])
 const tariffe = ref({ SINGOLA: 5, GRUPPO: 8, MAXI: 8.5 })
-const speseFisse = ref<{ nome: string; importo: number; dal: string; al: string }[]>([])
+const speseFisse = ref<{ nome: string; importo: number; dal: string; al: string; categoria: string }[]>([])
 const whatsappNumero = ref('')
 const sconti = ref<{ nome: string; descrizione: string; immagine: string }[]>([])
 const materieSpeciali = ref<string[]>([])
@@ -1226,13 +1255,16 @@ watchEffect(() => {
   try { materie.value = JSON.parse(configs.value.materie || '[]') } catch(e){}
   try { tariffe.value = JSON.parse(configs.value.tariffe_tutor || 'null') ?? { ...TARIFFE_DEFAULT } } catch(e){}
   try {
-    // Le spese salvate prima di agosto 2026 non hanno le date: restano "sempre attive"
+    // Le spese salvate prima di agosto 2026 non hanno le date: restano "sempre attive".
+    // Allo stesso modo quelle salvate prima della "categoria che sostituisce" si leggono
+    // come non collegate (''): nessun numero cambia finché non la scegli tu.
     const raw = JSON.parse(configs.value.spese_fisse || '[]')
     speseFisse.value = (Array.isArray(raw) ? raw : []).map((s: any) => ({
-      nome:    String(s?.nome ?? ''),
-      importo: Number(s?.importo) || 0,
-      dal:     typeof s?.dal === 'string' ? s.dal : '',
-      al:      typeof s?.al  === 'string' ? s.al  : '',
+      nome:      String(s?.nome ?? ''),
+      importo:   Number(s?.importo) || 0,
+      dal:       typeof s?.dal === 'string' ? s.dal : '',
+      al:        typeof s?.al  === 'string' ? s.al  : '',
+      categoria: typeof s?.categoria === 'string' ? s.categoria : '',
     }))
   } catch(e){}
   try { sconti.value = JSON.parse(configs.value.sconti || '[]') } catch(e){}
@@ -1468,14 +1500,18 @@ function aggiungiMaterieStandard() {
   )
 }
 
-const nuovaSpesa = reactive({ nome: '', importo: 0, dal: '', al: '' })
+const nuovaSpesa = reactive({ nome: '', importo: 0, dal: '', al: '', categoria: '' })
 function aggiungiSpesa() {
   if (nuovaSpesa.nome && nuovaSpesa.importo > 0) {
-    speseFisse.value.push({ nome: nuovaSpesa.nome, importo: nuovaSpesa.importo, dal: nuovaSpesa.dal, al: nuovaSpesa.al })
+    speseFisse.value.push({
+      nome: nuovaSpesa.nome, importo: nuovaSpesa.importo,
+      dal: nuovaSpesa.dal, al: nuovaSpesa.al, categoria: nuovaSpesa.categoria,
+    })
     nuovaSpesa.nome = ''
     nuovaSpesa.importo = 0
     nuovaSpesa.dal = ''
     nuovaSpesa.al = ''
+    nuovaSpesa.categoria = ''
   }
 }
 
@@ -1545,6 +1581,9 @@ async function salvaConfigs(opzioni?: { silenzioso?: boolean; rilancia?: boolean
           importo: s.importo,
           dal: s.dal || null,
           al:  s.al  || null,
+          // '' (nessuna) si salva come null: è il modo in cui il server legge
+          // "spesa non collegata a nessuna categoria contabile".
+          categoria: s.categoria || null,
         }))),
         whatsapp_numero: whatsappNumero.value,
         sconti: JSON.stringify(sconti.value),
@@ -1568,6 +1607,21 @@ async function salvaConfigs(opzioni?: { silenzioso?: boolean; rilancia?: boolean
 const { data: categorieData, pending: pendingCategorie, refresh: refreshCategorie } = useLazyFetch('/api/accounting/categories')
 const categorie = ref<{ chiave: string; etichetta: string; neutra: boolean; sistema: boolean }[]>([])
 watchEffect(() => { categorie.value = (categorieData.value ?? []).map((c: any) => ({ ...c })) })
+
+// Tendina "Categoria che sostituisce" delle spese fisse.
+// Fuori le categorie di sistema (compensi, pacchetti, bolli...): quelle le scrive il
+// gestionale da solo e non sono spese fisse. Fuori anche le categorie appena aggiunte
+// e non ancora salvate, che non hanno ancora una chiave a cui agganciarsi.
+const opzioniCategoriaSpesa = computed(() => [
+  { label: '(nessuna)', value: '' },
+  ...categorie.value
+    .filter((c) => c.chiave && !c.sistema)
+    .map((c) => ({ label: c.etichetta || c.chiave, value: c.chiave })),
+])
+
+// Quante spese previste sono ancora scollegate: se le registri anche in contabilità
+// finiscono contate due volte nel break-even.
+const speseSenzaCategoria = computed(() => speseFisse.value.filter((s) => !s.categoria))
 
 const nuovaCategoria = reactive({ etichetta: '', neutra: false })
 function aggiungiCategoria() {
