@@ -10,14 +10,17 @@ import { oraRome } from '../../utils/tutor-time-window'
 // settembre parte alle 20:00 italiane si ritroverebbe a partire alle 19:00 da fine
 // ottobre, e nessuno se ne ricorderebbe fino a quando qualcuno non se ne accorge.
 //
-// Quindi in vercel.json il job è schedulato DUE volte, "0 18,19 * * *": le 18:00 e
-// le 19:00 UTC. Una delle due, a seconda del periodo dell'anno, sono le 20:00
-// italiane; l'altra no. Ed è qui che si decide: si manda solo quando l'orologio
-// ITALIANO segna le 20. L'altra chiamata si ferma sulla porta e non manda niente.
+// In vercel.json il job è schedulato alle "0 18 * * *", cioè le 18:00 UTC: le 20:00
+// italiane con l'ora legale, le 19:00 con quella solare. Da fine ottobre a fine
+// marzo, quindi, il riepilogo parte un'ora prima del previsto. Non si perde niente:
+// una nota approvata dopo la partenza entra nel riepilogo della sera dopo, perché il
+// servizio guarda indietro due giorni.
 //
-// Metafora: sono due sveglie, una per l'ora legale e una per quella solare. Suonano
-// tutte e due, ma si alza solo quella che guarda l'orologio giusto. Nessuno deve
-// ricordarsi di spostare le lancette a ottobre e a marzo.
+// PERCHÉ NON DUE ORARI (che darebbero le 20:00 spaccate tutto l'anno): il piano
+// gratuito di Vercel accetta un solo avvio al giorno per ogni job, e il doppio
+// orario ha fatto FALLIRE la pubblicazione del 14/09/2026. Se un domani si passa a
+// un piano superiore, basta rimettere "0 18,19 * * *" e stringere la guardia qui
+// sotto alla sola ora 20.
 //
 // Per provarlo a mano fuori orario c'è ?forza=1 (serve comunque la parola d'ordine):
 // senza, una prova fatta alle 10 del mattino sembrerebbe "non funziona".
@@ -26,7 +29,12 @@ import { oraRome } from '../../utils/tutor-time-window'
 // propria: Vercel invia automaticamente "Authorization: Bearer $CRON_SECRET" alle
 // invocazioni cron. In sviluppo il controllo è disattivato, così la si può provare
 // dal browser senza inventarsi header.
-const ORA_INVIO = 20
+// Le due ore italiane in cui puo' cadere l'unica chiamata delle 18:00 UTC: le 20
+// con l'ora legale, le 19 con quella solare. Si accettano tutte e due, altrimenti
+// d'inverno la guardia bloccherebbe l'unica occasione e il riepilogo non partirebbe
+// mai piu'. (Il doppio orario, che avrebbe dato le 20 spaccate tutto l'anno, il
+// piano gratuito di Vercel non lo accetta: i job possono partire una volta al giorno.)
+const ORE_INVIO_AMMESSE = [19, 20]
 
 export default defineEventHandler(async (event) => {
   if (!import.meta.dev) {
@@ -40,10 +48,11 @@ export default defineEventHandler(async (event) => {
   const { ora } = oraRome()
   const forzato = getQuery(event).forza === '1'
 
-  if (ora !== ORA_INVIO && !forzato) {
-    // Non è un errore: è la sveglia sbagliata delle due. Si risponde e basta,
-    // così nel registro di Vercel resta scritto che il giro è avvenuto.
-    const saltato = { saltato: true, oraItaliana: ora, motivo: `Il riepilogo parte alle ${ORA_INVIO}:00 italiane` }
+  if (!ORE_INVIO_AMMESSE.includes(ora) && !forzato) {
+    // Non è un errore: è una chiamata arrivata fuori orario (una prova, un
+    // riavvio). Si risponde e basta, così nel registro di Vercel resta scritto
+    // che il giro è avvenuto e non sembra un guasto.
+    const saltato = { saltato: true, oraItaliana: ora, motivo: "Il riepilogo parte la sera, alle 20 (alle 19 con l'ora solare)" }
     console.log('[note-digest]', JSON.stringify(saltato))
     return saltato
   }
