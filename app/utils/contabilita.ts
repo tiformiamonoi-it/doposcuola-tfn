@@ -70,12 +70,17 @@ export function coloreStatoPagamento(stato: string): ColoreBadge {
 }
 
 export function coloreStatoRimborso(stato: string): ColoreBadge {
+  // Gli stati VERI di un rimborso sono tre e basta (reimbursement_status nel
+  // database): DA_PAGARE, PARZIALE, PAGATO. Qui ce n'erano altri tre inventati
+  // ('RIMBORSATO', 'DA_RIMBORSARE', 'RIFIUTATO') e mancava proprio quello iniziale,
+  // così un rimborso appena registrato finiva nel ramo "non so cosa sia" e prendeva
+  // il ROSSO dell'errore: sembrava un problema mentre era solo da pagare.
+  // Il ripiego ora è neutro, non rosso: uno stato che non conosciamo è un "non lo
+  // so", e il rosso va tenuto per le cose che non vanno davvero.
   switch (stato) {
-    case 'RIMBORSATO':  return 'success'
     case 'PAGATO':      return 'success'
-    case 'DA_RIMBORSARE': return 'warning'
     case 'PARZIALE':    return 'warning'
-    case 'RIFIUTATO':   return 'error'
-    default:            return 'error'
+    case 'DA_PAGARE':   return 'warning'
+    default:            return 'neutral'
   }
 }

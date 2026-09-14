@@ -199,6 +199,11 @@
                     <span class="font-medium text-slate-700 capitalize">{{ row.original.meseLabel }}</span>
                     <UBadge v-if="row.original.isMeseCorrente" size="xs" variant="subtle" color="info" class="ml-2">mese corrente</UBadge>
                   </template>
+                  <!-- Quante lezioni ci sono dietro quel compenso: la colonna esisteva
+                       gia' ma non e' mai stata scritta, e restava bianca per tutti. -->
+                  <template #numLezioni-cell="{ row }">
+                    <span class="text-slate-700">{{ row.original.numLezioni }}</span>
+                  </template>
                   <template #compensoCalcolato-cell="{ row }">
                     <div class="text-sm">
                       <div class="font-medium">€ {{ row.original.compensoCalcolato }}</div>
@@ -295,6 +300,12 @@
                   <template #dataRichiesta-cell="{ row }">
                     {{ new Date(row.original.dataRichiesta).toLocaleDateString('it-IT') }}
                   </template>
+                  <!-- Per COSA e' il rimborso. E' l'unica delle quattro colonne vuote
+                       che conteneva un'informazione non reperibile da nessun'altra
+                       parte: senza, la riga diceva solo data e importo. -->
+                  <template #descrizione-cell="{ row }">
+                    <span class="text-slate-700">{{ row.original.descrizione || '—' }}</span>
+                  </template>
                   <template #importo-cell="{ row }">€ {{ parseFloat(row.original.importo).toFixed(2) }}</template>
                   <template #importoPagato-cell="{ row }">€ {{ parseFloat(row.original.importoPagato).toFixed(2) }}</template>
                   <template #residuoReimb-cell="{ row }">
@@ -350,6 +361,14 @@
                 <UTable :data="performance" :columns="colonnePerf">
                   <template #meseLabel-cell="{ row }">
                     <span class="capitalize">{{ row.original.meseLabel }}</span>
+                  </template>
+                  <!-- I due numeri che danno senso al margine: senza, ricavo e compenso
+                       sono cifre senza contesto. -->
+                  <template #numLezioni-cell="{ row }">
+                    <span class="text-slate-700">{{ row.original.numLezioni }}</span>
+                  </template>
+                  <template #numStudenti-cell="{ row }">
+                    <span class="text-slate-700">{{ row.original.numStudenti }}</span>
                   </template>
                   <template #ricavo-cell="{ row }">€ {{ row.original.ricavo.toFixed(2) }}</template>
                   <template #compenso-cell="{ row }">€ {{ row.original.compenso.toFixed(2) }}</template>
@@ -904,6 +923,11 @@ const datiModifica = reactive({
   password: '', // reset password opzionale: vuoto = non cambiare
 })
 
+// Il ruolo com'era quando la scheda è stata caricata. Dichiarato QUI, prima di chi
+// lo usa: in un <script setup> una costante usata prima della sua riga esiste solo
+// dentro funzioni che partono dopo, e un controllo immediato esploderebbe.
+const ruoloIniziale = ref('TUTOR')
+
 watch(tutor, (t) => {
   if (!t) return
   Object.assign(datiModifica, {
@@ -923,6 +947,9 @@ watch(tutor, (t) => {
     noteInterne: t.noteInterne ?? '',
     password: '',
   })
+  // Il ruolo com'era all'apertura della finestra: serve a capire se la segreteria
+  // l'ha davvero toccato (vedi salvaTutor).
+  ruoloIniziale.value = t.role ?? 'TUTOR'
 })
 
 async function salvaTutor() {
@@ -932,6 +959,14 @@ async function salvaTutor() {
       method: 'PUT',
       body: {
         ...datiModifica,
+        // IL RUOLO SI MANDA SOLO SE È DAVVERO CAMBIATO.
+        // Il server lascia assegnare i ruoli al solo ADMIN. Rimandando sempre anche
+        // il ruolo — anche quando nessuno l'ha toccato — un SUPER_TUTOR che
+        // correggeva il telefono di un collega si vedeva rifiutare il salvataggio con
+        // un generico "Errore nel salvataggio", senza capire perché. Mandarlo solo
+        // quando cambia non allarga i permessi di nessuno: chi non è ADMIN e prova a
+        // cambiarlo davvero viene fermato dal server, come prima.
+        role: datiModifica.role !== ruoloIniziale.value ? datiModifica.role : undefined,
         password: datiModifica.password || undefined,
         phone: datiModifica.phone || null,
         // Campo vuoto = "non lo so": a database ci va NULL, non una stringa vuota
