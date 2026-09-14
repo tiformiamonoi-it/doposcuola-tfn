@@ -42,7 +42,7 @@
             <UBadge :color="tutor.active ? 'success' : 'neutral'" variant="subtle">
               {{ tutor.active ? 'Attivo' : 'Inattivo' }}
             </UBadge>
-            <UButton size="sm" variant="outline" icon="i-heroicons-pencil" @click="modalModificaAperto = true">
+            <UButton size="sm" variant="outline" icon="i-heroicons-pencil" @click="() => { modalModificaAperto = true }">
               Modifica
             </UButton>
             <!-- Su telefono la riga non regge badge + due bottoni + menù: "Liquida"
@@ -153,7 +153,7 @@
             <UCard>
               <div class="flex items-center justify-between mb-3">
                 <div class="text-xs text-slate-400 font-medium uppercase tracking-wide">Materie insegnate</div>
-                <UButton size="xs" variant="ghost" icon="i-heroicons-pencil" @click="modalMaterieAperto = true">
+                <UButton size="xs" variant="ghost" icon="i-heroicons-pencil" @click="() => { modalMaterieAperto = true }">
                   Gestisci
                 </UButton>
               </div>
@@ -267,7 +267,7 @@
         <template #rimborsi>
           <div class="space-y-4 pt-4">
             <div class="flex justify-end">
-              <UButton size="sm" icon="i-heroicons-plus" @click="modalNuovoRimborsoAperto = true">
+              <UButton size="sm" icon="i-heroicons-plus" @click="() => { modalNuovoRimborsoAperto = true }">
                 Nuovo rimborso
               </UButton>
             </div>
@@ -408,7 +408,7 @@
     <div v-else class="py-20 text-center text-slate-400">Tutor non trovato</div>
 
     <!-- ─── Modal Modifica Anagrafica ─── -->
-    <UModal v-model:open="modalModificaAperto" title="Modifica tutor" :ui="{ width: 'max-w-xl' }">
+    <UModal v-model:open="modalModificaAperto" title="Modifica tutor" :ui="{ content: 'max-w-xl' }">
       <template #body>
         <UForm :state="datiModifica" class="space-y-4" @submit="salvaTutor">
           <div class="grid grid-cols-2 gap-4">
@@ -424,7 +424,7 @@
           <UFormField name="password" label="Nuova password (opzionale)" hint="Lascia vuoto per non cambiarla. Al tutor arriva comunque un link per scegliersene una sua: nessuna password viaggia via email.">
             <div class="flex gap-2">
               <UInput v-model="datiModifica.password" type="text" placeholder="min. 8 caratteri" class="flex-1" />
-              <UButton icon="i-heroicons-arrow-path" variant="soft" color="neutral" @click="datiModifica.password = generaPasswordCasuale()">
+              <UButton icon="i-heroicons-arrow-path" variant="soft" color="neutral" @click="() => { datiModifica.password = generaPasswordCasuale() }">
                 Genera
               </UButton>
             </div>
@@ -465,7 +465,7 @@
             <UTextarea v-model="datiModifica.noteInterne" :rows="3" class="w-full" />
           </UFormField>
           <div class="flex justify-end gap-3 pt-2">
-            <UButton variant="ghost" @click="modalModificaAperto = false">Annulla</UButton>
+            <UButton variant="ghost" @click="() => { modalModificaAperto = false }">Annulla</UButton>
             <UButton type="submit" :loading="salvando">Salva</UButton>
           </div>
         </UForm>
@@ -473,7 +473,7 @@
     </UModal>
 
     <!-- ─── Modal Gestisci Materie ─── -->
-    <UModal v-model:open="modalMaterieAperto" title="Gestisci materie" :ui="{ width: 'max-w-md' }">
+    <UModal v-model:open="modalMaterieAperto" title="Gestisci materie" :ui="{ content: 'max-w-md' }">
       <template #body>
         <div class="space-y-4">
           <div class="flex gap-2">
@@ -497,7 +497,7 @@
             <span v-if="materieLocali.length === 0" class="text-sm text-slate-400">Nessuna materia</span>
           </div>
           <div class="flex justify-end gap-3 pt-2">
-            <UButton variant="ghost" @click="modalMaterieAperto = false">Annulla</UButton>
+            <UButton variant="ghost" @click="() => { modalMaterieAperto = false }">Annulla</UButton>
             <UButton :loading="salvando" @click="salvaMaterie">Salva materie</UButton>
           </div>
         </div>
@@ -505,7 +505,7 @@
     </UModal>
 
     <!-- ─── Modal Liquida Mese (dettaglio) ─── -->
-    <UModal v-model:open="modalLiquidaDettaglioAperto" title="Liquida mese" :ui="{ width: 'max-w-md' }">
+    <UModal v-model:open="modalLiquidaDettaglioAperto" title="Liquida mese" :ui="{ content: 'max-w-md' }">
       <template #body>
         <UForm :state="datiLiquidaDettaglio" class="space-y-4" @submit="confermaLiquidaDettaglio">
           <UFormField name="mese" label="Mese">
@@ -525,7 +525,7 @@
             <UTextarea v-model="datiLiquidaDettaglio.note" :rows="2" class="w-full" />
           </UFormField>
           <div class="flex justify-end gap-3 pt-2">
-            <UButton variant="ghost" :disabled="salvando" @click="modalLiquidaDettaglioAperto = false">Annulla</UButton>
+            <UButton variant="ghost" :disabled="salvando" @click="() => { modalLiquidaDettaglioAperto = false }">Annulla</UButton>
             <UButton type="submit" :loading="salvando" :disabled="salvando">Conferma</UButton>
           </div>
         </UForm>
@@ -533,7 +533,7 @@
     </UModal>
 
     <!-- ─── Modal Nuovo Rimborso ─── -->
-    <UModal v-model:open="modalNuovoRimborsoAperto" title="Nuovo rimborso spese" :ui="{ width: 'max-w-md' }">
+    <UModal v-model:open="modalNuovoRimborsoAperto" title="Nuovo rimborso spese" :ui="{ content: 'max-w-md' }">
       <template #body>
         <UForm :state="datiNuovoRimborso" class="space-y-4" @submit="creaNuovoRimborso">
           <UFormField name="importo" label="Importo (€)" required>
@@ -549,7 +549,7 @@
             <UTextarea v-model="datiNuovoRimborso.note" :rows="2" class="w-full" />
           </UFormField>
           <div class="flex justify-end gap-3 pt-2">
-            <UButton variant="ghost" @click="modalNuovoRimborsoAperto = false">Annulla</UButton>
+            <UButton variant="ghost" @click="() => { modalNuovoRimborsoAperto = false }">Annulla</UButton>
             <UButton type="submit" :loading="salvando">Registra rimborso</UButton>
           </div>
         </UForm>
@@ -557,7 +557,7 @@
     </UModal>
 
     <!-- ─── Modal Paga Rimborso ─── -->
-    <UModal v-model:open="modalPagaRimborsoAperto" title="Paga rimborso" :ui="{ width: 'max-w-sm' }">
+    <UModal v-model:open="modalPagaRimborsoAperto" title="Paga rimborso" :ui="{ content: 'max-w-sm' }">
       <template #body>
         <UForm :state="datiPagaRimborso" class="space-y-4" @submit="confermaPagaRimborso">
           <div v-if="rimborsoSelezionato" class="text-sm text-slate-600 bg-slate-50 rounded-lg p-3">
@@ -574,7 +574,7 @@
             <UTextarea v-model="datiPagaRimborso.note" :rows="2" class="w-full" />
           </UFormField>
           <div class="flex justify-end gap-3 pt-2">
-            <UButton variant="ghost" @click="modalPagaRimborsoAperto = false">Annulla</UButton>
+            <UButton variant="ghost" @click="() => { modalPagaRimborsoAperto = false }">Annulla</UButton>
             <UButton type="submit" :loading="salvando">Conferma pagamento</UButton>
           </div>
         </UForm>
@@ -607,23 +607,136 @@ const { user: sessionUser } = useUserSession()
 
 const id = route.params.id as string
 
+// Indirizzo della scheda tenuto come testo semplice: scritto "a stampo"
+// TypeScript lo confonde con /api/tutors/today-pool (sola lettura) e
+// rifiuterebbe le scritture (PUT e DELETE). Stessa scelta di ModalNuovoTutor.
+const indirizzoTutor: string = `/api/tutors/${id}`
+
 // Protezione TUTOR: vede solo sé stesso
 if (sessionUser.value?.role === 'TUTOR' && String(sessionUser.value?.id) !== id) {
   await navigateTo('/')
 }
 
+// ─── La forma dei dati che arrivano dal server ──
+// Senza queste dichiarazioni il controllore dei tipi non sa che cosa contiene la
+// risposta delle chiamate qui sotto e rifiuta la lettura di OGNI campo. Ogni
+// interfaccia ricalca l'endpoint corrispondente sotto server/api/tutors/**.
+
+/**
+ * GET /api/tutors/:id — getTutorById(): `users` unito a `tutor_profiles`.
+ * L'unione è "leftJoin", cioè il profilo può mancare: per questo i campi che
+ * vengono dal profilo possono essere `null`.
+ * Il ruolo: l'endpoint restituisce solo TUTOR e SUPER_TUTOR, ma da questa
+ * pagina si può promuovere ad ADMIN, quindi il modulo deve poterlo contenere.
+ */
+interface SchedaTutor {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+  phone: string | null
+  active: boolean
+  role: 'TUTOR' | 'SUPER_TUTOR' | 'ADMIN'
+  createdAt: string
+  profileId: string | null
+  indirizzo: string | null
+  citta: string | null
+  cap: string | null
+  codiceFiscale: string | null
+  partitaIva: string | null
+  dataNascita: string | null
+  materie: string[] | null
+  noteInterne: string | null
+  modalitaPagamento: 'ORE' | 'FORFAIT' | null
+  importoForfait: string | null
+}
+
+/** GET /api/tutors/:id/compensation — una riga per mese. */
+interface CompensoMese {
+  mese: string
+  meseLabel: string
+  numLezioni: number
+  compensoGrezzo: number
+  compensoCalcolato: number
+  pagato: number
+  residuo: number
+  stato: 'PAGATO' | 'PARZIALE' | 'DA_PAGARE' | 'PRO_BONO'
+  isMeseCorrente: boolean
+}
+
+/** GET /api/tutors/:id/reimbursements — righe di `tutor_reimbursements`. */
+interface RimborsoTutor {
+  id: string
+  tutorId: string
+  importo: string
+  importoPagato: string
+  descrizione: string
+  dataRichiesta: string
+  dataPagamento: string | null
+  stato: 'DA_PAGARE' | 'PARZIALE' | 'PAGATO'
+  metodo: 'CONTANTI' | 'BONIFICO' | 'POS' | 'ASSEGNO' | 'ALTRO' | null
+  note: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** GET /api/tutors/:id/payments — righe di `tutor_payments` (i compensi già pagati). */
+interface CompensoPagato {
+  id: string
+  tutorId: string
+  mese: string
+  importo: string
+  dataPagamento: string
+  metodo: 'CONTANTI' | 'BONIFICO' | 'POS' | 'ASSEGNO' | 'ALTRO'
+  status: 'PAGATO' | 'PARZIALE' | 'PRO_BONO'
+  note: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** GET /api/tutors/:id/performance — una riga per mese. */
+interface PerformanceMese {
+  mese: string
+  meseLabel: string
+  numLezioni: number
+  numStudenti: number
+  ricavo: number
+  compenso: number
+  margine: number
+  marginePerc: number
+}
+
+/** GET /api/tutors/:id/stats */
+interface StatisticheTutor {
+  distribuzioneTipo: Array<{ tipo: string; numLezioni: number; oreTotali: number; percentuale: number }>
+  topStudenti: Array<{ id: string; firstName: string; lastName: string; numLezioni: number; oreTotali: number }>
+}
+
+/** POST /api/tutors/:id/link-password */
+type EsitoLinkPassword = { ok: boolean; email: string; linkPassword: string } & EsitoInvitoEmail
+
+/**
+ * PUT /api/tutors/:id — updateTutor().
+ * Il link "scegli la tua password" torna SOLO quando l'admin ha impostato una
+ * password nuova: per questo quei campi sono facoltativi.
+ */
+type EsitoSalvataggioTutor = {
+  user: { id: string; email: string; firstName: string; lastName: string }
+  linkPassword?: string
+} & Partial<EsitoInvitoEmail>
+
 // ─── Fetch dati principali ─────────────────────
-const { data: tutor, pending: pendingTutor, refresh: refreshTutor } = useLazyFetch(`/api/tutors/${id}`, {
+const { data: tutor, pending: pendingTutor, refresh: refreshTutor } = useLazyFetch<SchedaTutor | null>(`/api/tutors/${id}`, {
   default: () => null,
 })
-const { data: compensation, pending: pendingComp, refresh: refreshComp } = useLazyFetch(`/api/tutors/${id}/compensation`, {
-  default: () => [] as any[],
+const { data: compensation, pending: pendingComp, refresh: refreshComp } = useLazyFetch<CompensoMese[]>(`/api/tutors/${id}/compensation`, {
+  default: () => [],
 })
-const { data: reimbursements, pending: pendingReimb, refresh: refreshReimb } = useLazyFetch(`/api/tutors/${id}/reimbursements`, {
-  default: () => [] as any[],
+const { data: reimbursements, pending: pendingReimb, refresh: refreshReimb } = useLazyFetch<RimborsoTutor[]>(`/api/tutors/${id}/reimbursements`, {
+  default: () => [],
 })
-const { data: tutorPayments, refresh: refreshTutorPayments } = useLazyFetch(`/api/tutors/${id}/payments`, {
-  default: () => [] as any[],
+const { data: tutorPayments, refresh: refreshTutorPayments } = useLazyFetch<CompensoPagato[]>(`/api/tutors/${id}/payments`, {
+  default: () => [],
 })
 const eliminandoCompenso = ref<string | null>(null)
 
@@ -634,7 +747,7 @@ const credEmail = ref('')
 const generandoCredenziali = ref(false)
 const linkAccesso = ref<({ link: string; email: string; nome: string } & EsitoInvitoEmail) | null>(null)
 
-watch(tutor, (t: any) => { if (t?.email && !credEmail.value) credEmail.value = t.email }, { immediate: true })
+watch(tutor, (t) => { if (t?.email && !credEmail.value) credEmail.value = t.email }, { immediate: true })
 
 async function inviaLinkAccesso() {
   if (!credEmail.value || !credEmail.value.includes('@')) {
@@ -645,16 +758,16 @@ async function inviaLinkAccesso() {
   try {
     // 1. Se la segreteria ha corretto l'email (tutor creati con email segnaposto)
     //    la salviamo prima: il link deve partire verso l'indirizzo giusto.
-    if (credEmail.value !== (tutor.value as any)?.email) {
-      await $fetch(`/api/tutors/${id}`, { method: 'PUT', body: { email: credEmail.value } })
+    if (credEmail.value !== tutor.value?.email) {
+      await $fetch(indirizzoTutor, { method: 'PUT', body: { email: credEmail.value } })
     }
     // 2. Poi il link vero e proprio. La password attuale NON viene toccata:
     //    finché il tutor non ne sceglie una nuova continua a entrare come prima.
-    const res = await $fetch(`/api/tutors/${id}/link-password`, { method: 'POST' }) as any
+    const res = await $fetch<EsitoLinkPassword>(`/api/tutors/${id}/link-password`, { method: 'POST' })
     linkAccesso.value = {
       link:         res?.linkPassword ?? '',
       email:        res?.email ?? credEmail.value,
-      nome:         (tutor.value as any)?.firstName ?? '',
+      nome:         tutor.value?.firstName ?? '',
       emailInviata: res?.emailInviata === true,
       motivoEmail:    res?.motivoEmail,
       dettaglioEmail: res?.dettaglioEmail,
@@ -671,7 +784,7 @@ async function inviaLinkAccesso() {
 // ─── ConfirmDialog: stato e logica in app/composables/useConfirm.ts ───
 const { confirmOpen, confirmTitle, confirmDescription, confirmLabel, confirmColor, chiediConferma, eseguiConferma } = useConfirm()
 
-async function eliminaCompenso(p: any) {
+async function eliminaCompenso(p: CompensoPagato) {
   chiediConferma(
     { title: `Eliminare il compenso di € ${parseFloat(p.importo).toFixed(2)}?`, description: 'Verrà rimosso anche il movimento contabile collegato.', confirmLabel: 'Elimina', confirmColor: 'error' },
     async () => {
@@ -689,31 +802,31 @@ async function eliminaCompenso(p: any) {
     }
   )
 }
-const { data: performance, pending: pendingPerf } = useLazyFetch(`/api/tutors/${id}/performance`, {
-  default: () => [] as any[],
+const { data: performance, pending: pendingPerf } = useLazyFetch<PerformanceMese[]>(`/api/tutors/${id}/performance`, {
+  default: () => [],
 })
-const { data: stats } = useLazyFetch(`/api/tutors/${id}/stats`, {
-  default: () => null as any,
+const { data: stats } = useLazyFetch<StatisticheTutor | null>(`/api/tutors/${id}/stats`, {
+  default: () => null,
 })
 
 // ─── Computed KPI ──────────────────────────────
 const arretratiTotali = computed(() =>
-  (compensation.value ?? []).reduce((s: number, m: any) => s + (m.residuo > 0.01 && !m.isMeseCorrente ? m.residuo : 0), 0)
+  (compensation.value ?? []).reduce((s: number, m) => s + (m.residuo > 0.01 && !m.isMeseCorrente ? m.residuo : 0), 0)
 )
 const mesiArretrati = computed(() =>
-  (compensation.value ?? []).filter((m: any) => m.residuo > 0.01 && !m.isMeseCorrente).length
+  (compensation.value ?? []).filter(m => m.residuo > 0.01 && !m.isMeseCorrente).length
 )
 const totaleCompensoPagato = computed(() =>
-  (compensation.value ?? []).reduce((s: number, m: any) => s + m.pagato, 0)
+  (compensation.value ?? []).reduce((s: number, m) => s + m.pagato, 0)
 )
 const compensoMeseCorrente = computed(() =>
-  (compensation.value ?? []).find((m: any) => m.isMeseCorrente)?.residuo ?? 0
+  (compensation.value ?? []).find(m => m.isMeseCorrente)?.residuo ?? 0
 )
 const totaleRimborsato = computed(() =>
-  (reimbursements.value ?? []).reduce((s: number, r: any) => s + parseFloat(r.importoPagato), 0)
+  (reimbursements.value ?? []).reduce((s: number, r) => s + parseFloat(r.importoPagato), 0)
 )
 const rimborsiDaPagare = computed(() =>
-  (reimbursements.value ?? []).reduce((s: number, r: any) =>
+  (reimbursements.value ?? []).reduce((s: number, r) =>
     s + Math.max(0, parseFloat(r.importo) - parseFloat(r.importoPagato)), 0)
 )
 
@@ -768,12 +881,7 @@ const colonnePerf = [
 
 const metodiPagamento = METODI_PAGAMENTO_ITEMS
 
-// Il tipo che useLazyFetch assegna a `tutor` è un'unione (scheda tutor | altre
-// risposte dell'API): TypeScript non sa quale ramo sia e rifiuta l'accesso a
-// QUALSIASI campo — succede già a codiceFiscale, città, cap e agli altri.
-// Qui la lettura passa da un solo punto tipizzato a mano, così la data di nascita
-// non allunga quella lista di errori.
-const dataNascitaTutor = computed<string | null>(() => (tutor.value as any)?.dataNascita ?? null)
+const dataNascitaTutor = computed<string | null>(() => tutor.value?.dataNascita ?? null)
 
 // ─── Modal Modifica ───────────────────────────
 const modalModificaAperto = ref(false)
@@ -803,7 +911,7 @@ watch(tutor, (t) => {
     lastName: t.lastName ?? '',
     email: t.email ?? '',
     phone: t.phone ?? '',
-    dataNascita: (t as any).dataNascita ?? '',
+    dataNascita: t.dataNascita ?? '',
     role: t.role ?? 'TUTOR',
     codiceFiscale: t.codiceFiscale ?? '',
     partitaIva: t.partitaIva ?? '',
@@ -820,7 +928,7 @@ watch(tutor, (t) => {
 async function salvaTutor() {
   salvando.value = true
   try {
-    const res = await $fetch(`/api/tutors/${id}`, {
+    const res = await $fetch<EsitoSalvataggioTutor>(indirizzoTutor, {
       method: 'PUT',
       body: {
         ...datiModifica,
@@ -840,14 +948,14 @@ async function salvaTutor() {
     toast.add({ title: 'Tutor aggiornato', color: 'success' })
     // Se l'admin ha impostato una password, al tutor è partito anche un link per
     // scegliersene una sua: mostriamolo, così la segreteria può inoltrarlo.
-    if ((res as any)?.linkPassword) {
+    if (res?.linkPassword) {
       linkAccesso.value = {
-        link:         (res as any).linkPassword,
-        email:        datiModifica.email || (tutor.value as any)?.email || '',
-        nome:         datiModifica.firstName || (tutor.value as any)?.firstName || '',
-        emailInviata: (res as any).emailInviata === true,
-        motivoEmail:    (res as any).motivoEmail,
-        dettaglioEmail: (res as any).dettaglioEmail,
+        link:         res.linkPassword,
+        email:        datiModifica.email || tutor.value?.email || '',
+        nome:         datiModifica.firstName || tutor.value?.firstName || '',
+        emailInviata: res.emailInviata === true,
+        motivoEmail:    res.motivoEmail,
+        dettaglioEmail: res.dettaglioEmail,
       }
     }
     modalModificaAperto.value = false
@@ -862,17 +970,17 @@ async function salvaTutor() {
 // ─── Modal Materie ────────────────────────────
 const modalMaterieAperto = ref(false)
 const materiaSelezionata = ref('')
-const materieLocali = ref<string[]>([...((tutor.value?.materie as string[]) ?? [])])
+const materieLocali = ref<string[]>([...(tutor.value?.materie ?? [])])
 
 // Fetch materie globali
-const { data: configsData } = useLazyFetch('/api/settings/configs', { default: () => ({}) })
+const { data: configsData } = useLazyFetch<Record<string, string>>('/api/settings/configs', { default: () => ({}) })
 const materieDisponibili = computed<string[]>(() => {
   try { return JSON.parse(configsData.value?.materie || '[]') } catch { return [] }
 })
 const materieNonAssegnate = computed(() => materieDisponibili.value.filter(m => !materieLocali.value.includes(m)))
 
 watch(tutor, (t) => {
-  materieLocali.value = [...((t?.materie as string[]) ?? [])]
+  materieLocali.value = [...(t?.materie ?? [])]
 })
 
 function aggiungiMateriaSelezionata() {
@@ -888,7 +996,7 @@ function rimuoviMateria(i: number) {
 async function salvaMaterie() {
   salvando.value = true
   try {
-    await $fetch(`/api/tutors/${id}`, {
+    await $fetch(indirizzoTutor, {
       method: 'PUT',
       body: { materie: materieLocali.value },
     })
@@ -914,14 +1022,14 @@ const datiLiquidaDettaglio = reactive({
 })
 
 function apriLiquidaDettaglio() {
-  const meseCorr = (compensation.value ?? []).find((m: any) => m.isMeseCorrente)
+  const meseCorr = (compensation.value ?? []).find(m => m.isMeseCorrente)
   const oggi = new Date()
   datiLiquidaDettaglio.mese = `${oggi.getFullYear()}-${String(oggi.getMonth() + 1).padStart(2, '0')}`
   if (meseCorr) datiLiquidaDettaglio.importo = String(meseCorr.residuo)
   modalLiquidaDettaglioAperto.value = true
 }
 
-function apriLiquidaMese(mese: any) {
+function apriLiquidaMese(mese: CompensoMese) {
   datiLiquidaDettaglio.mese = mese.mese
   datiLiquidaDettaglio.importo = String(mese.residuo)
   modalLiquidaDettaglioAperto.value = true
@@ -988,7 +1096,7 @@ async function creaNuovoRimborso() {
 // ─── Elimina rimborso ─────────────────────────
 const eliminandoRimborso = ref<string | null>(null)
 
-async function eliminaRimborso(r: any) {
+async function eliminaRimborso(r: RimborsoTutor) {
   chiediConferma(
     { title: `Eliminare il rimborso "${r.descrizione}"?`, description: 'Verranno eliminati anche i relativi movimenti contabili.', confirmLabel: 'Elimina', confirmColor: 'error' },
     async () => {
@@ -1008,10 +1116,10 @@ async function eliminaRimborso(r: any) {
 
 // ─── Modal Paga Rimborso ──────────────────────
 const modalPagaRimborsoAperto = ref(false)
-const rimborsoSelezionato = ref<any>(null)
+const rimborsoSelezionato = ref<RimborsoTutor | null>(null)
 const datiPagaRimborso = reactive({ importoPagamento: '', metodo: 'BONIFICO', note: '' })
 
-function apriPagaRimborso(r: any) {
+function apriPagaRimborso(r: RimborsoTutor) {
   rimborsoSelezionato.value = r
   const residuo = parseFloat(r.importo) - parseFloat(r.importoPagato)
   datiPagaRimborso.importoPagamento = residuo.toFixed(2)
@@ -1059,10 +1167,10 @@ const menuAzioni = computed(() => [
 async function toggleAttivo() {
   try {
     if (tutor.value?.active) {
-      await $fetch(`/api/tutors/${id}`, { method: 'DELETE' })
+      await $fetch(indirizzoTutor, { method: 'DELETE' })
       toast.add({ title: 'Tutor disattivato', color: 'info' })
     } else {
-      await $fetch(`/api/tutors/${id}`, { method: 'PUT', body: { active: true } })
+      await $fetch(indirizzoTutor, { method: 'PUT', body: { active: true } })
       toast.add({ title: 'Tutor riattivato', color: 'success' })
     }
     refreshTutor()

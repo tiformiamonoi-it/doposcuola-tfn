@@ -4,7 +4,7 @@
       <h2 class="font-heading text-xl font-bold text-slate-900">
         {{ isEditMode ? 'Modifica la lezione' : 'Richiedi una lezione' }}
       </h2>
-      <UButton v-if="isEditMode" size="xs" color="gray" variant="ghost" @click="resetForm">
+      <UButton v-if="isEditMode" size="xs" color="neutral" variant="ghost" @click="resetForm">
         Nuova richiesta
       </UButton>
     </div>
@@ -118,7 +118,7 @@
             <span
               v-if="(GIORNATE_SPECIALI[getDateString(day)]?.length) && form.dataDesiderata !== getDateString(day)"
               class="absolute top-0 left-0.5 text-[9px]"
-              :title="GIORNATE_SPECIALI[getDateString(day)].join(', ')"
+              :title="(GIORNATE_SPECIALI[getDateString(day)] ?? []).join(', ')"
             >⭐</span>
           </button>
         </div>
@@ -139,9 +139,9 @@
       <template #footer>
         <div class="flex justify-end">
           <UButton
-            :color="isEditMode ? 'amber' : 'primary'"
+            :color="isEditMode ? 'warning' : 'primary'"
             :disabled="!form.dataDesiderata || !form.studentId"
-            @click="step = 2"
+            @click="() => { step = 2 }"
           >
             Avanti
           </UButton>
@@ -218,8 +218,8 @@
 
       <template #footer>
         <div class="flex justify-between">
-          <UButton variant="ghost" @click="step = 1">Indietro</UButton>
-          <UButton :color="isEditMode ? 'amber' : 'primary'" :disabled="form.materie.length === 0" @click="step = 3">Avanti</UButton>
+          <UButton variant="ghost" @click="() => { step = 1 }">Indietro</UButton>
+          <UButton :color="isEditMode ? 'warning' : 'primary'" :disabled="form.materie.length === 0" @click="() => { step = 3 }">Avanti</UButton>
         </div>
       </template>
     </UCard>
@@ -266,8 +266,8 @@
 
       <template #footer>
         <div class="flex justify-between">
-          <UButton variant="ghost" @click="step = 2">Indietro</UButton>
-          <UButton :color="isEditMode ? 'amber' : 'primary'" :loading="loading" @click="inviaPrenotazione">
+          <UButton variant="ghost" @click="() => { step = 2 }">Indietro</UButton>
+          <UButton :color="isEditMode ? 'warning' : 'primary'" :loading="loading" @click="inviaPrenotazione">
             {{ isEditMode ? 'Salva Modifiche' : 'Conferma richiesta' }}
           </UButton>
         </div>
@@ -501,7 +501,9 @@ function selectDate(day: number) {
 function onStudentChange() {
   // Ricalcola se la data selezionata ha una lezione per il nuovo figlio
   if (form.dataDesiderata) {
-    const day = parseInt(form.dataDesiderata.split('-')[2], 10)
+    // La data è sempre 'YYYY-MM-DD': il ?? '' serve solo a TypeScript,
+    // che da solo non sa quante parti ha lo split (parseInt('') = NaN, come prima).
+    const day = parseInt(form.dataDesiderata.split('-')[2] ?? '', 10)
     selectDate(day) // Rilancia la logica di selezione che imposterà l'edit mode corretto
   }
 }

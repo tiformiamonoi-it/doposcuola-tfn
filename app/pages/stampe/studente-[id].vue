@@ -3,7 +3,7 @@
 
     <!-- Controlli (solo a schermo, nascosti in stampa) -->
     <div class="no-print flex flex-wrap items-end gap-3 mb-6 bg-slate-50 rounded-xl border border-slate-200 p-4">
-      <UButton icon="i-heroicons-arrow-left" variant="ghost" size="sm" @click="navigateTo(`/studenti/${id}`)">
+      <UButton icon="i-heroicons-arrow-left" variant="ghost" size="sm" @click="() => { navigateTo(`/studenti/${id}`) }">
         Torna alla scheda
       </UButton>
       <UFormField label="Dal" size="sm">

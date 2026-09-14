@@ -10,7 +10,7 @@
       <UButton
         v-if="isAdmin"
         icon="i-heroicons-plus"
-        @click="wizardAperto = true"
+        @click="() => { wizardAperto = true }"
       >
         Nuovo Studente
       </UButton>
@@ -108,7 +108,7 @@
               {{ [s.classe, s.scuola].filter(Boolean).join(' · ') || s.studentEmail || s.parentEmail || '—' }}
             </p>
           </div>
-          <UBadge :color="s.statusColor" variant="soft" size="md" :ui="{ rounded: 'rounded-lg' }">
+          <UBadge :color="s.statusColor" variant="soft" size="md">
             {{ s.globalStatus }}
           </UBadge>
         </div>
@@ -116,10 +116,14 @@
     </div>
 
     <!-- ─── DESKTOP: tabella ─── -->
-    <UCard
-      :ui="{ body: { padding: 'p-0' }, rounded: 'rounded-2xl', ring: 'ring-1 ring-slate-200', shadow: 'shadow-sm' }"
-      class="overflow-hidden hidden lg:block"
-    >
+    <!--
+      Niente `:ui` qui: `body: { padding }`, `rounded`, `ring` e `shadow` erano
+      chiavi di Nuxt UI 2 e nella versione 4 non esistono più — da tempo non
+      facevano più niente, la scheda usa già il suo aspetto predefinito.
+      Toglierle non cambia nulla a schermo; rimetterle al modo nuovo sì, quindi
+      la scelta resta da fare con calma (vedi il resoconto della pulizia H2).
+    -->
+    <UCard class="overflow-hidden hidden lg:block">
       <UTable
         :columns="columns"
         :data="studenti"
@@ -163,20 +167,19 @@
           :color="row.original.statusColor"
           variant="soft"
           size="md"
-          :ui="{ rounded: 'rounded-lg', font: 'font-medium tracking-wide text-sm px-3 py-1' }"
         >
           {{ row.original.globalStatus }}
         </UBadge>
       </template>
 
       <template #parentName-cell="{ row }">
-        <div class="truncate max-w-[150px]" :title="row.original.parentName || row.original.parentEmail">
+        <div class="truncate max-w-[150px]" :title="row.original.parentName || row.original.parentEmail || undefined">
           {{ row.original.parentName || row.original.parentEmail || '—' }}
         </div>
       </template>
 
         <template #scuola-cell="{ row }">
-          <div class="truncate max-w-[150px]" :title="row.original.scuola">
+          <div class="truncate max-w-[150px]" :title="row.original.scuola ?? undefined">
             {{ row.original.scuola || '—' }}
           </div>
         </template>
@@ -236,8 +239,39 @@ const nascondiInattivi = ref(true)
 const pagina = ref(1)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
+// ─── La forma di una riga dell'elenco ───
+// Sono le colonne della tabella `students` (quelle che questa pagina mostra) più
+// i due campi che il server CALCOLA per l'elenco: il testo del badge di stato e
+// il suo colore (server/services/student.service.ts → listStudents).
+// Va scritta a mano perché lo stesso indirizzo `/api/students` risponde in due
+// forme: quella completa e quella "leggera" (`light=true`, usata dalle tendine di
+// scelta dell'alunno) che gli stati NON li calcola. TypeScript non sa quale delle
+// due stia arrivando e senza questa dichiarazione rifiuta la lettura di ogni
+// campo. Questa pagina non chiede mai `light`, quindi riceve sempre la completa.
+// L'endpoint manda anche altro (pacchetti attivi, ore residue) che serve al
+// selettore degli alunni e che qui non si usa.
+type RigaStudente = {
+  id: string
+  firstName: string
+  lastName: string
+  classe: string | null
+  scuola: string | null
+  studentEmail: string | null
+  parentEmail: string | null
+  parentName: string | null
+  /** Il testo del badge: "Attivo", "Da saldare", "Da rinnovare", "Scaduto", "Nessun pacchetto", "Inattivo" */
+  globalStatus: string
+  /** Il colore del badge, deciso dal server: sono gli unici quattro che usa */
+  statusColor: 'success' | 'warning' | 'error' | 'neutral'
+}
+
+type ElencoStudenti = {
+  data: RigaStudente[]
+  meta: { page: number; limit: number; total: number; totalPages: number }
+}
+
 // ─── Fetch studenti ───
-const { data, pending, refresh } = useLazyFetch('/api/students', {
+const { data, pending, refresh } = useLazyFetch<ElencoStudenti>('/api/students', {
   query: computed(() => ({
     search:  search.value   || undefined,
     active:  filtroAttivo.value === 'all' ? undefined : filtroAttivo.value,

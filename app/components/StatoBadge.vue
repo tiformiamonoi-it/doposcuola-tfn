@@ -3,7 +3,6 @@
     :color="colore" 
     variant="soft" 
     size="md"
-    :ui="{ rounded: 'rounded-lg', font: 'font-medium tracking-wide text-sm px-3 py-1' }"
   >
     {{ etichetta }}
   </UBadge>

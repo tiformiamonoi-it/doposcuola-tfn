@@ -35,7 +35,7 @@
           <UButton v-if="isAdmin" :to="`/api/students/${id}/export`" external target="_blank" icon="i-heroicons-arrow-down-tray" variant="ghost" size="sm" class="hidden sm:inline-flex">Esporta dati</UButton>
           <UButton v-if="isAdmin" icon="i-heroicons-pencil-square" variant="ghost" size="sm" @click="apriModalModifica">Modifica</UButton>
           <UButton v-if="studente.active" icon="i-heroicons-user-minus" variant="ghost" color="error" size="sm" :loading="disattivando" class="hidden sm:inline-flex" @click="disattivaStudente">Disattiva</UButton>
-          <UButton v-if="isSoloAdmin" icon="i-heroicons-shield-exclamation" variant="ghost" color="error" size="sm" class="hidden sm:inline-flex" @click="anonimizzaAperto = true">Anonimizza</UButton>
+          <UButton v-if="isSoloAdmin" icon="i-heroicons-shield-exclamation" variant="ghost" color="error" size="sm" class="hidden sm:inline-flex" @click="() => { anonimizzaAperto = true }">Anonimizza</UButton>
           <!-- Se per il ruolo di chi guarda non resta nessuna azione da nascondere,
                il bottone a tre puntini non compare affatto. -->
           <UDropdownMenu v-if="azioniTelefono.length > 0" :items="azioniTelefono">
@@ -61,7 +61,7 @@
         </template>
         <template #footer>
           <div class="flex justify-end gap-3">
-            <UButton variant="ghost" @click="anonimizzaAperto = false">Annulla</UButton>
+            <UButton variant="ghost" @click="() => { anonimizzaAperto = false }">Annulla</UButton>
             <UButton color="error" :disabled="!anonimizzaConferma" :loading="anonimizzando" @click="anonimizzaStudente">Anonimizza definitivamente</UButton>
           </div>
         </template>
@@ -84,7 +84,10 @@
                 <UBadge :color="studente.active ? 'success' : 'neutral'" variant="subtle" size="sm">
                   {{ studente.active ? 'Attivo' : 'Inattivo' }}
                 </UBadge>
-                <UBadge v-if="studente.bisogniSpeciali" color="orange" variant="subtle" size="sm">BES / DSA</UBadge>
+                <!-- "orange" non esiste in Nuxt UI 4 (vedi la nota della card blu qui sotto):
+                     ricadeva sul blu di default. Il giallo di "warning" è quello che
+                     serviva: un richiamo, non un allarme. -->
+                <UBadge v-if="studente.bisogniSpeciali" color="warning" variant="subtle" size="sm">BES / DSA</UBadge>
               </div>
             </div>
 
@@ -239,7 +242,8 @@
                     <!-- Bisogni speciali: sempre visibili -->
                     <div class="text-sm">
                       <div class="flex items-center gap-2 mb-0.5">
-                        <UBadge color="orange" variant="subtle" size="xs">BES / DSA</UBadge>
+                        <!-- Stesso colore del badge in sidebar: "orange" non esiste in Nuxt UI 4 -->
+                        <UBadge color="warning" variant="subtle" size="xs">BES / DSA</UBadge>
                       </div>
                       <p v-if="studente.bisogniSpeciali" class="text-slate-700 whitespace-pre-wrap">{{ studente.bisogniSpeciali }}</p>
                       <p v-else class="text-slate-400 italic">Nessun bisogno speciale segnalato.</p>
@@ -544,7 +548,7 @@
                       </div>
                     </div>
                     <div class="flex gap-2 justify-end">
-                      <UButton size="sm" variant="ghost" @click="confermaCollegamento = null">Annulla</UButton>
+                      <UButton size="sm" variant="ghost" @click="() => { confermaCollegamento = null }">Annulla</UButton>
                       <UButton size="sm" color="primary" :loading="creandoAccesso" @click="creaAccessoPortale(true)">Sì, collega studente</UButton>
                     </div>
                   </div>
@@ -862,7 +866,7 @@
     <ModalCreaPacchetto
       v-model:open="modalCreaAperto"
       :student-id="id"
-      :student-name="studente?.lastName + ' ' + studente?.firstName"
+      :student-name="`${studente?.lastName} ${studente?.firstName}`"
       :rinnovo-da="pacchettoDaRinnovare"
       @refresh="ricaricaDopoPacchetto"
     />
@@ -913,7 +917,7 @@
       </template>
       <template #footer>
         <div class="flex justify-end gap-2 px-4 pb-4">
-          <UButton variant="ghost" @click="mostraModalCreaAccesso = false">Annulla</UButton>
+          <UButton variant="ghost" @click="() => { mostraModalCreaAccesso = false }">Annulla</UButton>
           <UButton
             color="primary"
             :loading="creandoAccesso"
@@ -927,7 +931,9 @@
     </UModal>
 
     <!-- ─── MODAL MODIFICA STUDENTE ─── -->
-    <UModal v-model:open="modalModificaAperto" title="Modifica Studente" :ui="{ width: 'max-w-2xl' }">
+    <!-- `width` era la chiave di Nuxt UI 2 e nella 4 non esiste più: la finestra
+         restava della larghezza normale. La chiave giusta oggi è `content`. -->
+    <UModal v-model:open="modalModificaAperto" title="Modifica Studente" :ui="{ content: 'max-w-2xl' }">
       <template #body>
         <UForm ref="formModifica" :schema="UpdateStudentSchema" :state="datiModifica" @submit="salvaModifica" class="space-y-4">
 
@@ -975,7 +981,7 @@
               <template v-else>
                 <div class="flex gap-2">
                   <UInput v-model="datiModifica.scuola" placeholder="Nome scuola" class="flex-1" />
-                  <UButton variant="ghost" size="xs" @click="altreScuolaModifica = false">← Lista</UButton>
+                  <UButton variant="ghost" size="xs" @click="() => { altreScuolaModifica = false }">← Lista</UButton>
                 </div>
               </template>
             </UFormField>
@@ -1131,7 +1137,7 @@
       </template>
       <template #footer>
         <div class="flex justify-end gap-3">
-          <UButton variant="ghost" @click="modalModificaAperto = false">Annulla</UButton>
+          <UButton variant="ghost" @click="() => { modalModificaAperto = false }">Annulla</UButton>
           <UButton :loading="salvando" @click="formModifica?.submit()">Salva Modifiche</UButton>
         </div>
       </template>
@@ -1300,20 +1306,67 @@ import { SCUOLE_TRAPANI, CLASSI_LISTA } from '~/utils/schools'
 import { formatData } from '~/utils/format'
 import { livelloDaClasse, etichettaLivello } from '#shared/livello-scolastico'
 
-// ─── Fetch studente ───
-const { data: studente, pending, refresh } = useLazyFetch(`/api/students/${id}`)
+// ─── La scheda dell'alunno, campo per campo ───
+// È la riga della tabella `students` (server/database/schema/students.ts) come
+// arriva da GET /api/students/:id, cioè dopo il passaggio in JSON: le date
+// diventano testo. Va scritta a mano perché l'indirizzo `/api/students/<codice>`
+// somiglia anche a `/api/students/stats` e TypeScript non sa quale delle due
+// risposte stia arrivando: senza questa dichiarazione rifiutava la lettura di
+// QUALSIASI campo, ed è il motivo per cui la pagina era piena di `as any`.
+// Questa pagina è riservata a ADMIN e SUPER_TUTOR (vedi definePageMeta): i
+// recapiti dei genitori, che il server nasconde ai TUTOR, qui arrivano sempre.
+// Scritto come `type` e non come `interface` di proposito: serve per poterla
+// passare a leggiSerie(), che accetta "un oggetto qualsiasi con quei nomi".
+type AnagraficaStudente = {
+  id: string
+  firstName: string
+  lastName: string
+  classe: string | null
+  scuola: string | null
+  /** Giorno civile 'AAAA-MM-GG'. Facoltativa: di molti alunni non la sappiamo. */
+  dataNascita: string | null
+  studentPhone: string | null
+  studentEmail: string | null
+  // Primo genitore/tutore: è l'intestatario delle fatture
+  parentName: string | null
+  parentEmail: string | null
+  parentPhone: string | null
+  parentIndirizzo: string | null
+  parentCitta: string | null
+  parentCap: string | null
+  parentCF: string | null
+  parentPIva: string | null
+  parentRelazione: string | null
+  // Secondo genitore/tutore: stessi campi, più la data di nascita
+  parent2Name: string | null
+  parent2Email: string | null
+  parent2Phone: string | null
+  parent2Indirizzo: string | null
+  parent2Citta: string | null
+  parent2Cap: string | null
+  parent2CF: string | null
+  parent2PIva: string | null
+  parent2DataNascita: string | null
+  parent2Relazione: string | null
+  active: boolean
+  note: string | null
+  bisogniSpeciali: string | null
+  studentUserId: string | null
+  abilitatoPrenotazioneOnline: boolean
+  createdAt: string
+  updatedAt: string
+}
 
-// Il tipo che useLazyFetch assegna a `studente` è un'unione (scheda alunno | altre
-// risposte dell'API): TypeScript non sa quale ramo sia e rifiuta l'accesso a
-// QUALSIASI campo — succede già a classe, scuola, bisogniSpeciali e agli altri.
-// Qui la lettura passa da un solo punto tipizzato a mano.
-const dataNascitaStudente = computed<string | null>(() => (studente.value as any)?.dataNascita ?? null)
+// ─── Fetch studente ───
+const { data: studente, pending, refresh } = useLazyFetch<AnagraficaStudente>(`/api/students/${id}`)
+
+const dataNascitaStudente = computed<string | null>(() => studente.value?.dataNascita ?? null)
 
 // IL LIVELLO SCOLASTICO NON È SALVATO DA NESSUNA PARTE: si deduce dalla classe.
 // Se la classe è vuota o scritta in un modo che non riconosciamo, qui esce "—"
 // e non un livello inventato: chi legge deve poter capire che il dato manca.
 const etichettaLivelloStudente = computed(() => {
-  const l = livelloDaClasse((studente.value as any)?.classe)
+  const l = livelloDaClasse(studente.value?.classe)
   return l ? etichettaLivello(l) : '—'
 })
 
@@ -1351,7 +1404,10 @@ async function disattivaStudente() {
     async () => {
       disattivando.value = true
       try {
-        await $fetch(`/api/students/${id}`, { method: 'DELETE' })
+        // Indirizzo tenuto come testo semplice: scritto "a stampo" TypeScript lo
+        // confonde con /api/students/stats (solo lettura) e rifiuterebbe il DELETE.
+        const indirizzoStudente: string = `/api/students/${id}`
+        await $fetch(indirizzoStudente, { method: 'DELETE' })
         toast.add({ title: 'Studente disattivato', color: 'success', icon: 'i-heroicons-check-circle' })
         refresh()
       } catch (err: any) {
@@ -1400,9 +1456,7 @@ const azioniTelefono = computed(() => {
   }
 
   const pericolose: Record<string, unknown>[] = []
-  // `as any` come nel resto della pagina: il tipo che useLazyFetch assegna a
-  // `studente` è un'unione e TypeScript non sa quale ramo sia (vedi riga 897).
-  if ((studente.value as any)?.active) {
+  if (studente.value?.active) {
     pericolose.push({ label: 'Disattiva', icon: 'i-heroicons-user-minus', color: 'error', onSelect: () => disattivaStudente() })
   }
   if (isSoloAdmin.value) {
@@ -1443,11 +1497,10 @@ function componiRelazione(scelta: string, altro: string): string | null {
 
 // I campi dei genitori, già pronti per essere mostrati.
 // /api/students/:id risponde con due forme diverse (completa per la segreteria,
-// ridotta per i tutor, senza i recapiti dei genitori): per TypeScript è un'unione
-// e leggerli uno per uno dal template costerebbe un errore di tipo per riga.
-// Si leggono una volta sola qui, e il riquadro in scheda usa questi valori.
+// ridotta per i tutor, senza i recapiti dei genitori): si leggono una volta sola
+// qui, e il riquadro in scheda usa questi valori.
 const genitori = computed(() => {
-  const s = studente.value as any
+  const s = studente.value
   const cittaCap = (citta?: string | null, cap?: string | null) =>
     citta ? `${citta} ${cap ?? ''}`.trim() : null
   return {
@@ -1466,7 +1519,7 @@ const genitori = computed(() => {
 
 // Il primo genitore c'è se ha almeno un dato suo. Serve alla riga "Nessun
 // genitore registrato" per l'alunno creato senza genitore (C5).
-const haPrimoGenitore = computed(() => haDatiGenitore(leggiSerie(studente.value as any, 1)))
+const haPrimoGenitore = computed(() => haDatiGenitore(leggiSerie(studente.value, 1)))
 
 // Il secondo genitore c'è se ha almeno un dato suo: così il riquadro in scheda
 // compare solo quando serve davvero.
@@ -1518,7 +1571,7 @@ const datiModifica = reactive({
 
 function apriModalModifica() {
   if (!studente.value) return
-  const s = studente.value as any
+  const s = studente.value
   const rel1 = scomponiRelazione(s.parentRelazione)
   const rel2 = scomponiRelazione(s.parent2Relazione)
   Object.assign(datiModifica, {
@@ -1594,7 +1647,7 @@ function stessaEmail(a?: string | null, b?: string | null) {
 // scheda e account andavano d'accordo: se erano già diverse non sappiamo quale
 // delle due sia quella giusta, e allora meglio non proporre niente.
 function conseguenzeDellaModifica(): VoceConseguenza[] {
-  const s = studente.value as any
+  const s = studente.value
   if (!s) return []
   const voci: VoceConseguenza[] = []
   const accStudente = (studentAccount.value as any)?.studentUser ?? null
@@ -1629,9 +1682,9 @@ function conseguenzeDellaModifica(): VoceConseguenza[] {
 
   // 2. Le email del primo e del secondo genitore
   const genitoriScheda = [
-    { vecchia: s.parentEmail as string | null, nuova: datiModifica.parentEmail },
+    { vecchia: s.parentEmail, nuova: datiModifica.parentEmail },
     // Spunta del secondo genitore tolta = i suoi dati spariscono: nessuna email nuova
-    { vecchia: s.parent2Email as string | null, nuova: mostraSecondoGenitore.value ? datiModifica.parent2Email : '' },
+    { vecchia: s.parent2Email, nuova: mostraSecondoGenitore.value ? datiModifica.parent2Email : '' },
   ]
   const giaProposti = new Set<string>()
   for (const { vecchia, nuova } of genitoriScheda) {
@@ -1695,7 +1748,7 @@ function legamePerGenitore(f: Fratello, mioSlot: Slot): { suoSlot: Slot; forte: 
   return { suoSlot: scelto.suoSlot, forte: Boolean(forte) }
 }
 
-function vociPerIFratelli(s: any): VoceConseguenza[] {
+function vociPerIFratelli(s: AnagraficaStudente): VoceConseguenza[] {
   // Dati dei fratelli non arrivati (o nessun fratello): nessuna domanda, e il
   // salvataggio va avanti come sempre
   if (fratelli.value.length === 0) return []
@@ -1807,7 +1860,10 @@ async function confermaPrimaDiSalvare(idAttive: string[]) {
 async function salvaAnagrafica(): Promise<boolean> {
   salvando.value = true
   try {
-    await $fetch(`/api/students/${id}`, {
+    // Indirizzo tenuto come testo semplice: scritto "a stampo" TypeScript lo
+    // confonde con /api/students/stats (solo lettura) e rifiuterebbe il PUT.
+    const indirizzoStudente: string = `/api/students/${id}`
+    await $fetch(indirizzoStudente, {
       method: 'PUT',
       body: {
         ...datiModifica,
@@ -1957,7 +2013,7 @@ function esportaCsvPrenotazioni() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `prenotazioni-${(studente.value as any)?.lastName ?? id}.csv`
+  a.download = `prenotazioni-${studente.value?.lastName ?? id}.csv`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -1993,7 +2049,7 @@ function comeRiconosciuto(f: Fratello): string {
 // ─── Collega un genitore già registrato (C5) ───
 const collegaGenitoreAperto = ref(false)
 const nomeAlunno = computed(() => {
-  const s = studente.value as any
+  const s = studente.value
   return s ? `${s.firstName ?? ''} ${s.lastName ?? ''}`.trim() : ''
 })
 function apriCollegaGenitore() {
@@ -2281,7 +2337,7 @@ const confermaCollegamento = ref<{
 } | null>(null)
 
 function apriModalCreaAccesso() {
-  const s = studente.value as any
+  const s = studente.value
   // Il primo genitore si precompila con i dati anagrafici della scheda; dal secondo
   // in poi si parte da campi vuoti (altrimenti si riproporrebbe il genitore già collegato).
   const primoGenitore = genitoriPortale.value.length === 0
@@ -2289,7 +2345,7 @@ function apriModalCreaAccesso() {
   datiCreaAccesso.firstName = ''
   datiCreaAccesso.lastName  = ''
   if (primoGenitore && s?.parentName) {
-    const parts = (s.parentName as string).trim().split(/\s+/)
+    const parts = s.parentName.trim().split(/\s+/)
     datiCreaAccesso.firstName = parts[0] ?? ''
     datiCreaAccesso.lastName  = parts.slice(1).join(' ')
   }

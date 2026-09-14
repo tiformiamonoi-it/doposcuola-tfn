@@ -4,7 +4,7 @@
       <div class="flex items-center gap-3 w-full">
         <UIcon name="i-heroicons-users" class="w-5 h-5 text-primary-500" />
         <span class="font-semibold text-slate-800 text-base flex-1">Seleziona studenti</span>
-        <UButton icon="i-heroicons-x-mark" size="xs" variant="ghost" color="neutral" @click="isOpen = false" />
+        <UButton icon="i-heroicons-x-mark" size="xs" variant="ghost" color="neutral" @click="() => { isOpen = false }" />
       </div>
     </template>
 
@@ -89,7 +89,7 @@
           {{ selected.size }} selezionati
         </span>
         <div class="flex gap-3">
-          <UButton variant="ghost" color="neutral" @click="isOpen = false">Annulla</UButton>
+          <UButton variant="ghost" color="neutral" @click="() => { isOpen = false }">Annulla</UButton>
           <UButton color="primary" :disabled="selected.size === 0" @click="onConfirm">
             Aggiungi selezionati
           </UButton>

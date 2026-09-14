@@ -73,7 +73,7 @@
                   <USelect v-model="editForm.metodo" :items="metodiPagamento" size="xs" />
                 </div>
                 <div class="flex justify-end gap-2 mt-2">
-                  <UButton size="xs" variant="ghost" @click="editingId = null">Annulla</UButton>
+                  <UButton size="xs" variant="ghost" @click="() => { editingId = null }">Annulla</UButton>
                   <UButton size="xs" color="primary" :disabled="!!editTipoError" @click="chiediModifica(p)">Salva</UButton>
                 </div>
               </div>
@@ -84,7 +84,7 @@
     </template>
     <template #footer>
       <div class="flex justify-end gap-3">
-        <UButton variant="ghost" @click="isOpen = false">Annulla</UButton>
+        <UButton variant="ghost" @click="() => { isOpen = false }">Annulla</UButton>
         <UButton :loading="salvandoPagamento" :disabled="giaSaldato || !!tipoPagamentoError" @click="salvaPagamento">Registra Pagamento</UButton>
       </div>
     </template>

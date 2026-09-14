@@ -61,7 +61,7 @@
             <p class="text-xs text-slate-500 mt-0.5">
               {{ t.oreIncluse }} ore
               <template v-if="t.tipo === 'MENSILE' && t.giorniInclusi"> · {{ t.giorniInclusi }} giorni · {{ t.orarioGiornaliero }}h/giorno</template>
-              <template v-else-if="t.tipo === 'A_CONSUMO'"> · € {{ parseFloat(t.tariffaOraria || 0).toFixed(2) }}/h</template>
+              <template v-else-if="t.tipo === 'A_CONSUMO'"> · € {{ parseFloat(t.tariffaOraria || '0').toFixed(2) }}/h</template>
               · € {{ parseFloat(t.prezzoStandard).toFixed(2) }}
               <span v-if="t.descrizione" class="ml-2 text-slate-400">— {{ t.descrizione }}</span>
             </p>
@@ -484,13 +484,13 @@
 
             <UTable :data="speseFisse" :columns="[{ accessorKey: 'nome', header: 'Spesa' }, { accessorKey: 'importo', header: 'Importo (€)' }, { id: 'validita', header: 'Valida dal / al' }, { id: 'stato', header: 'Stato' }, { id: 'azioni', header: '' }]">
               <template #importo-cell="{ row }">
-                <span class="font-medium">€ {{ parseFloat(row.original.importo).toFixed(2) }}</span>
+                <span class="font-medium">€ {{ row.original.importo.toFixed(2) }}</span>
               </template>
               <template #validita-cell="{ row }">
                 <div class="flex items-center gap-2">
-                  <UInput v-model="speseFisse[row.index].dal" type="date" size="xs" class="w-36" title="Da quando si paga (vuoto = da sempre)" />
+                  <UInput v-model="row.original.dal" type="date" size="xs" class="w-36" title="Da quando si paga (vuoto = da sempre)" />
                   <span class="text-slate-300">→</span>
-                  <UInput v-model="speseFisse[row.index].al" type="date" size="xs" class="w-36" title="Fino a quando si è pagata (vuoto = ancora attiva)" />
+                  <UInput v-model="row.original.al" type="date" size="xs" class="w-36" title="Fino a quando si è pagata (vuoto = ancora attiva)" />
                 </div>
               </template>
               <template #stato-cell="{ row }">
@@ -793,7 +793,7 @@
       </template>
       <template #footer>
         <div class="flex justify-end gap-3">
-          <UButton variant="ghost" @click="modalCreaAperto = false">Annulla</UButton>
+          <UButton variant="ghost" @click="() => { modalCreaAperto = false }">Annulla</UButton>
           <UButton :loading="salvando" @click="salvaTemplate">{{ inModifica ? 'Salva modifiche' : 'Salva Template' }}</UButton>
         </div>
       </template>
@@ -818,7 +818,7 @@
       </template>
       <template #footer>
         <div class="flex justify-end gap-3">
-          <UButton variant="ghost" @click="modalCreaSlotAperto = false">Annulla</UButton>
+          <UButton variant="ghost" @click="() => { modalCreaSlotAperto = false }">Annulla</UButton>
           <UButton :loading="salvandoSlot" @click="creaSlot">Salva Slot</UButton>
         </div>
       </template>

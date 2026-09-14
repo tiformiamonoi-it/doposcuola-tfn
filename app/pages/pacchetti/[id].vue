@@ -79,7 +79,7 @@
           variant="soft"
           size="sm"
           class="hidden sm:inline-flex"
-          @click="modalCreaAperto = true"
+          @click="() => { modalCreaAperto = true }"
         >
           Rinnova pacchetto
         </UButton>
@@ -91,7 +91,7 @@
           variant="soft"
           size="sm"
           class="hidden sm:inline-flex"
-          @click="modalModificaAperto = true"
+          @click="() => { modalModificaAperto = true }"
         >
           Modifica pacchetto
         </UButton>
@@ -106,7 +106,7 @@
         <UTooltip v-else text="Non eliminabile: ha pagamenti e/o lezioni collegate">
           <UButton color="error" variant="soft" icon="i-heroicons-trash" disabled class="hidden sm:inline-flex">Elimina pacchetto</UButton>
         </UTooltip>
-        <UButton icon="i-heroicons-banknotes" :disabled="giaSaldato" @click="modalPagamentoAperto = true">
+        <UButton icon="i-heroicons-banknotes" :disabled="giaSaldato" @click="() => { modalPagamentoAperto = true }">
           {{ giaSaldato ? 'Già saldato' : 'Registra Pagamento' }}
         </UButton>
         <UDropdownMenu :items="azioniTelefono">
@@ -263,7 +263,28 @@ function onPacchettoRinnovato() {
   }
 }
 
-const { data: pacchettoRes, pending, refresh: refreshPacchetto } = useFetch(`/api/packages/${id}`, { lazy: true })
+// La forma di cio' che risponde GET /api/packages/:id (server/api/packages/[id].get.ts).
+// Serve dichiararla a mano: l'indirizzo e' costruito con l'id, quindi Nuxt non puo'
+// risalire da solo all'endpoint. I numeri con la virgola arrivano come testo perche'
+// in banca dati sono "numeric" (per questo in pagina c'e' sempre un parseFloat).
+interface DettaglioPacchetto {
+  id: string
+  nome: string
+  tipo: 'ORE' | 'MENSILE' | 'A_CONSUMO'
+  studentId: string
+  studentFirstName: string | null
+  studentLastName: string | null
+  oreAcquistate: string
+  oreResiduo: string
+  giorniAcquistati: number | null
+  giorniResiduo: number | null
+  importoResiduo: string
+  dataScadenza: string | null
+  stati: string[]
+  sospeso: boolean
+}
+
+const { data: pacchettoRes, pending, refresh: refreshPacchetto } = useFetch<{ data: DettaglioPacchetto }>(`/api/packages/${id}`, { lazy: true })
 const pacchetto = computed(() => pacchettoRes.value?.data ?? null)
 
 const { data: lezioniRes, refresh: refreshLezioni } = useFetch(`/api/packages/${id}/lessons`, { lazy: true, default: () => ({ data: [] }) })
@@ -373,7 +394,7 @@ function avviaModificaPagamento(p: any) {
   editingPaymentId.value = p.id
   editForm.value = {
     importo: parseFloat(p.importo),
-    dataPagamento: new Date(p.dataPagamento).toISOString().split('T')[0],
+    dataPagamento: new Date(p.dataPagamento).toISOString().slice(0, 10),
     tipoPagamento: p.tipoPagamento,
     metodoPagamento: p.metodoPagamento
   }

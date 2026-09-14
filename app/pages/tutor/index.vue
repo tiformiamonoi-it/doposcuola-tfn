@@ -7,7 +7,7 @@
         <h2 class="text-xl font-semibold text-slate-900">Tutor</h2>
         <p class="text-sm text-slate-500 mt-0.5">Gestione del personale docente</p>
       </div>
-      <UButton icon="i-heroicons-plus" @click="modalCreaAperto = true">
+      <UButton icon="i-heroicons-plus" @click="() => { modalCreaAperto = true }">
         Nuovo Tutor
       </UButton>
     </div>
@@ -136,7 +136,7 @@
     <ModalNuovoTutor v-model:open="modalCreaAperto" @created="() => refresh()" />
 
     <!-- Modal Liquida Mese -->
-    <UModal v-model:open="modalLiquidaAperto" title="Liquida mese" :ui="{ width: 'max-w-md' }">
+    <UModal v-model:open="modalLiquidaAperto" title="Liquida mese" :ui="{ content: 'max-w-md' }">
       <template #body>
         <UForm :state="datiLiquida" class="space-y-4" @submit="liquidaTutor">
           <div class="text-sm text-slate-600 bg-slate-50 rounded-lg p-3">
@@ -163,7 +163,7 @@
             <UTextarea v-model="datiLiquida.note" class="w-full" :rows="2" />
           </UFormField>
           <div class="flex justify-end gap-3 pt-2">
-            <UButton variant="ghost" :disabled="salvando" @click="modalLiquidaAperto = false">Annulla</UButton>
+            <UButton variant="ghost" :disabled="salvando" @click="() => { modalLiquidaAperto = false }">Annulla</UButton>
             <UButton type="submit" :loading="salvando" :disabled="salvando">Conferma Liquidazione</UButton>
           </div>
         </UForm>
@@ -221,10 +221,59 @@ const filterQuery = computed(() => ({
   daLiquidare: soloLiquidare.value ? 'true' : undefined,
 }))
 
+// ─── La forma dei dati che manda il server ────
+// Copiata da server/services/tutor.service.ts → listTutors().
+// Gli importi sono già numeri in euro: il server li calcola in centesimi interi e
+// arrotonda una volta sola prima di spedirli.
+interface RigaTutor {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+  phone: string | null
+  active: boolean
+  modalitaPagamento: string | null
+  importoForfait: string | null
+  /** Data di creazione: parte come data e arriva qui come testo ISO */
+  createdAt: string
+  numLezioniMese: number
+  compensoCalcolato: number
+  compensoResiduo: number
+  mesiArretrati: number
+  totaleArretrati: number
+  totaleDaLiquidare: number
+  mesiDaLiquidare: number
+}
+
+interface KpiTutor {
+  tutoriAttivi: number
+  daLiquidare: number
+  totaleDovuto: number
+  mediaLiquidazione: number
+}
+
+interface ElencoTutor {
+  data: RigaTutor[]
+  kpi: KpiTutor
+}
+
+// Un mese del dettaglio compensi (GET /api/tutors/:id/compensation)
+interface MeseCompenso {
+  mese: string
+  meseLabel: string
+  numLezioni: number
+  compensoGrezzo: number
+  compensoCalcolato: number
+  pagato: number
+  residuo: number
+  stato: string
+  isMeseCorrente: boolean
+}
+
 // ─── Fetch ────────────────────────────────────
-const { data, pending, refresh } = useLazyFetch('/api/tutors', {
+const { data, pending, refresh } = useLazyFetch<ElencoTutor>('/api/tutors', {
   query: filterQuery,
-  default: () => ({ data: [], kpi: { tutoriAttivi: 0, daLiquidare: 0, totaleDovuto: 0, mediaLiquidazione: 0 } }),
+  default: (): ElencoTutor => ({ data: [], kpi: { tutoriAttivi: 0, daLiquidare: 0, totaleDovuto: 0, mediaLiquidazione: 0 } }),
 })
 
 const tutors = computed(() => data.value?.data ?? [])
@@ -258,7 +307,7 @@ const salvando = ref(false)
 
 // ─── Modal Liquida ────────────────────────────
 const modalLiquidaAperto  = ref(false)
-const tutorSelezionato    = ref<any>(null)
+const tutorSelezionato    = ref<RigaTutor | null>(null)
 
 const now = new Date()
 const datiLiquida = reactive({
@@ -269,7 +318,7 @@ const datiLiquida = reactive({
   note:    '',
 })
 
-function apriLiquida(tutor: any) {
+function apriLiquida(tutor: RigaTutor) {
   tutorSelezionato.value = tutor
   datiLiquida.importo = String(tutor.compensoResiduo > 0 ? tutor.compensoResiduo : tutor.compensoCalcolato)
   modalLiquidaAperto.value = true
@@ -277,16 +326,16 @@ function apriLiquida(tutor: any) {
 
 // ─── Slideover Dettaglio mensile (Da liquidare / Arretrati) ──
 const slideoverArretratiAperto    = ref(false)
-const tutorArretratiSelezionato   = ref<any>(null)
-const mesiArretratiDettaglio      = ref<any[]>([])
+const tutorArretratiSelezionato   = ref<RigaTutor | null>(null)
+const mesiArretratiDettaglio      = ref<MeseCompenso[]>([])
 const pendingArretratiDettaglio   = ref(false)
 
-async function apriDettaglioArretrati(tutor: any) {
+async function apriDettaglioArretrati(tutor: RigaTutor) {
   tutorArretratiSelezionato.value = tutor
   slideoverArretratiAperto.value  = true
   pendingArretratiDettaglio.value = true
   try {
-    const comp = await $fetch<any[]>(`/api/tutors/${tutor.id}/compensation`)
+    const comp = await $fetch<MeseCompenso[]>(`/api/tutors/${tutor.id}/compensation`)
     mesiArretratiDettaglio.value = comp.filter(m => m.residuo > 0.01)
   } catch {
     toast.add({ title: 'Errore nel caricamento del dettaglio', color: 'error' })
@@ -296,7 +345,7 @@ async function apriDettaglioArretrati(tutor: any) {
   }
 }
 
-function apriLiquidaPerMese(mese: any) {
+function apriLiquidaPerMese(mese: MeseCompenso) {
   if (!tutorArretratiSelezionato.value) return
   tutorSelezionato.value          = tutorArretratiSelezionato.value
   datiLiquida.mese                = mese.mese
@@ -336,7 +385,7 @@ async function liquidaTutor() {
 }
 
 // ─── Azioni dropdown ─────────────────────────
-function azioniTutor(tutor: any) {
+function azioniTutor(tutor: RigaTutor) {
   return [
     [{
       label: 'Vedi dettaglio',
@@ -356,13 +405,17 @@ function azioniTutor(tutor: any) {
   ]
 }
 
-async function toggleAttivo(tutor: any) {
+async function toggleAttivo(tutor: RigaTutor) {
+  // `/api/tutors/<id>` assomiglia anche a /api/tutors/today-pool, che è di sola
+  // lettura: TypeScript non sa scegliere e crede che qui si possa solo leggere.
+  // Gli diciamo di quale indirizzo si tratta — quello chiamato davvero non cambia.
+  const rottaTutor = `/api/tutors/${tutor.id}` as '/api/tutors/:id'
   try {
     if (tutor.active) {
-      await $fetch(`/api/tutors/${tutor.id}`, { method: 'DELETE' })
+      await $fetch(rottaTutor, { method: 'DELETE' })
       toast.add({ title: 'Tutor disattivato', color: 'info' })
     } else {
-      await $fetch(`/api/tutors/${tutor.id}`, { method: 'PUT', body: { active: true } })
+      await $fetch(rottaTutor, { method: 'PUT', body: { active: true } })
       toast.add({ title: 'Tutor riattivato', color: 'success' })
     }
     refresh()

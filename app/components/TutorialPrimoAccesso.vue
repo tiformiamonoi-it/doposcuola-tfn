@@ -23,8 +23,8 @@
       <div class="flex items-center justify-between w-full">
         <UButton variant="ghost" color="neutral" size="sm" :loading="chiudendo" @click="chiudi">Salta</UButton>
         <div class="flex gap-2">
-          <UButton v-if="stepCorrente > 0" variant="outline" size="sm" @click="stepCorrente--">Indietro</UButton>
-          <UButton v-if="stepCorrente < steps.length - 1" size="sm" @click="stepCorrente++">Avanti</UButton>
+          <UButton v-if="stepCorrente > 0" variant="outline" size="sm" @click="() => { stepCorrente-- }">Indietro</UButton>
+          <UButton v-if="stepCorrente < steps.length - 1" size="sm" @click="() => { stepCorrente++ }">Avanti</UButton>
           <UButton v-else size="sm" :loading="chiudendo" @click="chiudi">Ho capito, iniziamo!</UButton>
         </div>
       </div>

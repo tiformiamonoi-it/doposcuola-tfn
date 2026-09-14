@@ -127,10 +127,7 @@
     </div>
 
     <!-- ─── DESKTOP: Tabella pacchetti ─── -->
-    <UCard 
-      :ui="{ body: { padding: 'p-0' }, rounded: 'rounded-2xl', ring: 'ring-1 ring-slate-200', shadow: 'shadow-sm' }" 
-      class="overflow-hidden hidden lg:block"
-    >
+    <UCard class="overflow-hidden hidden lg:block">
       <UTable
         v-model:row-selection="rowSelection"
         :data="pacchetti"
@@ -241,7 +238,7 @@
 
     <!-- ─── MODAL RINNOVO BULK ─── -->
     <!-- ─── MODAL RINNOVO BULK ─── -->
-    <UModal v-model:open="modalBulkAperto" title="Rinnovo Massivo Pacchetti" :ui="{ width: 'max-w-3xl' }">
+    <UModal v-model:open="modalBulkAperto" title="Rinnovo Massivo Pacchetti" :ui="{ content: 'max-w-3xl' }">
       <template #body>
         <div class="space-y-6">
           <URadioGroup
@@ -258,7 +255,7 @@
                 v-model="datiBulk.templateSelezionato"
                 :items="templateOptions"
                 searchable
-                value-attribute="value"
+                value-key="value"
                 placeholder="Seleziona un pacchetto standard..."
                 class="w-full"
                 @update:model-value="applicaTemplateBulk"
@@ -295,7 +292,7 @@
       </template>
       <template #footer>
         <div class="flex justify-end gap-3">
-          <UButton variant="ghost" @click="modalBulkAperto = false">Annulla</UButton>
+          <UButton variant="ghost" @click="() => { modalBulkAperto = false }">Annulla</UButton>
           <UButton 
             :loading="salvandoBulk" 
             :disabled="datiBulk.modalita === 'TEMPLATE' && !datiBulk.templateScelto" 

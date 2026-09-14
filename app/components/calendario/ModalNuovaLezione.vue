@@ -6,7 +6,7 @@
           <UIcon name="i-heroicons-queue-list" class="w-6 h-6 text-primary-500" />
           Creazione Multipla Lezioni
         </h3>
-        <UButton color="gray" variant="ghost" icon="i-heroicons-x-mark" @click="isOpen = false" />
+        <UButton color="neutral" variant="ghost" icon="i-heroicons-x-mark" @click="() => { isOpen = false }" />
       </div>
     </template>
 
@@ -55,28 +55,31 @@
                 :popper="{ placement: 'bottom-end' }"
                 class="w-48"
               >
-                <UButton color="gray" variant="soft" icon="i-heroicons-plus" label="Aggiungi Slot Extra" class="w-full justify-between" />
+                <UButton color="neutral" variant="soft" icon="i-heroicons-plus" label="Aggiungi Slot Extra" class="w-full justify-between" />
               </USelectMenu>
               <span v-else class="text-xs text-slate-400 italic">Tutti gli slot orari sono già presenti</span>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <UCard v-for="(slot, slotIndex) in activeSlots" :key="slot.timeSlotId" class="flex flex-col h-full shadow-sm ring-1 ring-slate-200" :ui="{ body: { padding: 'p-4 flex-1 flex flex-col' }, header: { padding: 'px-4 py-3 bg-slate-50 border-b border-slate-100' } }">
+              <!-- Il vecchio :ui="{ body: { padding: … }, header: { padding: … } }" era scritto
+                   nella forma di Nuxt UI 2: in Nuxt UI 4 quelle chiavi non esistono più e non
+                   venivano applicate. Tolto: la scheda resta identica a come si vede oggi. -->
+              <UCard v-for="(slot, slotIndex) in activeSlots" :key="slot.timeSlotId" class="flex flex-col h-full shadow-sm ring-1 ring-slate-200">
                 <template #header>
                   <div class="flex items-center justify-between">
                     <span class="font-bold text-slate-800">{{ slot.label }}</span>
                     <div class="flex items-center gap-1">
                       <UButton 
                         v-if="slotIndex < activeSlots.length - 1"
-                        size="2xs" 
-                        color="gray" 
-                        variant="ghost" 
+                        size="xs"
+                        color="neutral"
+                        variant="ghost"
                         icon="i-heroicons-document-duplicate" 
                         title="Duplica nel prossimo slot"
                         @click="duplicateToNext(slotIndex)"
                       />
                       <UButton
-                        size="2xs"
+                        size="xs"
                         color="error"
                         variant="ghost"
                         icon="i-heroicons-trash"
@@ -189,7 +192,7 @@
 
     <template #footer>
       <div class="flex justify-end gap-3 w-full">
-        <UButton variant="ghost" color="neutral" @click="isOpen = false">Annulla</UButton>
+        <UButton variant="ghost" color="neutral" @click="() => { isOpen = false }">Annulla</UButton>
         <UButton color="primary" size="lg" :loading="saving" :disabled="!canSave" @click="saveAllLessons">
           <UIcon name="i-heroicons-check-circle" class="w-5 h-5 mr-1" />
           Salva Tutte le Lezioni
@@ -209,12 +212,38 @@ const emit = defineEmits(['refresh', 'close'])
 const isOpen = defineModel('open', { type: Boolean, default: false })
 const toast = useToast()
 
+// ─── La forma di quello che si compila a schermo ───
+// Una "voce di elenco" di USelectMenu: etichetta visibile + valore (l'id).
+interface Voce { label: string, value: string }
+// La voce del pacchetto porta con sé anche il residuo, che serve per l'avviso "ore esaurite".
+interface VocePacchetto extends Voce { residuo: number, tipo: string }
+// La voce dello slot orario si porta dietro l'ora di inizio e fine già accorciate a "HH:MM".
+interface VoceSlotOrario extends Voce { oraInizio: string, oraFine: string }
+
+interface StudenteInSlot {
+  studentItem: Voce
+  // "niente scelto" si scrive undefined perché è quello che USelectMenu si aspetta
+  packageItem: VocePacchetto | undefined
+  packageOptions: VocePacchetto[]
+  loadingPackages: boolean
+}
+
+interface SlotCompilabile {
+  timeSlotId: string
+  label: string
+  oraInizio: string
+  oraFine: string
+  studenti: StudenteInSlot[]
+  mezzaLezione: boolean
+  forzaGruppo: boolean
+}
+
 const selectedDate = ref(format(new Date(), 'yyyy-MM-dd'))
-const tutorItem = ref<any>(null)
+const tutorItem = ref<Voce | undefined>()
 const note = ref('')
 const saving = ref(false)
 
-const activeSlots = ref<any[]>([])
+const activeSlots = ref<SlotCompilabile[]>([])
 
 // ==========================================
 // FETCH DATA
@@ -249,12 +278,12 @@ watch([() => isOpen.value, allSlotsOptions], ([open, options]) => {
 
 function resetState() {
   selectedDate.value = format(new Date(), 'yyyy-MM-dd')
-  tutorItem.value = null
+  tutorItem.value = undefined
   note.value = ''
   activeSlots.value = []
 }
 
-function createEmptySlot(slotOpt: any) {
+function createEmptySlot(slotOpt: VoceSlotOrario): SlotCompilabile {
   return {
     timeSlotId: slotOpt.value,
     label: slotOpt.label,
@@ -284,7 +313,7 @@ function onExtraSlotChange(val: any) {
   }, 50)
 }
 
-function addExtraSlot(slotOpt: any) {
+function addExtraSlot(slotOpt: VoceSlotOrario) {
   activeSlots.value.push(createEmptySlot(slotOpt))
   activeSlots.value.sort((a, b) => a.oraInizio.localeCompare(b.oraInizio))
 }
@@ -296,11 +325,11 @@ function removeExtraSlot(idx: number) {
 function duplicateToNext(idx: number) {
   const current = activeSlots.value[idx]
   const next = activeSlots.value[idx + 1]
-  if (!next) return
-  
-  next.studenti = current.studenti.map((stu: any) => ({
+  if (!current || !next) return
+
+  next.studenti = current.studenti.map(stu => ({
     studentItem: { ...stu.studentItem },
-    packageItem: stu.packageItem ? { ...stu.packageItem } : null,
+    packageItem: stu.packageItem ? { ...stu.packageItem } : undefined,
     packageOptions: [...(stu.packageOptions || [])],
     loadingPackages: false
   }))
@@ -314,12 +343,12 @@ function duplicateToNext(idx: number) {
 // ==========================================
 function getAvailableStudents(slotIdx: number, stuIdx: number) {
   const currentSlot = activeSlots.value[slotIdx]
-  const selectedIds = currentSlot.studenti.map((s: any, idx: number) => idx !== stuIdx ? s.studentItem?.value : null).filter(Boolean)
+  const selectedIds = (currentSlot?.studenti ?? []).map((s, idx) => idx !== stuIdx ? s.studentItem?.value : null).filter(Boolean)
   return studentsOptions.value.filter(opt => !selectedIds.includes(opt.value))
 }
 
 function removeStudent(slotIdx: number, stuIdx: number) {
-  activeSlots.value[slotIdx].studenti.splice(stuIdx, 1)
+  activeSlots.value[slotIdx]?.studenti.splice(stuIdx, 1)
 }
 
 // ─── Picker studenti ───
@@ -334,23 +363,25 @@ function apriPickerPerSlot(slotIdx: number) {
 async function onPickerConfirm(picked: Array<{ studentId: string; nome: string; pacchettiAttivi?: any[] }>) {
   pickerAperto.value = false
   const slotIdx = pickerSlotIndex.value
-  if (slotIdx < 0 || !activeSlots.value[slotIdx]) return
+  const slot = activeSlots.value[slotIdx]
+  if (slotIdx < 0 || !slot) return
 
   for (const p of picked) {
-    const alreadyIn = activeSlots.value[slotIdx].studenti.some((s: any) => s.studentItem?.value === p.studentId)
+    const alreadyIn = slot.studenti.some(s => s.studentItem?.value === p.studentId)
     if (alreadyIn) continue
 
-    const stu = { studentItem: { label: p.nome, value: p.studentId }, packageItem: null, packageOptions: [], loadingPackages: false }
-    activeSlots.value[slotIdx].studenti.push(stu)
-    const stuIdx = activeSlots.value[slotIdx].studenti.length - 1
+    const stu: StudenteInSlot = { studentItem: { label: p.nome, value: p.studentId }, packageItem: undefined, packageOptions: [], loadingPackages: false }
+    slot.studenti.push(stu)
+    const stuIdx = slot.studenti.length - 1
     await onStudenteSelezionato(slotIdx, stuIdx, { value: p.studentId }, p.pacchettiAttivi)
   }
 }
 
 async function onStudenteSelezionato(slotIdx: number, stuIdx: number, newVal: any, prefetched?: any[]) {
-  const stu = activeSlots.value[slotIdx].studenti[stuIdx]
+  const stu = activeSlots.value[slotIdx]?.studenti[stuIdx]
+  if (!stu) return
   const targetId = newVal?.value
-  if (!targetId) { stu.packageOptions = []; stu.packageItem = null; return }
+  if (!targetId) { stu.packageOptions = []; stu.packageItem = undefined; return }
 
   stu.loadingPackages = true
   try {
@@ -372,7 +403,7 @@ async function onStudenteSelezionato(slotIdx: number, stuIdx: number, newVal: an
     }))
     
     if (stu.packageOptions.length > 0) stu.packageItem = stu.packageOptions[0]
-    else stu.packageItem = null
+    else stu.packageItem = undefined
   } catch (err) { console.error(err) } 
   finally { stu.loadingPackages = false }
 }
@@ -444,6 +475,9 @@ function formatCurrency(val: number) { return val.toFixed(2) }
 // SAVE LOGIC
 // ==========================================
 async function saveAllLessons() {
+  // Senza tutor il bottone è disabilitato (canSave): il controllo è solo per sicurezza.
+  const tutorScelto = tutorItem.value
+  if (!tutorScelto) return
   saving.value = true
   let successCount = 0
   let errorCount = 0
@@ -457,7 +491,7 @@ async function saveAllLessons() {
       }))
 
       const payload = {
-        tutorId: tutorItem.value.value,
+        tutorId: tutorScelto.value,
         timeSlotId: slot.timeSlotId,
         data: selectedDate.value,
         forzaGruppo: slot.forzaGruppo,

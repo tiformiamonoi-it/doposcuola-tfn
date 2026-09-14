@@ -11,7 +11,7 @@
     </template>
     <template #footer>
       <div class="flex justify-end gap-3 w-full">
-        <UButton variant="ghost" @click="isOpen = false">Annulla</UButton>
+        <UButton variant="ghost" @click="() => { isOpen = false }">Annulla</UButton>
         <UButton :color="confirmColor" :loading="loading" @click="onConfirm">{{ confirmLabel }}</UButton>
       </div>
     </template>

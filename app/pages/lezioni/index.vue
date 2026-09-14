@@ -99,7 +99,7 @@
 
         <!-- Colonna Note -->
         <template #note-cell="{ row }">
-          <span class="text-slate-500 text-xs truncate max-w-[160px] block" :title="row.original.note">{{ row.original.note ?? '—' }}</span>
+          <span class="text-slate-500 text-xs truncate max-w-[160px] block" :title="row.original.note ?? undefined">{{ row.original.note ?? '—' }}</span>
         </template>
 
         <!-- Colonna Azioni -->
@@ -202,7 +202,7 @@
             </UButton>
             <UButton 
               v-if="lezioneSelezionata"
-              color="red" 
+              color="error" 
               variant="soft" 
               icon="i-heroicons-trash"
               @click="eliminaLezioneSelezionata"
@@ -210,7 +210,7 @@
               Elimina
             </UButton>
           </div>
-          <UButton variant="ghost" @click="modalDettaglioAperto = false">Chiudi</UButton>
+          <UButton variant="ghost" @click="() => { modalDettaglioAperto = false }">Chiudi</UButton>
         </div>
       </template>
     </UModal>

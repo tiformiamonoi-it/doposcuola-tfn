@@ -1,5 +1,5 @@
 <template>
-  <UModal v-model:open="isOpen" :title="`Nuovo Studente — Step ${step} di 4`" :ui="{ width: 'max-w-2xl' }">
+  <UModal v-model:open="isOpen" :title="`Nuovo Studente — Step ${step} di 4`" :ui="{ content: 'max-w-2xl' }">
     <template #body>
       <!-- Barra di progresso -->
       <div class="flex items-center gap-2 mb-6">
@@ -232,7 +232,7 @@
             <UFormField label="Pacchetto standard (da Impostazioni)" required>
               <div class="flex gap-2 w-full items-center">
                 <USelectMenu v-model="templatePkgSelezionato" :items="templateOptions" searchable
-                  value-attribute="value" placeholder="Seleziona un pacchetto standard..." class="flex-1"
+                  value-key="value" placeholder="Seleziona un pacchetto standard..." class="flex-1"
                   @update:model-value="applicaTemplatePkg" />
                 <UButton v-if="dati.pacchetto.standardPackageId" variant="ghost" color="neutral"
                   icon="i-heroicons-x-mark" title="Scollega template e personalizza i dettagli (il nome resta quello del pacchetto standard)"
@@ -426,7 +426,7 @@
         <div class="flex gap-3 ml-auto">
           <UButton v-if="step === 1" @click="form1?.submit()">Avanti</UButton>
           <UButton v-else-if="step === 2" @click="form2?.submit()">Avanti</UButton>
-          <UButton v-else-if="step < 4" @click="step++">Avanti</UButton>
+          <UButton v-else-if="step < 4" @click="() => { step++ }">Avanti</UButton>
           <!-- Il giro sui doppioni (D3) sta dentro il salvataggio: la rotellina
                deve girare anche mentre si controlla, o sembra che non succeda niente -->
           <UButton v-else :loading="salvando || cercandoDoppioni" color="primary" @click="salvaTutto">
@@ -438,7 +438,7 @@
   </UModal>
 
   <!-- Risultato finale -->
-  <UModal v-model:open="risultatoAperto" title="Studente creato con successo!" :ui="{ width: 'max-w-md' }">
+  <UModal v-model:open="risultatoAperto" title="Studente creato con successo!" :ui="{ content: 'max-w-md' }">
     <template #body>
       <div class="space-y-4">
         <div class="flex items-center gap-3">
@@ -492,7 +492,7 @@
               Collegare anche questo studente allo stesso account? La password non cambierà.
             </p>
             <div class="flex gap-2 justify-end">
-              <UButton size="xs" variant="ghost" @click="acc.collegaEsistente = null">Non collegare</UButton>
+              <UButton size="xs" variant="ghost" @click="() => { acc.collegaEsistente = null }">Non collegare</UButton>
               <UButton size="xs" color="primary" :loading="acc.collegando" @click="confermaCollegamentoEsistente(acc)">
                 Collega allo stesso account
               </UButton>

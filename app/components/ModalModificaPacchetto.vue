@@ -90,7 +90,7 @@
     </template>
     <template #footer>
       <div class="flex justify-end gap-3">
-        <UButton variant="ghost" @click="isOpen = false">Annulla</UButton>
+        <UButton variant="ghost" @click="() => { isOpen = false }">Annulla</UButton>
         <UButton :loading="isSaving" :disabled="!canSave" @click="salvaModifiche">Salva Modifiche</UButton>
       </div>
     </template>

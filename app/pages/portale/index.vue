@@ -301,7 +301,7 @@
 
       <template #footer>
         <div class="flex justify-end gap-2 px-4 pb-4">
-          <UButton variant="ghost" size="sm" @click="modalModificaAperto = false">Annulla</UButton>
+          <UButton variant="ghost" size="sm" @click="() => { modalModificaAperto = false }">Annulla</UButton>
           <UButton 
             color="primary" 
             size="sm"

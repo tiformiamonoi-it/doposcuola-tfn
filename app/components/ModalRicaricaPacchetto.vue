@@ -62,7 +62,7 @@
     </template>
     <template #footer>
       <div class="flex justify-end gap-3">
-        <UButton variant="ghost" @click="isOpen = false">Annulla</UButton>
+        <UButton variant="ghost" @click="() => { isOpen = false }">Annulla</UButton>
         <UButton :loading="salvandoRicarica" @click="salvaRicarica">Conferma Ricarica</UButton>
       </div>
     </template>

@@ -1,3 +1,8 @@
+import type { BadgeProps } from '@nuxt/ui'
+
+// I colori ammessi da Nuxt UI 4 (compresi quelli aggiunti in app.config).
+type ColoreBadge = NonNullable<BadgeProps['color']>
+
 // Etichette leggibili per metodi di pagamento e tipi di movimento.
 // Le CATEGORIE sono ora dinamiche (gestite da Impostazioni → Categorie Contabili):
 // vedi shared/accounting-categories.ts e /api/accounting/categories.
@@ -49,8 +54,10 @@ export const TIPI_PAGAMENTO_ITEMS = [
   { label: 'Integrazione', value: 'INTEGRAZIONE' },
 ]
 
-// Colori badge stato pagamento tutor
-export function coloreStatoPagamento(stato: string): string {
+// Colori badge stato pagamento tutor.
+// Il tipo di ritorno è quello dei colori di Nuxt UI (non un testo qualsiasi):
+// così il colore può finire direttamente nella prop `color` di un badge.
+export function coloreStatoPagamento(stato: string): ColoreBadge {
   switch (stato) {
     case 'PAGATO':      return 'success'
     case 'DA_PAGARE':   return 'warning'
@@ -62,7 +69,7 @@ export function coloreStatoPagamento(stato: string): string {
   }
 }
 
-export function coloreStatoRimborso(stato: string): string {
+export function coloreStatoRimborso(stato: string): ColoreBadge {
   switch (stato) {
     case 'RIMBORSATO':  return 'success'
     case 'PAGATO':      return 'success'

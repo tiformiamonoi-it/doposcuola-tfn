@@ -15,12 +15,12 @@
         </div>
 
         <div class="flex items-center bg-white rounded-xl ring-1 ring-slate-200 shadow-sm p-1">
-          <UButton color="gray" variant="ghost" icon="i-heroicons-chevron-left" @click="previousMonth" />
+          <UButton color="neutral" variant="ghost" icon="i-heroicons-chevron-left" @click="previousMonth" />
           <div class="flex flex-col items-center min-w-[140px] px-2">
             <span class="text-sm font-semibold text-slate-800 capitalize">{{ nomeMeseAnno }}</span>
-            <UButton size="2xs" variant="link" color="primary" @click="goToToday" :padded="false" class="mt-0.5">Torna a Oggi</UButton>
+            <UButton size="xs" variant="link" color="primary" @click="goToToday" :padded="false" class="mt-0.5">Torna a Oggi</UButton>
           </div>
-          <UButton color="gray" variant="ghost" icon="i-heroicons-chevron-right" @click="nextMonth" />
+          <UButton color="neutral" variant="ghost" icon="i-heroicons-chevron-right" @click="nextMonth" />
         </div>
       </div>
 
@@ -61,7 +61,7 @@
                 </div>
               </div>
             </div>
-            <UButton color="gray" variant="ghost" :icon="isDayExpanded(giorno.dateStr) ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="pointer-events-none" />
+            <UButton color="neutral" variant="ghost" :icon="isDayExpanded(giorno.dateStr) ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="pointer-events-none" />
           </div>
 
           <div v-if="isDayExpanded(giorno.dateStr)" class="border-t border-slate-100">
@@ -90,7 +90,7 @@
                   <UIcon name="i-heroicons-squares-2x2" class="w-4 h-4 text-slate-400" />
                   Griglia Oraria
                 </h4>
-                <UButton v-if="isToday(giorno.dateStr) && entroOrario" size="xs" color="gray" variant="soft" icon="i-heroicons-plus" @click="openLezioneRapida(giorno.dateStr)">
+                <UButton v-if="isToday(giorno.dateStr) && entroOrario" size="xs" color="neutral" variant="soft" icon="i-heroicons-plus" @click="openLezioneRapida(giorno.dateStr)">
                   Aggiungi lezione
                 </UButton>
               </div>

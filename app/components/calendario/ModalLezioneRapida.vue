@@ -70,7 +70,7 @@
             </div>
 
             <!-- Bottone apri picker -->
-            <UButton icon="i-heroicons-user-plus" variant="soft" color="primary" class="w-full justify-center" @click="pickerAperto = true">
+            <UButton icon="i-heroicons-user-plus" variant="soft" color="primary" class="w-full justify-center" @click="() => { pickerAperto = true }">
               {{ students.length === 0 ? 'Aggiungi studenti (obbligatorio)' : '+ Aggiungi altri studenti' }}
             </UButton>
           </div>
@@ -114,7 +114,7 @@
     
     <template #footer>
       <div class="flex justify-end gap-3 w-full">
-        <UButton variant="ghost" color="neutral" @click="isOpen = false">Annulla</UButton>
+        <UButton variant="ghost" color="neutral" @click="() => { isOpen = false }">Annulla</UButton>
         <UButton color="primary" :loading="saving" :disabled="!canSave" @click="saveLesson">
           Salva Lezione
         </UButton>

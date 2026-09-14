@@ -1,5 +1,5 @@
 <template>
-  <UModal v-model:open="isOpen" title="Nuovo Pacchetto" :ui="{ width: 'max-w-xl' }">
+  <UModal v-model:open="isOpen" title="Nuovo Pacchetto" :ui="{ content: 'max-w-xl' }">
     <template #body>
       <div class="space-y-4">
         <!-- Scegli template (se ci sono pacchetti standard) -->
@@ -10,7 +10,7 @@
                 v-model="templateSelezionato"
                 :items="templateOptions"
                 searchable
-                value-attribute="value"
+                value-key="value"
                 placeholder="Seleziona un pacchetto standard..."
                 class="flex-1"
                 @update:model-value="applicaTemplate"
@@ -30,11 +30,18 @@
 
         <!-- Studente -->
         <UFormField label="Studente" required>
+          <!-- ATTENZIONE, difetto noto lasciato in piedi di proposito (H2, 14/09/2026).
+               "value-attribute" e' una chiave di Nuxt UI 2: qui non fa piu' nulla, quindi il
+               v-model tiene l'INTERO oggetto {label, value}. Finche' si sceglie dalla lista si
+               vede il nome giusto, ma quando la finestra si apre gia' con uno studente (dalla
+               sua scheda, o su "Rinnova") il codice ci mette il solo id e il campo mostra il
+               codice invece del nome. Si corregge con value-key="value", ma e' un cambiamento
+               VISIBILE: va deciso, non fatto di nascosto. -->
           <USelectMenu
             v-model="studenteSelezionato"
             :items="studenteOptions"
             searchable
-            value-attribute="value"
+            value-key="value"
             placeholder="Cerca per cognome, nome, classe..."
             class="w-full"
             :disabled="!!props.studentId || !!props.rinnovoDa"
@@ -168,7 +175,7 @@
     </template>
     <template #footer>
       <div class="flex justify-end gap-3">
-        <UButton variant="ghost" @click="isOpen = false">Annulla</UButton>
+        <UButton variant="ghost" @click="() => { isOpen = false }">Annulla</UButton>
         <UButton :loading="salvando" @click="creaPacchetto">Salva Pacchetto</UButton>
       </div>
     </template>

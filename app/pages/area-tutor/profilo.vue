@@ -49,7 +49,7 @@
       block
       variant="soft"
       icon="i-heroicons-play-circle"
-      @click="tutorialRiapri = true"
+      @click="() => { tutorialRiapri = true }"
     >
       Rivedi il tutorial di benvenuto
     </UButton>

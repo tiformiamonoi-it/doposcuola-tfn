@@ -9,7 +9,7 @@
         </p>
       </div>
       <div class="flex items-center gap-3">
-        <UButton color="white" icon="i-heroicons-arrow-path" :loading="loading" @click="loadData">
+        <UButton color="neutral" variant="outline" icon="i-heroicons-arrow-path" :loading="loading" @click="loadData">
           Aggiorna
         </UButton>
         <UButton color="primary" icon="i-heroicons-printer" @click="stampaTabellone">
@@ -21,12 +21,12 @@
     <!-- Calendario Navigazione Giorno -->
     <UCard class="no-print">
       <div class="flex items-center justify-between">
-        <UButton icon="i-heroicons-chevron-left" color="white" variant="ghost" @click="cambiaGiorno(-1)" />
+        <UButton icon="i-heroicons-chevron-left" color="neutral" variant="ghost" @click="cambiaGiorno(-1)" />
         <div class="text-center">
           <div class="font-bold text-lg">{{ dataFormattata }}</div>
           <div class="text-sm text-slate-500">{{ tutors.length }} Tutor | {{ badges.length }} Prenotazioni</div>
         </div>
-        <UButton icon="i-heroicons-chevron-right" color="white" variant="ghost" @click="cambiaGiorno(1)" />
+        <UButton icon="i-heroicons-chevron-right" color="neutral" variant="ghost" @click="cambiaGiorno(1)" />
       </div>
     </UCard>
 
@@ -151,7 +151,7 @@
       <div class="no-print space-y-4">
         <div class="flex items-center justify-between">
           <h2 class="font-semibold text-lg text-slate-800">Da Assegnare</h2>
-          <UBadge color="gray">{{ unassignedBadges.length }}</UBadge>
+          <UBadge color="neutral">{{ unassignedBadges.length }}</UBadge>
         </div>
 
         <div v-if="unassignedBadges.length === 0" class="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-8 text-center text-slate-500">
@@ -248,14 +248,54 @@ useHead({ title: 'Matching — tiformiamonoi' })
 
 const toast = useToast()
 
+// ─── La forma dei dati che manda il server ───
+// Copiata da server/api/matching/[date].get.ts: se cambia là, va cambiata anche qui.
+interface TutorDelGiorno {
+  id: string
+  name: string
+  phone: string | null
+  notes: string
+  subjects: string[]
+  /** true = il tutor ha spuntato lui la disponibilità (l'admin può togliergliela) */
+  daDisponibilita: boolean
+}
+
+interface BadgePrenotazione {
+  subjectId: string
+  bookingId: string
+  studentName: string
+  studentSurname: string
+  studentPhone: string
+  subject: string
+  notes: string | null
+  assignedTutorId: string | null
+  assignedSlot: string | null
+  isAssigned: boolean
+  /** Supplemento della materia speciale fuori data: 0 se non previsto */
+  supplemento: number
+  supplementoApplicato: boolean
+}
+
+interface SlotOrario {
+  id: string
+  label: string
+}
+
+interface MatchingDelGiorno {
+  date: string
+  tutors: TutorDelGiorno[]
+  badges: BadgePrenotazione[]
+  slots: SlotOrario[]
+}
+
 // Stato principale
 const currentDate = ref(new Date())
 const loading = ref(false)
-const tutors = ref<any[]>([])
-const badges = ref<any[]>([])
-const slots = ref<any[]>([])
+const tutors = ref<TutorDelGiorno[]>([])
+const badges = ref<BadgePrenotazione[]>([])
+const slots = ref<SlotOrario[]>([])
 const isDragOver = ref<string | null>(null)
-let draggedBadge: any = null
+let draggedBadge: BadgePrenotazione | null = null
 
 const dataFormattata = computed(() => {
   return format(currentDate.value, 'EEEE d MMMM yyyy', { locale: it }).replace(/^\w/, c => c.toUpperCase())
@@ -329,7 +369,7 @@ watch(currentDate, () => {
 async function loadData() {
   loading.value = true
   try {
-    const res = await $fetch(`/api/matching/${dateParam.value}`)
+    const res = await $fetch<MatchingDelGiorno>(`/api/matching/${dateParam.value}`)
     tutors.value = res.tutors
     badges.value = res.badges
     slots.value = res.slots
@@ -346,10 +386,13 @@ function getAssignedBadges(tutorId: string, slotId: string) {
 
 // ─── Supplemento lezione speciale fuori data: OK admin → +€10 sul pacchetto ───
 const applicandoSupplemento = ref<string | null>(null)
-async function applicaSupplemento(badge: any) {
+async function applicaSupplemento(badge: BadgePrenotazione) {
   applicandoSupplemento.value = badge.bookingId
   try {
-    const res: any = await $fetch(`/api/admin/bookings/${badge.bookingId}/supplemento`, { method: 'POST' })
+    // Il server risponde anche con la prenotazione aggiornata: qui serve solo il nome del pacchetto
+    const res = await $fetch<{ packageId: string, packageNome: string }>(
+      `/api/admin/bookings/${badge.bookingId}/supplemento`, { method: 'POST' },
+    )
     badges.value.forEach(b => { if (b.bookingId === badge.bookingId) b.supplementoApplicato = true })
     toast.add({
       title: 'Supplemento applicato',
@@ -364,7 +407,7 @@ async function applicaSupplemento(badge: any) {
   }
 }
 
-function handleDragStart(event: any, badge: any) {
+function handleDragStart(event: DragEvent, badge: BadgePrenotazione) {
   draggedBadge = badge
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
@@ -373,22 +416,25 @@ function handleDragStart(event: any, badge: any) {
   }
 }
 
-async function handleDrop(event: any, tutorId: string, slotId: string) {
+async function handleDrop(event: DragEvent, tutorId: string, slotId: string) {
   isDragOver.value = null
   if (!draggedBadge) return
+  // Teniamo da parte QUESTO badge: la chiamata al server dura, e nel frattempo
+  // draggedBadge potrebbe già essere un altro (o niente).
+  const trascinato = draggedBadge
 
   try {
     await $fetch('/api/matching/assign', {
       method: 'POST',
       body: {
-        subjectId: draggedBadge.subjectId,
+        subjectId: trascinato.subjectId,
         tutorId,
         slot: slotId
       }
     })
-    
+
     // Aggiorna stato locale
-    const badge = badges.value.find(b => b.subjectId === draggedBadge.subjectId)
+    const badge = badges.value.find(b => b.subjectId === trascinato.subjectId)
     if (badge) {
       badge.assignedTutorId = tutorId
       badge.assignedSlot = slotId
@@ -401,7 +447,7 @@ async function handleDrop(event: any, tutorId: string, slotId: string) {
   draggedBadge = null
 }
 
-async function rimuoviAssegnazione(badge: any) {
+async function rimuoviAssegnazione(badge: BadgePrenotazione) {
   try {
     await $fetch('/api/matching/assign', {
       method: 'POST',
@@ -427,9 +473,9 @@ async function rimuoviAssegnazione(badge: any) {
 const confirmOpen = ref(false)
 const confirmTitle = ref('')
 const confirmDescription = ref('')
-const pendingDeleteBadge = ref<any>(null)
+const pendingDeleteBadge = ref<BadgePrenotazione | null>(null)
 
-function eliminaPrenotazioneManuale(badge: any) {
+function eliminaPrenotazioneManuale(badge: BadgePrenotazione) {
   pendingDeleteBadge.value = badge
   confirmTitle.value = `Eliminare la prenotazione per ${badge.studentName} ${badge.studentSurname}?`
   confirmDescription.value = 'La prenotazione verrà rimossa definitivamente.'

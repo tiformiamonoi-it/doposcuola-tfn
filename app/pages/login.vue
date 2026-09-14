@@ -100,7 +100,7 @@
       </template>
       <template #footer>
         <div class="flex justify-end gap-3">
-          <UButton variant="ghost" @click="recuperoAperto = false">Chiudi</UButton>
+          <UButton variant="ghost" @click="() => { recuperoAperto = false }">Chiudi</UButton>
           <UButton :loading="recuperoLoading" :disabled="!recuperoEmail" @click="inviaRecupero">Invia</UButton>
         </div>
       </template>
