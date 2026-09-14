@@ -249,6 +249,11 @@ export const UpgradePackageSchema = z.object({
   
   // Scadenza
   nuovaDataScadenza: z.coerce.date().optional().nullable(),
+
+  // Data di inizio. Si correggeva solo alla creazione: chi sbagliava (o chi doveva
+  // far partire il pacchetto dal giorno dell'iscrizione, non da quello in cui lo
+  // registra in segreteria) era costretto a cancellare tutto e rifare.
+  nuovaDataInizio: z.coerce.date().optional(),
   
   // Pagamento di integrazione (obbligatorio se nuovoPrezzoTotale > prezzoTotalePrecedente e importoPagato era totale, ma il server lo gestirà come opzionale se la differenza viene messa "in debito" o saldata subito)
   pagamentoIntegrazione: InitialPaymentSchema.optional(),

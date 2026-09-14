@@ -207,6 +207,10 @@ export default defineEventHandler(async (event) => {
         giorniAcquistati: data.nuoviGiorniAcquistati,
         giorniResiduo: existing.tipo === 'MENSILE' ? nuoviGiorniResiduo : null,
         dataScadenza: data.nuovaDataScadenza !== undefined ? data.nuovaDataScadenza : existing.dataScadenza,
+        // La data di inizio si corregge come le altre: serve a chi si iscrive a
+        // metà mese e va fatto partire dal suo giorno, non da quello in cui la
+        // segreteria registra il pacchetto.
+        dataInizio: data.nuovaDataInizio ?? existing.dataInizio,
         prezzoTotale: String(data.nuovoPrezzoTotale),
         importoPagato: String(nuovoImportoPagato),
         importoResiduo: String(nuovoImportoResiduo),

@@ -79,19 +79,23 @@
 
         <!-- ORE: ore inserite direttamente -->
         <UFormField v-if="nuovo.tipo === 'ORE'" label="Ore acquistate" required>
-          <UInputNumber v-model="nuovo.oreAcquistate" :min="0.5" :step="0.5" class="w-full" :disabled="!!nuovo.standardPackageId" />
+          <UInputNumber v-model="nuovo.oreAcquistate" :min="0.5" :step="0.5" class="w-full" />
+          <template v-if="nuovo.standardPackageId" #description>
+            <span class="text-xs text-slate-400">{{ NOTA_MODELLO }}</span>
+          </template>
         </UFormField>
 
         <!-- MENSILE: giorni × ore/giorno → ore totali calcolate automaticamente -->
         <template v-else-if="nuovo.tipo === 'MENSILE'">
           <div class="grid grid-cols-2 gap-4">
             <UFormField label="Giorni acquistati" required>
-              <UInputNumber v-model="nuovo.giorniAcquistati" :min="1" :step="1" class="w-full" :disabled="!!nuovo.standardPackageId" />
+              <UInputNumber v-model="nuovo.giorniAcquistati" :min="1" :step="1" class="w-full" />
             </UFormField>
             <UFormField label="Ore al giorno (max)" required>
-              <UInputNumber v-model="nuovo.orarioGiornaliero" :min="0.5" :step="0.5" class="w-full" :disabled="!!nuovo.standardPackageId" />
+              <UInputNumber v-model="nuovo.orarioGiornaliero" :min="0.5" :step="0.5" class="w-full" />
             </UFormField>
           </div>
+          <p v-if="nuovo.standardPackageId" class="text-xs text-slate-400 -mt-2">{{ NOTA_MODELLO }}</p>
           <UFormField label="Ore totali incluse">
             <UInputNumber :model-value="nuovo.oreAcquistate" disabled class="w-full" />
             <template #description>
@@ -242,6 +246,15 @@ const salvando = ref(false)
 const studenteSelezionato = ref<string>('')
 const templateSelezionato = ref<string>('')
 const pacchettiAttiviStudente = ref<any[]>([])
+
+// QUANTITÀ MODIFICABILI ANCHE CON UN MODELLO SCELTO (14/09/2026).
+// Prima, scegliendo un pacchetto standard, giorni e ore si bloccavano: si poteva
+// cambiare solo il prezzo. Ma il caso più comune del doposcuola è proprio quello
+// che restava fuori — il ragazzo che si iscrive il 14 e il mese finisce il 30:
+// servono meno giorni, non solo meno soldi. Il modello è un punto di partenza, non
+// un modulo prestampato: quello che si cambia qui vale per QUESTA vendita e il
+// listino in Impostazioni non si muove di un centesimo (stessa regola di E1).
+const NOTA_MODELLO = 'Puoi cambiarli: vale solo per questo pacchetto, il modello in Impostazioni non cambia.'
 
 const annoScadenzaOre = computed(() => annoScadenzaOreDa(nuovo?.dataInizio || oggiISO()))
 

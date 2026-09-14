@@ -18,6 +18,17 @@
           </UFormField>
         </div>
 
+        <!-- La data di inizio si poteva scegliere solo alla creazione: chi la
+             sbagliava doveva cancellare il pacchetto e rifarlo da capo. -->
+        <UFormField label="Data di inizio">
+          <UInput type="date" v-model="form.nuovaDataInizio" class="w-full" />
+          <template #description>
+            <span class="text-xs text-slate-400">
+              Quando il pacchetto parte davvero: per chi si iscrive a metà mese è il giorno dell'iscrizione.
+            </span>
+          </template>
+        </UFormField>
+
         <USeparator />
 
         <!-- Sezione Prezzo e Integrazione -->
@@ -103,6 +114,7 @@ const form = reactive({
   nuoviGiorniAcquistati: 0,
   nuovoPrezzoTotale: 0,
   nuovaDataScadenza: '',
+  nuovaDataInizio: '',
   pagamentoIntegrazione: {
     importo: 0,
     metodoPagamento: 'CONTANTI',
@@ -124,6 +136,14 @@ watch(() => [isOpen.value, props.pacchetto], ([open, pkg]) => {
       form.nuovaDataScadenza = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     } else {
       form.nuovaDataScadenza = ''
+    }
+    // Stessa conversione della scadenza: dal formato del database a quello del
+    // campo data del browser, che vuole 'AAAA-MM-GG' e nient'altro.
+    if (pkg.dataInizio) {
+      const di = new Date(pkg.dataInizio)
+      form.nuovaDataInizio = `${di.getFullYear()}-${String(di.getMonth() + 1).padStart(2, '0')}-${String(di.getDate()).padStart(2, '0')}`
+    } else {
+      form.nuovaDataInizio = ''
     }
     
     form.pagamentoIntegrazione = {
@@ -202,6 +222,10 @@ async function salvaModifiche() {
 
     if (form.nuovaDataScadenza) {
       payload.nuovaDataScadenza = form.nuovaDataScadenza
+    }
+
+    if (form.nuovaDataInizio) {
+      payload.nuovaDataInizio = form.nuovaDataInizio
     }
 
     if (form.pagamentoIntegrazione.importo > 0) {
