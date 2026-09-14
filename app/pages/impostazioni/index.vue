@@ -372,6 +372,43 @@
             </template>
           </UCard>
 
+          <!-- CARD RIEPILOGO SERALE ALLE FAMIGLIE -->
+          <UCard>
+            <template #header>
+              <div class="flex items-center gap-2">
+                <UIcon name="i-heroicons-envelope" class="w-4 h-4 text-tfn-500" />
+                <span class="font-medium text-slate-800">Email della sera alle famiglie</span>
+              </div>
+            </template>
+            <div class="space-y-3">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-slate-800">Avvisa le famiglie delle nuove comunicazioni</p>
+                  <p class="text-xs text-slate-500 mt-0.5">
+                    Ogni sera, se durante la giornata è stata approvata una comunicazione nuova, la famiglia
+                    riceve un'email che dice solo «c'è qualcosa di nuovo nel portale». Il testo della
+                    comunicazione non viene mai scritto nell'email.
+                  </p>
+                </div>
+                <USwitch v-model="riepilogoSeraleAttivo" aria-label="Email della sera alle famiglie" />
+              </div>
+
+              <p v-if="!riepilogoSeraleAttivo" class="text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                Al momento l'email della sera è spenta per tutti. Le comunicazioni continuano ad arrivare
+                regolarmente nel portale e le famiglie le leggono entrando: semplicemente non ricevono più
+                l'avviso via email. Finché questo interruttore resta giù, l'interruttore che trovi sulla
+                scheda del singolo alunno non ha effetto.
+              </p>
+              <p v-else class="text-xs text-slate-400">
+                Puoi spegnere l'avviso anche per un solo alunno: lo trovi nella sua scheda, nel riquadro
+                «Accesso Portale».
+              </p>
+            </div>
+            <template #footer>
+              <UButton @click="salvaConfigs()" :loading="salvandoConfigs">Salva Modifiche</UButton>
+            </template>
+          </UCard>
+
           <!-- CARD ANNO SCOLASTICO -->
           <UCard>
             <template #header>
@@ -1243,6 +1280,11 @@ const materie = ref<string[]>([])
 const tariffe = ref({ SINGOLA: 5, GRUPPO: 8, MAXI: 8.5 })
 const speseFisse = ref<{ nome: string; importo: number; dal: string; al: string; categoria: string }[]>([])
 const whatsappNumero = ref('')
+// Interruttore generale dell'email serale alle famiglie (system_configs.riepilogo_serale_attivo).
+// Si parte da ACCESO: è com'era il gestionale prima che l'interruttore esistesse, e una
+// configurazione non ancora salvata non deve spegnere di nascosto un avviso che le
+// famiglie si aspettano. Lo stesso criterio del server, in note-digest.service.ts.
+const riepilogoSeraleAttivo = ref(true)
 const sconti = ref<{ nome: string; descrizione: string; immagine: string }[]>([])
 const materieSpeciali = ref<string[]>([])
 const giornateSpeciali = ref<Record<string, string[]>>({})
@@ -1279,6 +1321,8 @@ watchEffect(() => {
     giornateSpeciali.value = out
   } catch(e){}
   whatsappNumero.value = configs.value.whatsapp_numero || ''
+  // Spento SOLO se qualcuno ha salvato "false": riga assente o valore strano = acceso.
+  riepilogoSeraleAttivo.value = (configs.value.riepilogo_serale_attivo ?? '').trim().toLowerCase() !== 'false'
   annoScolastico.value = configs.value.anno_scolastico_corrente || annoScolasticoDa(oggiISO())
   inizioAnnoScolastico.value = configs.value.anno_scolastico_inizio || inizioAnnoProposto(annoScolastico.value)
 })
@@ -1586,6 +1630,8 @@ async function salvaConfigs(opzioni?: { silenzioso?: boolean; rilancia?: boolean
           categoria: s.categoria || null,
         }))),
         whatsapp_numero: whatsappNumero.value,
+        // Le configurazioni si salvano sempre come testo: qui "true"/"false".
+        riepilogo_serale_attivo: riepilogoSeraleAttivo.value ? 'true' : 'false',
         sconti: JSON.stringify(sconti.value),
         materie_speciali: JSON.stringify(materieSpeciali.value),
         giornate_speciali: JSON.stringify(giornateSpeciali.value),

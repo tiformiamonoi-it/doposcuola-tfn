@@ -1,11 +1,15 @@
 import { z } from 'zod'
-import { updatePrenotazioneFlag } from '../../../../services/portal-user.service'
+import { updatePrenotazioneFlag, updateRiepilogoSeraleFlag } from '../../../../services/portal-user.service'
 import { toHttpError } from '../../../../utils/http-error'
 
 // Solo azioni che riguardano l'alunno nel suo insieme: le azioni su un singolo
 // genitore (reset password, scollegamento) stanno in portal-access/[parentUserId].*
 const PutSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('toggle-prenotazione'), abilitato: z.boolean() }),
+  // L'email serale "c'è una comunicazione nuova nel portale" per questa famiglia.
+  // È un comando della segreteria, non della famiglia: qui infatti servono ADMIN o
+  // SUPER_TUTOR, esattamente come per la prenotazione online.
+  z.object({ action: z.literal('toggle-riepilogo-serale'), attivo: z.boolean() }),
 ])
 
 // PUT /api/admin/students/:id/portal-access
@@ -28,6 +32,11 @@ export default defineEventHandler(async (event) => {
   try {
     if (result.data.action === 'toggle-prenotazione') {
       await updatePrenotazioneFlag(studentId, result.data.abilitato)
+      return { ok: true }
+    }
+
+    if (result.data.action === 'toggle-riepilogo-serale') {
+      await updateRiepilogoSeraleFlag(studentId, result.data.attivo)
       return { ok: true }
     }
 

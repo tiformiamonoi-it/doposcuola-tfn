@@ -1,0 +1,1 @@
+ALTER TABLE "students" ADD COLUMN "riepilogo_serale_attivo" boolean DEFAULT true NOT NULL;

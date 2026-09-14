@@ -600,6 +600,38 @@
                     <span class="text-slate-500">Prenotazione online abilitata</span>
                     <USwitch :model-value="(portalAccess as any)?.abilitatoPrenotazioneOnline ?? false" :loading="togglando" @update:model-value="togglePrenotazione" />
                   </div>
+
+                  <!-- EMAIL DELLA SERA — impostazione dell'ALUNNO, vale per tutti i
+                       genitori collegati (chi ha due genitori: o la ricevono entrambi
+                       o nessuno dei due, perché la comunicazione è del figlio).
+                       Quando l'interruttore generale in Impostazioni è spento, questo
+                       si mostra disattivato e spiegato: due interruttori che sembrano
+                       contraddirsi farebbero credere di aver acceso un avviso che in
+                       realtà non parte comunque. -->
+                  <div class="mt-3 pt-3 border-t border-slate-100">
+                    <div class="flex items-start justify-between gap-3 text-sm">
+                      <div class="min-w-0">
+                        <span :class="riepilogoSeraleGeneraleAttivo ? 'text-slate-500' : 'text-slate-400'">
+                          Email della sera per le nuove comunicazioni
+                        </span>
+                        <p class="text-xs text-slate-400 mt-0.5">
+                          Se è spenta, le comunicazioni restano nel portale: la famiglia non riceve più l'avviso via email.
+                        </p>
+                      </div>
+                      <USwitch
+                        :model-value="(portalAccess as any)?.riepilogoSeraleAttivo ?? true"
+                        :loading="togglandoRiepilogo"
+                        :disabled="!riepilogoSeraleGeneraleAttivo"
+                        aria-label="Email della sera per le nuove comunicazioni"
+                        @update:model-value="toggleRiepilogoSerale"
+                      />
+                    </div>
+                    <p v-if="!riepilogoSeraleGeneraleAttivo" class="mt-2 text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                      L'email della sera è spenta per TUTTI dalla pagina Impostazioni, quindi questo
+                      interruttore ora non ha effetto: nessuna famiglia riceve l'avviso. Per riattivarlo
+                      vai in Impostazioni → «Email della sera alle famiglie».
+                    </p>
+                  </div>
                 </UCard>
 
                 <!-- ─── CONSENSI PRIVACY ───
@@ -2330,6 +2362,15 @@ async function resetPasswordStudente() {
   }
 }
 const togglando = ref(false)
+const togglandoRiepilogo = ref(false)
+
+// L'interruttore GENERALE arriva insieme ai dati del portale (una chiamata sola).
+// Se la risposta non lo contiene ancora si assume ACCESO: è com'era il gestionale
+// prima che l'interruttore esistesse, e non deve sembrare spento per un dato che
+// manca. Stesso criterio del server, in note-digest.service.ts.
+const riepilogoSeraleGeneraleAttivo = computed<boolean>(
+  () => (portalAccess.value as any)?.riepilogoSeraleGeneraleAttivo ?? true
+)
 const confermaCollegamento = ref<{
   email: string
   firstName: string
@@ -2482,6 +2523,34 @@ async function togglePrenotazione(value: boolean) {
     })
   } finally {
     togglando.value = false
+  }
+}
+
+// Accende/spegne l'email della sera per QUESTA famiglia. Non tocca le comunicazioni:
+// quelle restano nel portale e si leggono entrando, cambia solo se parte la posta.
+async function toggleRiepilogoSerale(value: boolean) {
+  togglandoRiepilogo.value = true
+  try {
+    await $fetch(`/api/admin/students/${id}/portal-access`, {
+      method: 'PUT',
+      body: { action: 'toggle-riepilogo-serale', attivo: value },
+    })
+    await refreshPortal()
+    toast.add({
+      title: value ? 'Email della sera riattivata' : 'Email della sera disattivata',
+      description: value
+        ? "La famiglia tornerà a ricevere l'avviso quando c'è una comunicazione nuova."
+        : "Le comunicazioni restano nel portale: la famiglia non riceverà più l'avviso via email.",
+      color: value ? 'success' : 'warning',
+    })
+  } catch (e: any) {
+    toast.add({
+      title: 'Errore',
+      description: e?.data?.statusMessage ?? 'Impossibile aggiornare',
+      color: 'error',
+    })
+  } finally {
+    togglandoRiepilogo.value = false
   }
 }
 

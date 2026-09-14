@@ -69,6 +69,24 @@ export const students = pgTable('students', {
   studentUserId:               text('student_user_id').references(() => users.id, { onDelete: 'set null' }),
   abilitatoPrenotazioneOnline: boolean('abilitato_prenotazione_online').notNull().default(false),
 
+  // RIEPILOGO SERALE DELLE COMUNICAZIONI — l'interruttore di QUESTA famiglia.
+  //
+  // Acceso (il predefinito) = la sera, quando c'è una comunicazione nuova
+  // approvata, parte l'email "c'è qualcosa di nuovo nel portale". Spento = quella
+  // famiglia non riceve più l'email; le comunicazioni però RESTANO nel portale e
+  // si leggono entrando, perché questa colonna governa la posta, non la visibilità.
+  //
+  // NOT NULL con predefinito TRUE apposta: la colonna nasce già "accesa" su tutti
+  // gli alunni in archivio, quindi il giorno in cui la migrazione viene applicata
+  // nessuno smette di ricevere l'avviso senza che qualcuno l'abbia deciso. Una
+  // colonna nullable avrebbe costretto ogni lettura a decidere cosa significa NULL:
+  // meglio che la risposta sia scritta una volta sola, qui.
+  //
+  // Sopra a questo c'è l'interruttore GENERALE in Impostazioni
+  // (system_configs.riepilogo_serale_attivo): se quello è spento, l'email non parte
+  // per nessuno e questa colonna non conta. Vedi note-digest.service.ts.
+  riepilogoSeraleAttivo: boolean('riepilogo_serale_attivo').notNull().default(true),
+
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

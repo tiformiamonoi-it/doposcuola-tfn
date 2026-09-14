@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm'
 import { db } from '../database/client'
 import { users, students, studentParents } from '../database/schema'
 import { annullaLinkAperti, inviaInvitoPassword, inviaInvitoPasswordAUtente, passwordSegnapostoHash } from '../utils/password-token'
+import { riepilogoSeraleAttivoGlobalmente } from './note-digest.service'
 import { eMinoreDi14 } from '#shared/eta'
 import type { CreatePortalAccessInput } from '#shared/schemas/portal-user.schema'
 
@@ -20,7 +21,7 @@ function isUniqueViolation(err: any, constraint?: string): boolean {
 export async function getPortalAccess(studentId: string) {
   const student = await db.query.students.findFirst({
     where: eq(students.id, studentId),
-    columns: { id: true, abilitatoPrenotazioneOnline: true },
+    columns: { id: true, abilitatoPrenotazioneOnline: true, riepilogoSeraleAttivo: true },
   })
 
   if (!student) {
@@ -60,9 +61,19 @@ export async function getPortalAccess(studentId: string) {
     numeroFigli: figliPerGenitore.get(link.parentUser.id) ?? 1,
   }))
 
+  // L'interruttore GENERALE del riepilogo serale viaggia insieme a quello del
+  // singolo alunno, in una risposta sola: la scheda deve poter dire "questo
+  // interruttore oggi non conta, l'invio è spento per tutti" senza fare una seconda
+  // chiamata alle configurazioni. Due interruttori che sembrano contraddirsi sono
+  // il modo più veloce per far credere alla segreteria di aver acceso qualcosa che
+  // in realtà resta spento.
+  const riepilogoSeraleGeneraleAttivo = await riepilogoSeraleAttivoGlobalmente()
+
   return {
     id:                          student.id,
     abilitatoPrenotazioneOnline: student.abilitatoPrenotazioneOnline,
+    riepilogoSeraleAttivo:       student.riepilogoSeraleAttivo,
+    riepilogoSeraleGeneraleAttivo,
     parents,
   }
 }
@@ -474,6 +485,17 @@ export async function correggiEmailAccount(input: {
 export async function updatePrenotazioneFlag(studentId: string, abilitato: boolean) {
   const [updated] = await db.update(students)
     .set({ abilitatoPrenotazioneOnline: abilitato, updatedAt: new Date() } as any)
+    .where(eq(students.id, studentId))
+    .returning()
+  return updated
+}
+
+// Aggiorna il flag riepilogoSeraleAttivo: l'email serale "c'è una comunicazione
+// nuova nel portale" per QUESTA famiglia. Spegnerlo non nasconde niente: le
+// comunicazioni restano visibili nel portale, smette solo di partire la posta.
+export async function updateRiepilogoSeraleFlag(studentId: string, attivo: boolean) {
+  const [updated] = await db.update(students)
+    .set({ riepilogoSeraleAttivo: attivo, updatedAt: new Date() } as any)
     .where(eq(students.id, studentId))
     .returning()
   return updated

@@ -14,9 +14,19 @@
 // 3. Mai un'email a vuoto: se per quell'alunno non c'è niente, non parte niente.
 //    Una casella che riceve solo email "piene" resta di buona reputazione e non
 //    finisce nello spam — che è poi l'unico modo perché le email arrivino davvero.
+//
+// DUE INTERRUTTORI PER SPEGNERLO (aggiunti dopo, su richiesta della segreteria):
+// - GENERALE: system_configs.riepilogo_serale_attivo, dalla pagina Impostazioni.
+//   Spento, la sera non parte niente per nessuno.
+// - PER ALUNNO: students.riepilogo_serale_attivo, dalla scheda dell'alunno.
+//   Spento, quella famiglia non riceve l'email; tutte le altre sì.
+// Il generale VINCE sempre sul singolo: se è spento lui, l'interruttore della
+// scheda non conta (ed è quello che l'interfaccia deve far capire a colpo d'occhio).
+// In nessuno dei due casi la comunicazione sparisce: resta nel portale e si legge
+// entrando. Si spegne la posta, non il contenuto.
 import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../database/client'
-import { studentNotes, students, studentParents, users } from '../database/schema'
+import { studentNotes, students, studentParents, users, systemConfigs } from '../database/schema'
 import { sendEmail, emailNoteNelPortale } from '../utils/email'
 import { confiniGiornoOggiRome } from '../utils/tutor-time-window'
 
@@ -30,11 +40,36 @@ import { confiniGiornoOggiRome } from '../utils/tutor-time-window'
 // la scuola senza posta per il resto della giornata.
 const MAX_EMAIL_PER_RUN = 120
 
+// L'INTERRUTTORE GENERALE, in system_configs come spese_fisse o whatsapp_numero.
+// Nessuna colonna nuova e nessuna migrazione: la riga nasce da sola la prima volta
+// che la segreteria salva le Impostazioni.
+//
+// SE LA RIGA NON C'È, IL RIEPILOGO È ACCESO. È la regola più importante di tutto
+// il file: prima che questo interruttore esistesse l'email partiva sempre, e una
+// configurazione semplicemente assente non deve spegnere di nascosto un avviso che
+// le famiglie si aspettano. Si spegne solo se qualcuno ha scritto "false" apposta.
+export const CHIAVE_RIEPILOGO_SERALE = 'riepilogo_serale_attivo'
+
+/**
+ * L'interruttore generale del riepilogo serale: true = la sera le email partono.
+ * Spento SOLO se la configurazione dice esattamente "false"; riga assente, vuota o
+ * con un valore strano valgono ACCESO (vedi CHIAVE_RIEPILOGO_SERALE).
+ */
+export async function riepilogoSeraleAttivoGlobalmente(): Promise<boolean> {
+  const [row] = await db.select({ value: systemConfigs.value })
+    .from(systemConfigs)
+    .where(eq(systemConfigs.key, CHIAVE_RIEPILOGO_SERALE))
+    .limit(1)
+  return (row?.value ?? '').trim().toLowerCase() !== 'false'
+}
+
 /** Esito di un giro del riepilogo: serve al log del cron per capire cosa è successo senza tirare a indovinare. */
 export interface EsitoRiepilogoNote {
   /** Estremi della finestra di tempo esaminata (formato leggibile italiano) */
   finestra: { da: string; a: string }
+  /** Comunicazioni trovate nella finestra, COMPRESE quelle degli alunni con l'avviso spento */
   noteTrovate: number
+  /** Alunni per cui si è davvero provato a mandare l'avviso (quelli spenti non sono qui) */
   alunniConNote: number
   destinatari: number
   emailInviate: number
@@ -46,6 +81,22 @@ export interface EsitoRiepilogoNote {
   noteSegnate: number
   /** true quando il tetto prudente ha fermato il giro prima di mandare qualcosa */
   tettoRaggiunto: boolean
+  /**
+   * Quanti alunni avevano comunicazioni nuove ma l'avviso serale spento sulla loro
+   * scheda. È l'unica spia di un interruttore lasciato giù per sbaglio: senza questo
+   * numero, un alunno spento a novembre resterebbe muto fino a giugno senza che
+   * nessuno se ne accorga.
+   */
+  alunniConInvioSpento: number
+  /**
+   * true quando il giro non ha mandato niente PER SCELTA (interruttore generale
+   * spento), non per un guasto. Stessa forma della risposta del cron quando la
+   * chiamata arriva fuori orario, così chi legge il registro riconosce subito la
+   * differenza tra "non doveva partire" e "è andato storto qualcosa".
+   */
+  saltato?: boolean
+  /** Il perché del salto, in italiano leggibile: finisce nel registro così com'è */
+  motivo?: string
 }
 
 /** "Maria Rossi" → "Maria". Nell'email si dà del tu, il cognome suonerebbe da ufficio. */
@@ -94,8 +145,22 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
     alunniSenzaRecapito: [],
     noteSegnate: 0,
     tettoRaggiunto: false,
+    alunniConInvioSpento: 0,
     ...extra,
   })
+
+  // ── 0. L'INTERRUTTORE GENERALE ──
+  // Se la segreteria ha spento il riepilogo serale in Impostazioni, il giro finisce
+  // qui: nessuna email, nessuna nota segnata come annunciata. Si esce DICENDOLO,
+  // con la stessa forma che il cron usa quando la chiamata arriva fuori orario
+  // (saltato + motivo), perché nel registro un giro spento apposta e un giro andato
+  // storto non devono somigliarsi.
+  if (!(await riepilogoSeraleAttivoGlobalmente())) {
+    return esitoVuoto({
+      saltato: true,
+      motivo: 'Il riepilogo serale è spento nelle Impostazioni: nessuna email inviata (le comunicazioni restano nel portale)',
+    })
+  }
 
   // ── 1. LE NOTE DA ANNUNCIARE ──
   // Solo visibilità FAMIGLIA (le INTERNE non escono dal gestionale), solo
@@ -108,6 +173,10 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
     studentLastName:  students.lastName,
     parentName:       students.parentName,
     parentEmail:      students.parentEmail,
+    // L'interruttore della singola famiglia viaggia insieme alla nota: si filtra
+    // dopo, in memoria, e non nel WHERE, perché le note escluse vanno CONTATE per
+    // la spia "alunni saltati" e un filtro in SQL le farebbe sparire e basta.
+    invioAttivo:      students.riepilogoSeraleAttivo,
   })
     .from(studentNotes)
     .innerJoin(students, eq(studentNotes.studentId, students.id))
@@ -128,7 +197,28 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
     noteIds: string[]
   }
   const alunni = new Map<string, Alunno>()
+
+  // GLI ALUNNI CON L'AVVISO SPENTO ESCONO DI SCENA QUI, E LE LORO NOTE NON VENGONO
+  // TIMBRATE COME "GIÀ ANNUNCIATE".
+  //
+  // Timbrarle sarebbe comodo (non tornerebbero mai più a galla) ma sarebbe una
+  // bugia scritta nel database: avvisoInviatoAt significa "la famiglia è stata
+  // avvisata", e qui la famiglia non è stata avvisata affatto. Lasciandolo vuoto,
+  // il giorno in cui la segreteria riaccende l'interruttore l'avviso riparte da
+  // solo, senza che nessuno debba andare a ripescare a mano le comunicazioni
+  // rimaste indietro.
+  //
+  // L'effetto collaterale — una raffica di avvisi il giorno della riaccensione —
+  // se lo mangia già la finestra di due giorni decisa qui sopra: al massimo
+  // ripartono le comunicazioni approvate nelle ultime 48 ore, non l'arretrato di
+  // mesi. Per questo la scelta prudente (non timbrare) qui non costa niente.
+  const alunniConInvioSpento = new Set<string>()
+
   for (const n of note) {
+    if (!n.invioAttivo) {
+      alunniConInvioSpento.add(n.studentId)
+      continue
+    }
     const esistente = alunni.get(n.studentId)
     if (esistente) {
       esistente.noteIds.push(n.id)
@@ -141,6 +231,14 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
       parentEmail: n.parentEmail,
       noteIds: [n.id],
     })
+  }
+
+  // Se TUTTE le note trovate erano di alunni con l'avviso spento non resta niente da
+  // spedire, ma il giro non è "vuoto": il conteggio degli alunni saltati deve
+  // arrivare lo stesso nel registro. (Serve anche a evitare la query qui sotto con
+  // un elenco di id vuoto.)
+  if (alunni.size === 0) {
+    return esitoVuoto({ noteTrovate: note.length, alunniConInvioSpento: alunniConInvioSpento.size })
   }
 
   // ── 3. I DESTINATARI ──
@@ -204,7 +302,7 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
 
   const elenco = [...destinatari.values()]
   if (elenco.length === 0) {
-    return esitoVuoto({ noteTrovate: note.length, alunniConNote: alunni.size, alunniSenzaRecapito })
+    return esitoVuoto({ noteTrovate: note.length, alunniConNote: alunni.size, alunniSenzaRecapito, alunniConInvioSpento: alunniConInvioSpento.size })
   }
 
   // Il tetto ferma TUTTO il giro invece di mandarne 120 e tagliare il resto: se
@@ -220,6 +318,7 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
       destinatari: elenco.length,
       alunniSenzaRecapito,
       tettoRaggiunto: true,
+      alunniConInvioSpento: alunniConInvioSpento.size,
     })
   }
 
@@ -282,5 +381,6 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
     alunniSenzaRecapito,
     noteSegnate: noteDaSegnare.size,
     tettoRaggiunto: false,
+    alunniConInvioSpento: alunniConInvioSpento.size,
   }
 }
