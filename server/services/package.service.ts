@@ -1,9 +1,11 @@
 import { db } from '../database/client'
-import { accountingEntries, packages, packageRecharges, payments, students, lessonStudents } from '../database/schema'
-import { and, count, desc, eq, getTableColumns } from 'drizzle-orm'
+import { accountingEntries, packages, packageRecharges, payments, students, lessonStudents, lessons, users, timeSlots } from '../database/schema'
+import { and, asc, count, desc, eq, getTableColumns } from 'drizzle-orm'
 import { oggiRomeStr, romeDateStr } from '../utils/tutor-time-window'
 import { CAT } from '#shared/accounting-categories'
 import { serveBollo } from '#shared/bollo'
+import { calcolaDataScadenza } from '#shared/scadenza-pacchetto'
+import { inCentesimi, inEuro } from '../utils/arrotondamenti'
 import { registraBolloInTransazione, riferimentoBollo } from './bollo.service'
 import type { CreatePackageInput, PackageQuery, RechargePackageInput, UpdatePackageInput } from '#shared/schemas/package.schema'
 
@@ -497,7 +499,18 @@ export async function rechargePackage(id: string, data: RechargePackageInput, op
     const [pkg] = await tx.select().from(packages).where(eq(packages.id, id)).limit(1)
     if (!pkg) throw new Error('Pacchetto non trovato')
     if (pkg.tipo !== 'A_CONSUMO') throw new Error('Solo i pacchetti a consumo possono essere ricaricati')
-    if (pkg.stati.includes('CHIUSO')) throw new Error('Impossibile ricaricare un pacchetto CHIUSO')
+
+    // NIENTE blocco su CHIUSO (decisione Q24 del 14/09/2026).
+    //
+    // Un libretto che finisce le ore e viene saldato diventa da solo ESAURITO + PAGATO
+    // + CHIUSO: la macchina a stati chiude tutti i pacchetti così. Ma per il libretto
+    // quel momento è esattamente il momento della ricarica — è una tessera del
+    // telefono, non un abbonamento che scade. Il vecchio controllo spegneva il tasto
+    // "Ricarica" proprio quando serviva, mentre "Modifica pacchetto" (upgrade) le ore
+    // le aggiungeva lo stesso: due tasti per la stessa cosa con regole opposte.
+    // Qui non serve filtrare per tipo: la riga sopra ha già scartato tutto ciò che non
+    // è A_CONSUMO, quindi il blocco su CHIUSO resta intatto per gli altri pacchetti
+    // (updatePackage continua a rifiutarli).
 
     const tariffa = data.tariffaOraria ?? parseFloat(pkg!.tariffaOraria ?? '0')
     const importoRicarica = data.importo
@@ -570,12 +583,31 @@ export async function rechargePackage(id: string, data: RechargePackageInput, op
       note:          data.note ?? null,
     })
 
+    // La ricarica riapre anche la SCADENZA, se era gia' passata.
+    //
+    // Togliere il blocco su CHIUSO non basta da solo: il libretto nasce con una
+    // scadenza (il 15 giugno di fine anno scolastico, shared/scadenza-pacchetto.ts).
+    // Con le ore azzerate lo stato torna ATTIVO appena si ricarica, ma se la data era
+    // gia' passata il pacchetto resta SCADUTO -> e quindi di nuovo CHIUSO: la famiglia
+    // paga, le ore entrano, e poi createLesson si rifiuta di scalarle perche' il
+    // pacchetto risulta scaduto. Soldi presi e ore inutilizzabili: il caso peggiore.
+    // Quindi: se al momento della ricarica la scadenza e' alle spalle, la si sposta al
+    // prossimo 15 giugno. Non accorcia mai niente (si tocca solo una data gia' passata)
+    // e vale solo per il libretto, che e' l'unico pacchetto che si ricarica.
+    const scadenzaAttualeStr = pkg!.dataScadenza ? romeDateStr(new Date(pkg!.dataScadenza)) : null
+    const dataRicaricaStr    = romeDateStr(new Date(data.data))
+    let nuovaDataScadenza    = pkg!.dataScadenza
+    if (scadenzaAttualeStr && scadenzaAttualeStr < dataRicaricaStr) {
+      const prossima = calcolaDataScadenza('A_CONSUMO', dataRicaricaStr)
+      if (prossima) nuovaDataScadenza = new Date(prossima)
+    }
+
     // Ricalcola gli stati con i nuovi valori
     const nuoviStati = computePackageStates({
       oreAcquistate:  String(nuovaOreAcquistate),
       oreResiduo:     String(nuovaOreResiduo),
       importoResiduo: String(nuovoImportoResiduo),
-      dataScadenza:   pkg!.dataScadenza,
+      dataScadenza:   nuovaDataScadenza,
       sospeso:        pkg!.sospeso,
     })
 
@@ -586,6 +618,7 @@ export async function rechargePackage(id: string, data: RechargePackageInput, op
       prezzoTotale:   String(nuovoPrezzoTotale),
       importoPagato:  String(nuovoImportoPagato),
       importoResiduo: String(nuovoImportoResiduo),
+      dataScadenza:   nuovaDataScadenza,
       stati:          nuoviStati,
       // Ricarica: gli avvisi email tornano eleggibili
       avvisoOreInviatoAt:      null,
@@ -605,6 +638,207 @@ export async function getPackageRecharges(packageId: string) {
     .where(eq(packageRecharges.packageId, packageId))
     .orderBy(desc(packageRecharges.data))
 }
+
+// ─────────────────────────────────────────────
+// ESTRATTO CONTO DEL LIBRETTO — GET /api/packages/:id/estratto-conto
+// (decisione Q25 del 14/09/2026)
+//
+// Il libretto è un salvadanaio di ore: le ricariche lo riempiono, le lezioni lo
+// svuotano. Finora la finestra "Libretto" mostrava solo metà della storia — le
+// ricariche — e il conto non si poteva rifare a mano. Qui le due metà tornano
+// insieme in un elenco unico, in ordine di data, con il saldo dopo ogni riga:
+// esattamente come l'estratto conto della banca.
+//
+// Due scelte che vale la pena di spiegare:
+//
+// 1) le ore consumate NON si danno per scontate a 1 per lezione. Il valore vero è
+//    quello scritto in `lesson_students.ore_scalate` al momento della lezione: oggi
+//    createLesson ci mette sempre 1.0, ma i dati importati dal vecchio gestionale
+//    possono avere altro, e se un giorno la regola cambierà l'estratto conto resterà
+//    giusto senza che nessuno debba ricordarsi di venirlo a correggere qui.
+//
+// 2) le ore si sommano in CENTESIMI INTERI (regola F3, server/utils/arrotondamenti.ts).
+//    Sono numeric(10,2) come gli euro e soffrono lo stesso difetto della virgola:
+//    sommate una per una in JavaScript produrrebbero saldi tipo 8,999999999996.
+// ─────────────────────────────────────────────
+
+/** Una riga dell'estratto conto: o una ricarica (+ore) o una lezione (−ore). */
+export type VoceLibretto = {
+  id:          string
+  tipo:        'RICARICA' | 'LEZIONE'
+  data:        string   // giorno civile 'YYYY-MM-DD'
+  ore:         number   // positivo per le ricariche, negativo per le lezioni
+  saldo:       number   // saldo DOPO questa riga
+  descrizione: string
+  dettaglio:   string
+  importo:     number | null   // solo ricariche
+  pagata:      boolean | null  // solo ricariche: c'è un pagamento collegato?
+}
+
+export type EstrattoContoLibretto = {
+  pacchetto: {
+    id:            string
+    nome:          string
+    studente:      string
+    tariffaOraria: number | null
+    dataInizio:    Date
+    dataScadenza:  Date | null
+    stati:         string[]
+    oreResiduo:    number
+  }
+  periodo:          { dal: string | null, al: string | null }
+  voci:             VoceLibretto[]
+  totaleRicaricate: number
+  totaleConsumate:  number
+  saldoFinale:      number   // quello che dice l'elenco
+  saldoPacchetto:   number   // quello che dice packages.ore_residuo
+  differenza:       number   // saldoFinale − saldoPacchetto (0 = tutto torna)
+  avviso:           string | null
+}
+
+/** Ore scritte all'italiana ("9,5"), per i messaggi che legge la segreteria. */
+function oreIt(n: number): string {
+  return n.toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 2 })
+}
+
+export async function getEstrattoContoLibretto(packageId: string): Promise<EstrattoContoLibretto> {
+  const pkg = await getPackageById(packageId)
+  if (!pkg) throw new Error('Pacchetto non trovato')
+  if (pkg.tipo !== 'A_CONSUMO') {
+    throw new Error(
+      `L'estratto conto delle ore esiste solo per il libretto (pacchetto A CONSUMO). "${pkg.nome}" è un pacchetto ${pkg.tipo}: le sue ore sono comprate tutte all'inizio, non ci sono ricariche da mettere in fila.`,
+    )
+  }
+
+  // Le due metà della storia, ciascuna dalla sua tabella
+  const ricariche = await db
+    .select()
+    .from(packageRecharges)
+    .where(eq(packageRecharges.packageId, packageId))
+    .orderBy(asc(packageRecharges.data))
+
+  const consumi = await db
+    .select({
+      id:             lessonStudents.id,
+      oreScalate:     lessonStudents.oreScalate,
+      createdAt:      lessonStudents.createdAt,
+      data:           lessons.data,
+      mezzaLezione:   lessons.mezzaLezione,
+      tutorFirstName: users.firstName,
+      tutorLastName:  users.lastName,
+      oraInizio:      timeSlots.oraInizio,
+      oraFine:        timeSlots.oraFine,
+    })
+    .from(lessonStudents)
+    .innerJoin(lessons, eq(lessonStudents.lessonId, lessons.id))
+    .innerJoin(users, eq(lessons.tutorId, users.id))
+    .leftJoin(timeSlots, eq(lessons.timeSlotId, timeSlots.id))
+    .where(eq(lessonStudents.packageId, packageId))
+    .orderBy(asc(lessons.data))
+
+  // Righe grezze, ancora senza saldo. `ordine` serve solo a decidere chi viene prima
+  // a parità di giorno: la ricarica prima del consumo, perché nella realtà si paga e
+  // poi si usa — altrimenti il saldo del giorno stesso comparirebbe negativo.
+  type Grezza = Omit<VoceLibretto, 'saldo'> & { ordine: number, creata: number }
+
+  const grezze: Grezza[] = []
+
+  for (const r of ricariche) {
+    const ore     = parseFloat(r.ore)
+    const importo = parseFloat(r.importo)
+    const tariffa = parseFloat(r.tariffaOraria)
+    grezze.push({
+      id:          r.id,
+      tipo:        'RICARICA',
+      data:        romeDateStr(new Date(r.data)),
+      ore,
+      descrizione: r.note?.trim() || 'Ricarica',
+      dettaglio:   `${oreIt(ore)} ore a € ${tariffa.toFixed(2)}/h`,
+      importo,
+      pagata:      !!r.paymentId,
+      ordine:      0,
+      creata:      new Date(r.createdAt).getTime(),
+    })
+  }
+
+  for (const c of consumi) {
+    // Il valore che il database ha DAVVERO registrato, non "1 ora" dato per scontato
+    const ore    = parseFloat(c.oreScalate)
+    const orario = c.oraInizio && c.oraFine ? `${c.oraInizio}–${c.oraFine}` : null
+    const pezzi  = [
+      `tutor ${c.tutorFirstName ?? ''} ${c.tutorLastName ?? ''}`.trim(),
+      orario,
+      c.mezzaLezione ? 'mezza lezione' : null,
+    ].filter(Boolean) as string[]
+    grezze.push({
+      id:          c.id,
+      tipo:        'LEZIONE',
+      data:        c.data,
+      ore:         -ore,
+      descrizione: 'Lezione',
+      dettaglio:   pezzi.join(' · '),
+      importo:     null,
+      pagata:      null,
+      ordine:      1,
+      creata:      new Date(c.createdAt).getTime(),
+    })
+  }
+
+  grezze.sort((a, b) =>
+    a.data.localeCompare(b.data) || (a.ordine - b.ordine) || (a.creata - b.creata),
+  )
+
+  // Saldo progressivo in centesimi di ora (interi: niente code decimali)
+  let saldoCent      = 0
+  let ricaricateCent = 0
+  let consumateCent  = 0
+
+  const voci: VoceLibretto[] = grezze.map(({ ordine: _ordine, creata: _creata, ...v }) => {
+    const cent = inCentesimi(v.ore)
+    saldoCent += cent
+    if (cent >= 0) ricaricateCent += cent
+    else consumateCent -= cent
+    return { ...v, saldo: inEuro(saldoCent) }
+  })
+
+  // ⚠️ Il controllo che rende onesto il documento: il saldo dell'elenco deve
+  // coincidere con packages.ore_residuo, che è il numero su cui lavora tutto il resto
+  // del gestionale. Se i due non coincidono NON si aggiusta niente di nascosto: si
+  // scrive a chiare lettere che c'è una differenza. Un conto che non torna e lo dice
+  // è utile; un conto che non torna e tace è un danno.
+  const saldoFinale    = inEuro(saldoCent)
+  const saldoPacchetto = parseFloat(pkg.oreResiduo)
+  const differenza     = inEuro(saldoCent - inCentesimi(saldoPacchetto))
+
+  const avviso = differenza === 0
+    ? null
+    : `Attenzione: questo elenco chiude a ${oreIt(saldoFinale)} ore, ma il pacchetto ne registra ${oreIt(saldoPacchetto)} — differenza di ${oreIt(Math.abs(differenza))} ${Math.abs(differenza) === 1 ? 'ora' : 'ore'}. Le ore buone sono quelle del pacchetto: prima di consegnare questo foglio alla famiglia, fai verificare il conto in segreteria.`
+
+  return {
+    pacchetto: {
+      id:            pkg.id,
+      nome:          pkg.nome,
+      studente:      `${pkg.studentFirstName ?? ''} ${pkg.studentLastName ?? ''}`.trim(),
+      tariffaOraria: pkg.tariffaOraria ? parseFloat(pkg.tariffaOraria) : null,
+      dataInizio:    pkg.dataInizio,
+      dataScadenza:  pkg.dataScadenza,
+      stati:         pkg.stati,
+      oreResiduo:    saldoPacchetto,
+    },
+    periodo: {
+      dal: voci[0]?.data ?? null,
+      al:  voci[voci.length - 1]?.data ?? null,
+    },
+    voci,
+    totaleRicaricate: inEuro(ricaricateCent),
+    totaleConsumate:  inEuro(consumateCent),
+    saldoFinale,
+    saldoPacchetto,
+    differenza,
+    avviso,
+  }
+}
+
 
 // ─────────────────────────────────────────────
 // DELETE — DELETE /api/packages/:id

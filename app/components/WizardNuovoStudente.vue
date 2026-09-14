@@ -427,7 +427,9 @@
           <UButton v-if="step === 1" @click="form1?.submit()">Avanti</UButton>
           <UButton v-else-if="step === 2" @click="form2?.submit()">Avanti</UButton>
           <UButton v-else-if="step < 4" @click="step++">Avanti</UButton>
-          <UButton v-else :loading="salvando" color="primary" @click="salvaTutto">
+          <!-- Il giro sui doppioni (D3) sta dentro il salvataggio: la rotellina
+               deve girare anche mentre si controlla, o sembra che non succeda niente -->
+          <UButton v-else :loading="salvando || cercandoDoppioni" color="primary" @click="salvaTutto">
             Salva Tutto
           </UButton>
         </div>
@@ -510,6 +512,65 @@
       </div>
     </template>
   </UModal>
+
+  <!-- ─── POSSIBILI DOPPIONI (D3) ───
+       Si avvisa, non si blocca: due fratelli con nomi simili e due omonimi veri
+       sono casi legittimi, e chi sa com'è andata è la persona davanti allo schermo. -->
+  <UModal v-model:open="doppioniAperti" title="Esiste già un alunno che somiglia a questo" :ui="{ content: 'max-w-lg' }">
+    <template #body>
+      <div class="space-y-4">
+        <div class="flex items-start gap-3">
+          <UIcon name="i-heroicons-exclamation-triangle" class="w-6 h-6 text-amber-500 shrink-0" aria-hidden="true" />
+          <p class="text-sm text-slate-600">
+            Prima di creare <strong>{{ dati.studente.firstName }} {{ dati.studente.lastName }}</strong>,
+            guarda chi c'è già in archivio: se è uno di questi, non serve una seconda scheda.
+          </p>
+        </div>
+
+        <div v-for="a in doppioni" :key="a.id" class="rounded-xl border border-slate-200 p-3 space-y-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="text-sm font-medium text-slate-800">{{ a.nome }}</p>
+            <UBadge v-if="a.classe" color="neutral" variant="subtle" size="sm">{{ a.classe }}</UBadge>
+            <!-- Un ex alunno che torna è il caso in cui il doppione nasce più
+                 facilmente: la sua scheda dagli elenchi normali non si vede. -->
+            <UBadge v-if="!a.attivo" color="warning" variant="soft" size="sm">Non più attivo</UBadge>
+          </div>
+
+          <p class="text-sm text-slate-600">{{ spiegazioneDoppione(a) }}</p>
+          <ul v-if="a.recapiti.length" class="text-xs text-slate-500 space-y-0.5">
+            <li v-for="(r, i) in a.recapiti" :key="i">{{ dettaglioRecapito(r) }}</li>
+          </ul>
+
+          <div class="flex flex-wrap gap-2 pt-1">
+            <UButton
+              :to="`/studenti/${a.id}`" target="_blank"
+              size="xs" variant="soft" color="neutral" icon="i-heroicons-arrow-top-right-on-square"
+              :aria-label="`Apri la scheda di ${a.nome} in una nuova scheda del browser`"
+            >
+              Vai alla scheda
+            </UButton>
+            <!-- Compare solo per chi sa che cosa vuol dire collegare (la scheda di
+                 un contatto): il wizard emette l'evento e non si occupa del resto. -->
+            <UButton
+              v-if="puoCollegare"
+              size="xs" color="primary" icon="i-heroicons-link"
+              @click="collegaAlunnoEsistente(a)"
+            >
+              Collega il contatto a questo alunno
+            </UButton>
+          </div>
+        </div>
+      </div>
+    </template>
+    <template #footer>
+      <div class="flex flex-wrap justify-end gap-2 w-full">
+        <UButton variant="ghost" color="neutral" @click="() => { doppioniAperti = false }">Annulla</UButton>
+        <UButton color="warning" :loading="salvando" @click="creaComunque">
+          Crea comunque un alunno nuovo
+        </UButton>
+      </div>
+    </template>
+  </UModal>
 </template>
 
 <script setup lang="ts">
@@ -517,9 +578,12 @@ import type { EsitoInvitoEmail } from '#shared/email'
 import { oggiISO } from '~/utils/format'
 import { METODI_PAGAMENTO_ITEMS } from '~/utils/contabilita'
 import { z } from 'zod'
+import { getCurrentInstance } from 'vue'
 import { normalizzaTelefono } from '~/utils/phone'
 import { parolaParentela } from '#shared/genitori'
 import type { AccountGenitore, AltroGenitore, DatiGenitore, GenitoriDelFratello, PersonaGenitore } from '#shared/genitori'
+import { dettaglioRecapito, spiegazioneDoppione } from '#shared/doppioni'
+import type { AlunnoSimile, RisultatoDoppioni } from '#shared/doppioni'
 
 // `prefill` = dati già noti (es. presi da un contatto del mini-CRM): all'apertura
 // il wizard parte con quei campi già scritti. Senza `prefill` non cambia nulla.
@@ -559,6 +623,14 @@ const emit = defineEmits<{
   (e: 'refresh'): void
   /** Id dello studente appena creato (serve a chi ha aperto il wizard per collegarlo) */
   (e: 'created', studentId: string): void
+  /**
+   * "Quello che stai creando esiste già: è LUI" (D3). Nessun alunno è stato
+   * creato: il wizard ha solo riconosciuto un possibile doppione e passa la
+   * palla a chi lo ha aperto, che sa cosa vuol dire collegare (la scheda di un
+   * contatto aggancia il figlio a quell'alunno). Chi non ascolta questo evento
+   * non vede nemmeno il bottone.
+   */
+  (e: 'collega-esistente', studentId: string): void
 }>()
 
 const isOpen = computed({
@@ -903,6 +975,11 @@ function chiudi() {
   risultato.accessi = []
   risultato.pacchettoCreato = false
   risultato.errorePacchetto = ''
+  // Il controllo doppioni riparte pulito: il prossimo alunno è un altro (D3)
+  doppioni.value = []
+  doppioniAperti.value = false
+  doppioniControllati.value = false
+  doppioniConfermati.value = false
 }
 
 // L'esito dell'accesso di UN genitore. Ce n'è uno per genitore a cui è stato
@@ -1053,6 +1130,77 @@ async function collegaAccountGenitore(
   }
 }
 
+// ─── POSSIBILI DOPPIONI (D3) ───
+// Prima di creare davvero si chiede al gestionale se quel ragazzo è già in
+// archivio: stesso nome e cognome, oppure stesso telefono o stessa email del
+// genitore. Se somiglia a qualcuno non si salva niente e si chiede alla
+// segreteria cosa fare — collegare, creare comunque, annullare. È un controllo
+// di cortesia (decisione Q21): non blocca mai, perché due fratelli con nomi
+// simili e due omonimi veri esistono e vanno iscritti tutti e due.
+
+const doppioni = ref<AlunnoSimile[]>([])
+const doppioniAperti = ref(false)
+/** Il controllo è già stato fatto e superato per questo salvataggio: non si ripete */
+const doppioniControllati = ref(false)
+/** L'utente ha detto "crea comunque": lo si dice anche al server, che ha la sua rete di sicurezza */
+const doppioniConfermati = ref(false)
+const cercandoDoppioni = ref(false)
+
+// "Collega il contatto a questo alunno" ha senso solo per chi sa che cosa vuol
+// dire collegare: il wizard non lo sa e non deve saperlo. Se chi lo ha aperto
+// ascolta l'evento (la scheda di un contatto) il bottone c'è; altrimenti no.
+const istanza = getCurrentInstance()
+const puoCollegare = computed(() => Boolean(istanza?.vnode.props?.onCollegaEsistente))
+
+// Riaperto il wizard, il controllo riparte da zero: l'alunno è un altro.
+watch(() => props.open, (adesso) => {
+  if (!adesso) return
+  doppioni.value = []
+  doppioniAperti.value = false
+  doppioniControllati.value = false
+  doppioniConfermati.value = false
+})
+
+/**
+ * Gli alunni che somigliano a quello che si sta creando. Non lancia mai errori:
+ * se la rete non va o l'endpoint risponde male si restituisce un elenco vuoto e
+ * si prosegue come prima di questa funzione. Un controllo di cortesia non deve
+ * impedire alla segreteria di lavorare.
+ */
+async function cercaDoppioni(): Promise<AlunnoSimile[]> {
+  cercandoDoppioni.value = true
+  try {
+    const res = await $fetch<RisultatoDoppioni>('/api/admin/students/possibili-doppioni', {
+      query: {
+        firstName: dati.studente.firstName.trim() || undefined,
+        lastName:  dati.studente.lastName.trim() || undefined,
+        telefono:  dati.genitore.parentPhone.trim() || undefined,
+        email:     dati.genitore.parentEmail.trim() || undefined,
+      },
+    })
+    return res.alunni ?? []
+  } catch {
+    return []
+  } finally {
+    cercandoDoppioni.value = false
+  }
+}
+
+/** "Crea comunque": si riparte dal salvataggio, ma stavolta senza chiedere più niente */
+function creaComunque() {
+  doppioniAperti.value = false
+  doppioniControllati.value = true
+  doppioniConfermati.value = true
+  salvaTutto()
+}
+
+/** "È lui": nessun alunno nuovo, la palla passa a chi ha aperto il wizard */
+function collegaAlunnoEsistente(a: AlunnoSimile) {
+  doppioniAperti.value = false
+  emit('collega-esistente', a.id)
+  chiudi()
+}
+
 async function salvaTutto() {
   // Il nome pacchetto deriva sempre dal pacchetto standard scelto
   if (dati.pacchetto.crea && !dati.pacchetto.nome) {
@@ -1103,6 +1251,19 @@ async function salvaTutto() {
     return
   }
 
+  // Ultimo controllo prima di creare: quel ragazzo è già in archivio? (D3)
+  // Si fa una volta sola per salvataggio — chi ha già risposto "crea comunque"
+  // non se lo ritrova davanti un'altra volta.
+  if (!doppioniControllati.value) {
+    const simili = await cercaDoppioni()
+    if (simili.length > 0) {
+      doppioni.value = simili
+      doppioniAperti.value = true
+      return
+    }
+    doppioniControllati.value = true
+  }
+
   salvando.value = true
   try {
     // 1. Crea studente — se questo fallisce non c'è niente da salvare dopo
@@ -1136,9 +1297,26 @@ async function salvaTutto() {
         parent2DataNascita: dati.genitore2.dataNascita || undefined,
         parent2Relazione: relazioneDa(dati.genitore2) || undefined,
       } : {}),
+      // "L'ho già guardato, vai avanti": senza questo il server rifiuta di creare
+      // un alunno con lo stesso nome E lo stesso recapito di uno che c'è già.
+      ...(doppioniConfermati.value ? { confermaDoppione: true } : {}),
     }
 
-    const studenteRes = await $fetch('/api/students', { method: 'POST', body: studenteBody }) as any
+    let studenteRes: any
+    try {
+      studenteRes = await $fetch('/api/students', { method: 'POST', body: studenteBody })
+    } catch (err: any) {
+      // Il doppione l'ha trovato il server (la sua rete di sicurezza scatta anche
+      // se il controllo del browser è stato saltato): stessa finestra, stessa scelta.
+      const stato = err?.statusCode ?? err?.response?.status
+      const trovati = err?.data?.data?.doppioni
+      if (stato === 409 && Array.isArray(trovati) && trovati.length > 0) {
+        doppioni.value = trovati
+        doppioniAperti.value = true
+        return
+      }
+      throw err
+    }
     const studenteId = studenteRes.data?.id
     if (!studenteId) throw new Error('Creazione studente fallita')
 

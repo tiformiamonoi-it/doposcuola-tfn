@@ -292,6 +292,7 @@
     v-model:open="wizardAperto"
     :prefill="prefillStudente"
     @created="dopoStudenteCreato"
+    @collega-esistente="collegaAlunnoEsistente"
   />
 
   <!-- Conversione in tutor: il modulo "Nuovo Tutor" si apre già compilato -->
@@ -533,6 +534,31 @@ async function dopoStudenteCreato(studentId: string) {
     toast.add({
       title: 'Lo studente è stato creato ma il contatto non è stato aggiornato',
       description: err?.data?.statusMessage ?? 'Segna a mano lo stato «Convertito» in questa scheda.',
+      color: 'error',
+    })
+  }
+  await dopoModifica()
+}
+
+// Nessuno studente è stato creato: il wizard ha riconosciuto che quel ragazzo è
+// GIÀ in archivio (D3) e la segreteria ha detto "è lui". Si collega questo figlio
+// alla scheda che c'è già — stesso sportello della conversione normale, quindi il
+// contatto diventa "Convertito" e il rientro di settembre resta segnato — e non
+// nasce nessun doppione.
+async function collegaAlunnoEsistente(studentId: string) {
+  const c = contatto.value
+  const f = figlioInCreazione.value
+  if (!c || !f) return
+  try {
+    await $fetch(`/api/contacts/${c.id}/figli/collega`, {
+      method: 'POST',
+      body: { figlioId: f.id, studentId },
+    })
+    toast.add({ title: 'Contatto collegato all\'alunno che c\'era già', color: 'success' })
+  } catch (err: any) {
+    toast.add({
+      title: 'Il collegamento non è riuscito',
+      description: err?.data?.statusMessage ?? 'Riprova, oppure segna a mano lo stato «Convertito» in questa scheda.',
       color: 'error',
     })
   }
