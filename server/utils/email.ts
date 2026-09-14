@@ -199,3 +199,79 @@ export function emailAvvisoPacchetto(p: {
     `),
   }
 }
+
+// RIEPILOGO SERALE DELLE NOTE (A3, decisioni Q14 e Q23).
+//
+// PERCHE' l'email NON contiene la nota: una comunicazione del tutor su un
+// ragazzo è un dato delicato, e la posta resta leggibile per sempre nella
+// casella — aperta da chiunque abbia in mano quel telefono. Qui viaggia solo
+// l'avviso che c'è qualcosa di nuovo; il testo si legge nel portale, dopo aver
+// fatto l'accesso. È la stessa scelta di emailInvitoPassword (niente password
+// per email) e di emailAvvisoPacchetto (niente ore residue per email).
+//
+// Non compare nemmeno il NOME DEL TUTOR: nel portale le note sono firmate
+// "Segreteria" (vedi getPortalNotes) e l'email non deve svelare di più.
+//
+// Un genitore con due figli riceve UNA email che parla di tutti e due: due
+// email nello stesso minuto dallo stesso mittente sembrano un errore, e i
+// filtri antispam le guardano peggio.
+export function emailNoteNelPortale(p: {
+  /** Nome di battesimo del destinatario; se non lo conosciamo si saluta senza nome */
+  nome?: string | null
+  /** Un elemento per figlio, con quante comunicazioni nuove ci sono per lui */
+  figli: { nome: string; quante: number }[]
+  /** Link assoluto alla pagina Note del portale; assente se appUrl non è configurato */
+  link?: string
+}): { subject: string; html: string } {
+  const totale = p.figli.reduce((somma, f) => somma + f.quante, 0)
+  const unaSola = totale === 1
+
+  const saluto = p.nome ? `Ciao ${p.nome},` : 'Ciao,'
+
+  // Con un figlio solo la frase resta quella del piano ("1 nuova comunicazione
+  // per Luca"); con più figli si elenca chi riguarda, perché il genitore deve
+  // capire a colpo d'occhio per quale ragazzo deve entrare.
+  let frase: string
+  if (p.figli.length === 1) {
+    const f = p.figli[0]!
+    frase = unaSola
+      ? `oggi c'è <strong>1 nuova comunicazione</strong> per <strong>${f.nome}</strong> nel portale.`
+      : `oggi ci sono <strong>${f.quante} nuove comunicazioni</strong> per <strong>${f.nome}</strong> nel portale.`
+  } else {
+    const pezzi = p.figli.map((f) => `<strong>${f.quante} per ${f.nome}</strong>`)
+    const elenco = pezzi.length > 1
+      ? `${pezzi.slice(0, -1).join(', ')} e ${pezzi[pezzi.length - 1]}`
+      : pezzi[0]
+    frase = `oggi ci sono nuove comunicazioni nel portale: ${elenco}.`
+  }
+
+  const invito = unaSola ? 'Entra nel portale per leggerla.' : 'Entra nel portale per leggerle.'
+
+  // Senza appUrl configurato non possiamo scrivere un indirizzo cliccabile:
+  // meglio una riga onesta che un pulsante che non porta da nessuna parte.
+  const azione = p.link
+    ? `<p style="margin: 20px 0;">
+        <a href="${p.link}" style="display:inline-block;background:#0063A6;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;">
+          Leggi nel portale
+        </a>
+      </p>`
+    : '<p style="font-size: 14px;">Entra nel portale delle famiglie di tiformiamonoi e apri la sezione <strong>Note</strong>.</p>'
+
+  return {
+    subject: unaSola
+      ? 'Una nuova comunicazione nel portale — tiformiamonoi'
+      : 'Nuove comunicazioni nel portale — tiformiamonoi',
+    html: layout('Novità nel portale', `
+      <p style="font-size: 14px;">${saluto} ${frase}</p>
+      <p style="font-size: 14px;">${invito}</p>
+      ${azione}
+      <p style="font-size: 13px; color: #64748b;">
+        Per riservatezza il testo della comunicazione non viaggia mai per email: si legge solo nel portale, dopo l'accesso.
+      </p>
+      <p style="font-size: 13px; color: #64748b; margin-top: 16px;">
+        Ricevi questa email perché sei collegato al portale famiglie di tiformiamonoi:
+        ti scriviamo una volta sola a fine giornata, e soltanto nei giorni in cui c'è davvero qualcosa di nuovo.
+      </p>
+    `),
+  }
+}
