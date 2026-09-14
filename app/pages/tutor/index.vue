@@ -234,6 +234,8 @@ interface RigaTutor {
   active: boolean
   modalitaPagamento: string | null
   importoForfait: string | null
+  /** Primo giorno del mese da cui vale il fisso ('AAAA-MM-01'), o null */
+  forfaitDal: string | null
   /** Data di creazione: parte come data e arriva qui come testo ISO */
   createdAt: string
   numLezioniMese: number
@@ -264,6 +266,8 @@ interface MeseCompenso {
   numLezioni: number
   compensoGrezzo: number
   compensoCalcolato: number
+  /** true se quel mese è stato calcolato col fisso mensile, false se a ore */
+  forfaitApplicato: boolean
   pagato: number
   residuo: number
   stato: string

@@ -111,6 +111,15 @@
                     <dt class="text-slate-400 w-32 shrink-0">Importo</dt>
                     <dd>€ {{ tutor.importoForfait }}</dd>
                   </div>
+                  <!-- DA QUANDO vale il fisso: si deve capire a colpo d'occhio, perché
+                       i mesi prima di questa data restano contati a ore. -->
+                  <div v-if="tutor.modalitaPagamento === 'FORFAIT'" class="flex gap-2">
+                    <dt class="text-slate-400 w-32 shrink-0">A partire da</dt>
+                    <dd class="capitalize">
+                      {{ etichettaMese(meseInizioFissoTutor) }}
+                      <span v-if="!tutor.forfaitDal" class="text-slate-400 normal-case">(non indicato: vale da questo mese in poi)</span>
+                    </dd>
+                  </div>
                 </dl>
                 <div v-if="tutor.noteInterne" class="mt-4">
                   <div class="text-xs text-slate-400 mb-1 font-medium uppercase tracking-wide">Note interne</div>
@@ -207,7 +216,11 @@
                   <template #compensoCalcolato-cell="{ row }">
                     <div class="text-sm">
                       <div class="font-medium">€ {{ row.original.compensoCalcolato }}</div>
-                      <div v-if="tutor.modalitaPagamento === 'FORFAIT'" class="text-tfn-500 font-medium text-xs mt-0.5">Quota Forfait</div>
+                      <!-- "Quota Forfait" solo sui mesi in cui il fisso vale davvero.
+                           I mesi PRECEDENTI alla partenza del fisso restano pagati a
+                           ore e lo dicono, altrimenti sembrerebbero un errore. -->
+                      <div v-if="row.original.forfaitApplicato" class="text-tfn-500 font-medium text-xs mt-0.5">Quota Forfait</div>
+                      <div v-else-if="tutor.modalitaPagamento === 'FORFAIT'" class="text-slate-400 text-xs mt-0.5">a ore (prima del fisso)</div>
                       <div class="text-slate-400 text-xs">ore: € {{ row.original.compensoGrezzo.toFixed(2) }}</div>
                     </div>
                   </template>
@@ -477,9 +490,21 @@
               />
             </UFormField>
           </div>
-          <UFormField v-if="datiModifica.modalitaPagamento === 'FORFAIT'" name="importoForfait" label="Importo forfait (€)">
-            <UInput v-model="datiModifica.importoForfait" type="number" class="w-full" />
-          </UFormField>
+          <div v-if="datiModifica.modalitaPagamento === 'FORFAIT'" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <UFormField name="importoForfait" label="Importo forfait (€)">
+              <UInput v-model="datiModifica.importoForfait" type="number" class="w-full" />
+            </UFormField>
+            <!-- Senza questo mese il gestionale applicherebbe il fisso anche ai mesi
+                 già pagati a ore, facendo comparire arretrati mai esistiti. -->
+            <UFormField
+              name="forfaitDal"
+              label="Fisso mensile a partire da"
+              required
+              hint="I mesi precedenti restano pagati a ore"
+            >
+              <UInput v-model="datiModifica.forfaitDal" type="month" class="w-full" />
+            </UFormField>
+          </div>
           <UFormField name="noteInterne" label="Note interne">
             <UTextarea v-model="datiModifica.noteInterne" :rows="3" class="w-full" />
           </UFormField>
@@ -614,6 +639,9 @@
 
 <script setup lang="ts">
 import type { EsitoInvitoEmail } from '#shared/email'
+// La regola del fisso mensile sta scritta una volta sola, e il modulo usa la stessa
+// del server: così il mese proposto qui e quello controllato là non possono divergere.
+import { etichettaMese, meseDiGiorno, meseDiOggi, meseInizioFisso } from '#shared/compenso-tutor'
 import { oggiISO } from '~/utils/format'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
 import { METODI_PAGAMENTO_ITEMS, coloreStatoPagamento, coloreStatoRimborso } from '~/utils/contabilita'
@@ -668,6 +696,8 @@ interface SchedaTutor {
   noteInterne: string | null
   modalitaPagamento: 'ORE' | 'FORFAIT' | null
   importoForfait: string | null
+  /** Primo giorno del mese da cui vale il fisso ('AAAA-MM-01'), o null se non indicato */
+  forfaitDal: string | null
 }
 
 /** GET /api/tutors/:id/compensation — una riga per mese. */
@@ -677,6 +707,8 @@ interface CompensoMese {
   numLezioni: number
   compensoGrezzo: number
   compensoCalcolato: number
+  /** true se QUEL mese è stato calcolato col fisso mensile, false se a ore */
+  forfaitApplicato: boolean
   pagato: number
   residuo: number
   stato: 'PAGATO' | 'PARZIALE' | 'DA_PAGARE' | 'PRO_BONO'
@@ -902,6 +934,17 @@ const metodiPagamento = METODI_PAGAMENTO_ITEMS
 
 const dataNascitaTutor = computed<string | null>(() => tutor.value?.dataNascita ?? null)
 
+// DA QUANDO vale il fisso per questo tutor, 'AAAA-MM'. Se la data non c'è (profili
+// salvati prima del 14/09/2026) è il mese corrente: mai all'indietro, esattamente
+// come decide il server.
+const meseInizioFissoTutor = computed<string>(
+  () => meseInizioFisso({
+    modalitaPagamento: tutor.value?.modalitaPagamento,
+    importoForfait:    tutor.value?.importoForfait,
+    forfaitDal:        tutor.value?.forfaitDal,
+  }) ?? meseDiOggi(),
+)
+
 // ─── Modal Modifica ───────────────────────────
 const modalModificaAperto = ref(false)
 const salvando = ref(false)
@@ -919,6 +962,9 @@ const datiModifica = reactive({
   cap: tutor.value?.cap ?? '',
   modalitaPagamento: tutor.value?.modalitaPagamento ?? 'ORE',
   importoForfait: tutor.value?.importoForfait ?? '',
+  // Il campo <input type="month"> vuole 'AAAA-MM', la colonna a database è un giorno
+  // ('AAAA-MM-01'): qui si tiene la forma del modulo, il server rimette il giorno.
+  forfaitDal: meseDiGiorno(tutor.value?.forfaitDal ?? ''),
   noteInterne: tutor.value?.noteInterne ?? '',
   password: '', // reset password opzionale: vuoto = non cambiare
 })
@@ -944,6 +990,10 @@ watch(tutor, (t) => {
     cap: t.cap ?? '',
     modalitaPagamento: t.modalitaPagamento ?? 'ORE',
     importoForfait: t.importoForfait ?? '',
+    // Tutor già a fisso ma senza mese di partenza (dati vecchi): si propone il mese
+    // corrente, che è anche quello che il server userebbe. Salvando, la cosa si fissa
+    // nero su bianco e non resta più affidata alla regola di riserva.
+    forfaitDal: meseDiGiorno(t.forfaitDal ?? '') || (t.modalitaPagamento === 'FORFAIT' ? meseDiOggi() : ''),
     noteInterne: t.noteInterne ?? '',
     password: '',
   })
@@ -952,7 +1002,21 @@ watch(tutor, (t) => {
   ruoloIniziale.value = t.role ?? 'TUTOR'
 })
 
+// Chi sposta la modalità su "Forfait" si trova il mese di partenza già compilato col
+// MESE CORRENTE: è il caso normale (si mette a fisso da adesso) ed è la scelta che
+// evita di far ricomparire arretrati sui mesi già pagati a ore. Resta modificabile.
+watch(() => datiModifica.modalitaPagamento, (modalita) => {
+  if (modalita === 'FORFAIT' && !datiModifica.forfaitDal) datiModifica.forfaitDal = meseDiOggi()
+})
+
 async function salvaTutor() {
+  // Il fisso mensile senza un mese di partenza è proprio il difetto che stiamo
+  // chiudendo: meglio fermarsi qui con un messaggio chiaro che lasciar decidere al
+  // server una data che la segreteria non ha scelto.
+  if (datiModifica.modalitaPagamento === 'FORFAIT' && !datiModifica.forfaitDal) {
+    toast.add({ title: 'Indica da quale mese parte il fisso mensile', color: 'error' })
+    return
+  }
   salvando.value = true
   try {
     const res = await $fetch<EsitoSalvataggioTutor>(indirizzoTutor, {
@@ -977,6 +1041,9 @@ async function salvaTutor() {
         citta: datiModifica.citta || null,
         cap: datiModifica.cap || null,
         importoForfait: datiModifica.importoForfait || null,
+        // Solo per il fisso: tornando "a ore" si manda null e il server azzera la data
+        // (se un giorno il tutor tornasse a fisso, il mese va deciso di nuovo).
+        forfaitDal: datiModifica.modalitaPagamento === 'FORFAIT' ? (datiModifica.forfaitDal || null) : null,
         noteInterne: datiModifica.noteInterne || null,
       },
     })

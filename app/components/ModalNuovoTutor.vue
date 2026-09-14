@@ -50,9 +50,21 @@
             />
           </UFormField>
         </div>
-        <UFormField v-if="nuovoTutor.modalitaPagamento === 'FORFAIT'" name="importoForfait" label="Importo forfait (€)">
-          <UInput v-model="nuovoTutor.importoForfait" type="number" placeholder="500" class="w-full" />
-        </UFormField>
+        <div v-if="nuovoTutor.modalitaPagamento === 'FORFAIT'" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <UFormField name="importoForfait" label="Importo forfait (€)">
+            <UInput v-model="nuovoTutor.importoForfait" type="number" placeholder="500" class="w-full" />
+          </UFormField>
+          <!-- Da quale mese vale il fisso: senza, il gestionale lo applicherebbe anche
+               ai mesi passati e farebbe comparire arretrati mai esistiti. -->
+          <UFormField
+            name="forfaitDal"
+            label="Fisso mensile a partire da"
+            required
+            hint="I mesi precedenti restano pagati a ore"
+          >
+            <UInput v-model="nuovoTutor.forfaitDal" type="month" class="w-full" />
+          </UFormField>
+        </div>
 
         <!-- Solo se si arriva da un contatto: le materie che ha detto di insegnare
              non sono un campo del modulo, finiscono sul profilo subito dopo la creazione -->
@@ -103,6 +115,8 @@
 // modulo si apre già compilato coi suoi dati. Senza `prefill` si comporta
 // esattamente come prima: stessi campi, stessi controlli, stessi messaggi.
 import type { EsitoInvitoEmail } from '#shared/email'
+// Stessa regola del server, scritta una volta sola (shared/compenso-tutor.ts)
+import { meseDiOggi } from '#shared/compenso-tutor'
 
 // Dati già noti, presi dalla scheda contatto. Nome, cognome, email e telefono
 // finiscono nei campi e restano tutti modificabili.
@@ -139,6 +153,15 @@ const nuovoTutor = reactive({
   role:              'TUTOR',
   modalitaPagamento: 'ORE',
   importoForfait:    '',
+  // Mese da cui parte il fisso ('AAAA-MM', come il campo <input type="month">).
+  // Precompilato col mese corrente: un tutor nuovo messo a fisso parte da adesso.
+  forfaitDal:        meseDiOggi(),
+})
+
+// Passando a "Forfait mensile" il mese di partenza si ripropone da solo, così non
+// resta mai vuoto per distrazione. Resta modificabile.
+watch(() => nuovoTutor.modalitaPagamento, (modalita) => {
+  if (modalita === 'FORFAIT' && !nuovoTutor.forfaitDal) nuovoTutor.forfaitDal = meseDiOggi()
 })
 
 // ─── Precompilazione (solo se arriva `prefill`) ───
@@ -165,6 +188,12 @@ async function creaTutor() {
     toast.add({ title: 'Campi obbligatori mancanti', color: 'error' })
     return
   }
+  // Il fisso mensile deve sapere da quando vale, altrimenti finirebbe applicato
+  // anche ai mesi passati: è il difetto segnalato il 14/09/2026.
+  if (nuovoTutor.modalitaPagamento === 'FORFAIT' && !nuovoTutor.forfaitDal) {
+    toast.add({ title: 'Indica da quale mese parte il fisso mensile', color: 'error' })
+    return
+  }
   // Le materie si fotografano adesso: appena il tutor esiste la scheda del
   // contatto si ricarica, e il salvataggio qui sotto non deve dipendere da quello.
   const materie = [...materieDalContatto.value]
@@ -178,6 +207,8 @@ async function creaTutor() {
         // Campo vuoto = "non lo so": a database ci va NULL, non una stringa vuota
         dataNascita:    nuovoTutor.dataNascita || null,
         importoForfait: nuovoTutor.importoForfait || null,
+        // Solo per i tutor a fisso: per quelli a ore la colonna resta vuota
+        forfaitDal:     nuovoTutor.modalitaPagamento === 'FORFAIT' ? (nuovoTutor.forfaitDal || null) : null,
       },
     }) as any
     toast.add({ title: 'Tutor creato con successo', color: 'success' })
@@ -196,6 +227,7 @@ async function creaTutor() {
     Object.assign(nuovoTutor, {
       firstName: '', lastName: '', email: '', password: '',
       phone: '', dataNascita: '', role: 'TUTOR', modalitaPagamento: 'ORE', importoForfait: '',
+      forfaitDal: meseDiOggi(),
     })
 
     const userId: string | undefined = res?.user?.id
@@ -227,6 +259,7 @@ async function creaTutor() {
       firstName: 'Nome', lastName: 'Cognome', email: 'Email',
       password: 'Password', phone: 'Telefono', dataNascita: 'Data di nascita', role: 'Ruolo',
       modalitaPagamento: 'Modalità compenso', importoForfait: 'Importo forfait',
+      forfaitDal: 'Fisso mensile a partire da',
     }
     let desc = ''
     if (errors) {

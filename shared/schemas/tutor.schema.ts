@@ -1,6 +1,30 @@
 // shared/schemas/tutor.schema.ts
 import { z } from 'zod'
 import { DataNascitaOpz } from './data-nascita'
+import { meseValido, primoGiornoDelMese } from '../compenso-tutor'
+
+// IL MESE DA CUI PARTE IL FISSO MENSILE.
+//
+// Dal modulo arriva come <UInput type="month">, cioè 'AAAA-MM'; a database la
+// colonna è un giorno civile, e il giorno è sempre il primo del mese. Qui si
+// accettano entrambe le forme e si normalizza a 'AAAA-MM-01', così il resto del
+// gestionale non deve più chiedersi in che formato gli è arrivato il mese.
+// Campo vuoto = "non indicato" → NULL a database: in quel caso vale la regola di
+// sicurezza scritta in shared/compenso-tutor.ts (il fisso parte dal mese corrente,
+// mai all'indietro), non un mese inventato.
+const MeseForfaitOpz = z
+  .union([
+    z.literal(''),
+    z
+      .string()
+      .trim()
+      // Un mese che non esiste ('2026-13') Postgres lo rifiuterebbe con un 500:
+      // meglio un messaggio chiaro qui.
+      .refine(v => meseValido(v.slice(0, 7)), 'Mese non valido (formato AAAA-MM)')
+      .transform(v => primoGiornoDelMese(v)),
+  ])
+  .transform(v => (v.length > 0 ? v : null))
+  .nullish()
 
 // Gli importi arrivano da <UInput type="number">, che restituisce un NUMERO appena
 // l'utente tocca il campo (Nuxt UI, Input.vue → looseToNumber) e una stringa se resta
@@ -22,6 +46,9 @@ export const CreateTutorSchema = z.object({
   role:              z.enum(['TUTOR', 'ADMIN', 'SUPER_TUTOR']).default('TUTOR'),
   modalitaPagamento: z.enum(['ORE', 'FORFAIT']).default('ORE'),
   importoForfait:    z.coerce.string().optional().nullable(),
+  // Solo per i tutor a fisso: il mese da cui il fisso comincia a valere.
+  // Se non arriva, il service lo mette al mese corrente (mai all'indietro).
+  forfaitDal:        MeseForfaitOpz,
 })
 export type CreateTutorInput = z.infer<typeof CreateTutorSchema>
 
@@ -44,6 +71,10 @@ export const UpdateTutorSchema = z.object({
   noteInterne:       z.string().optional().nullable(),
   modalitaPagamento: z.enum(['ORE', 'FORFAIT']).optional(),
   importoForfait:    z.coerce.string().optional().nullable(),
+  // Il mese da cui vale il fisso. Si tocca solo passando a Forfait: tornando "a ore"
+  // il service lo azzera da solo, così un eventuale rientro nel fisso riparte da capo
+  // e non resuscita i mesi vecchi.
+  forfaitDal:        MeseForfaitOpz,
   active:            z.boolean().optional(),
 })
 export type UpdateTutorInput = z.infer<typeof UpdateTutorSchema>

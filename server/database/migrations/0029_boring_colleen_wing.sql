@@ -1,0 +1,1 @@
+ALTER TABLE "tutor_profiles" ADD COLUMN "forfait_dal" date;

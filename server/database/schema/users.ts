@@ -55,6 +55,25 @@ export const tutorProfiles = pgTable('tutor_profiles', {
   noteInterne:  text('note_interne'),
   modalitaPagamento: tutorPaymentModeEnum('modalita_pagamento').notNull().default('ORE'),
   importoForfait:    numeric('importo_forfait', { precision: 10, scale: 2 }),
+  // DA QUANDO vale il fisso mensile: PRIMO GIORNO del mese di partenza ('AAAA-MM-01').
+  //
+  // Senza questa data il gestionale applicava il fisso a ogni mese in cui il tutor
+  // avesse fatto lezione, passato compreso: un tutor pagato a ore da settembre a
+  // dicembre e messo a 500 € oggi risultava creditore di 500 € anche per quei quattro
+  // mesi. Arretrati mai esistiti (segnalato da Alessandro il 14/09/2026). I mesi
+  // precedenti a questa data restano contati A ORE, come sono stati pagati davvero.
+  //
+  // Giorno civile (`date`), MAI timestamptz: vedi il commento gemello su
+  // students.dataNascita. Un mese non è un istante, e passando da un timestamp con
+  // fuso orario il 1° settembre delle 00:00 diventa il 31 agosto in mezza Europa —
+  // cioè il fisso partirebbe un mese prima del dovuto.
+  //
+  // ⚠️ VUOTO NON VUOL DIRE "DA SEMPRE": se un tutor risulta FORFAIT ma qui non c'è
+  // niente (sono i profili salvati prima del 14/09/2026), il fisso vale DAL MESE
+  // CORRENTE IN AVANTI, mai per i mesi passati. È la regola che rende impossibile il
+  // difetto anche sui dati vecchi che non possiamo controllare uno per uno; sta
+  // scritta una volta sola in shared/compenso-tutor.ts e la usano tutti.
+  forfaitDal:        date('forfait_dal', { mode: 'string' }),
   createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt:    timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
