@@ -25,14 +25,15 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const updated = await toggleInvoiceStatus(paymentId, parsed.data)
+  const esito = await toggleInvoiceStatus(paymentId, parsed.data)
 
-  if (!updated) {
+  if (!esito) {
     throw createError({
       statusCode: 404,
       statusMessage: 'Movimento contabile non trovato per questo pagamento',
     })
   }
 
-  return { data: updated }
+  // bollo: cosa è successo alla marca da bollo (CREATO / RIMOSSO / GIA_VERSATO / null)
+  return { data: esito.movimento, bollo: esito.bollo }
 })

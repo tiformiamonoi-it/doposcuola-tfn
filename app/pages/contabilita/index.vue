@@ -43,10 +43,12 @@
 
     <template v-else-if="dash">
 
-      <!-- ─── PERIODO SELEZIONATO: 4 KPI sempre visibili ─── -->
+      <!-- ─── PERIODO SELEZIONATO: 5 KPI sempre visibili ─── -->
       <div>
         <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Periodo selezionato</p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- 5 card: tutte in fila solo sugli schermi molto larghi. Altrove si va a capo
+             in modo ordinato (vedi la card del margine di contribuzione, che allarga). -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-4">
 
           <UCard class="bg-green-50 border-green-100">
             <div class="flex items-start justify-between">
@@ -141,6 +143,45 @@
                 </button>
               </div>
               <UIcon name="i-heroicons-presentation-chart-line" class="w-6 h-6" :class="dash.breakEven >= 0 ? 'text-emerald-400' : 'text-rose-400'" />
+            </div>
+          </UCard>
+
+          <!-- N7 — Margine di contribuzione (entrate − compensi e rimborsi tutor).
+               Allarga su 2 colonne dove la griglia non ne ha 5, così la riga resta piena.
+               Cliccabile come il break-even: apre il conto riga per riga. -->
+          <UCard
+            v-if="mdc"
+            class="cursor-pointer hover:shadow-md transition-shadow sm:col-span-2 2xl:col-span-1"
+            :class="mdc.margine >= 0 ? 'bg-cyan-50 border-cyan-100' : 'bg-rose-50 border-rose-100'"
+            @click="modalMdcAperto = true"
+          >
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-xs font-medium uppercase tracking-wide flex items-center gap-1" :class="mdc.margine >= 0 ? 'text-cyan-700' : 'text-rose-700'">
+                  Margine di contribuzione
+                  <!-- Come nel break-even: il "?" non deve aprire anche il popup del calcolo -->
+                  <span @click.stop>
+                    <StatHelp text="Quanto resta delle entrate dopo aver pagato i tutor (compensi e rimborsi): è ciò che serve a coprire affitto e spese fisse." />
+                  </span>
+                </p>
+                <p class="text-2xl font-bold mt-1" :class="mdc.margine >= 0 ? 'text-cyan-700' : 'text-rose-700'">
+                  € {{ fmt(mdc.margine) }}
+                </p>
+                <p class="text-[11px] mt-1" :class="mdc.margine >= 0 ? 'text-cyan-700' : 'text-rose-700'">
+                  {{ mdc.percentuale === null ? 'Nessuna entrata nel periodo' : `${pct(mdc.percentuale)}% delle entrate` }}
+                </p>
+                <!-- Comando da tastiera, come nella card del break-even -->
+                <button
+                  type="button"
+                  class="mt-2 inline-flex items-center gap-1 text-[11px] font-medium underline underline-offset-2 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
+                  :class="mdc.margine >= 0 ? 'text-cyan-800 focus-visible:outline-cyan-700' : 'text-rose-700 focus-visible:outline-rose-600'"
+                  @click.stop="modalMdcAperto = true"
+                >
+                  <UIcon name="i-heroicons-calculator" class="w-3.5 h-3.5" aria-hidden="true" />
+                  Vedi il calcolo
+                </button>
+              </div>
+              <UIcon name="i-heroicons-chart-pie" class="w-6 h-6" :class="mdc.margine >= 0 ? 'text-cyan-500' : 'text-rose-400'" aria-hidden="true" />
             </div>
           </UCard>
 
@@ -569,7 +610,7 @@
                 />
               </UTooltip>
             </template>
-            <UTooltip v-else-if="row.original.tipo === 'ENTRATA' && (isManuale(row.original) || row.original.paymentId)" text="Aggiungi alle fatture da emettere">
+            <UTooltip v-else-if="row.original.tipo === 'ENTRATA' && !CATEGORIE_BOLLO.includes(row.original.categoria ?? '') && (isManuale(row.original) || row.original.paymentId)" text="Aggiungi alle fatture da emettere">
               <UButton
                 icon="i-heroicons-document-plus"
                 color="neutral" variant="ghost" size="xs"
@@ -1067,6 +1108,77 @@
       </template>
     </UModal>
 
+    <!-- ─── MODAL N7 — Margine di contribuzione, il conto riga per riga ─── -->
+    <UModal v-model:open="modalMdcAperto" title="Come si calcola il margine di contribuzione">
+      <template #body>
+        <div v-if="mdc" class="text-sm">
+          <dl class="space-y-2">
+            <div class="flex items-baseline justify-between gap-4">
+              <dt class="text-slate-600">Entrate del periodo</dt>
+              <dd class="font-medium text-green-700 tabular-nums whitespace-nowrap">+ € {{ fmt(mdc.entrate) }}</dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-4">
+              <dt class="text-slate-600">Compensi tutor</dt>
+              <dd class="font-medium text-red-700 tabular-nums whitespace-nowrap">− € {{ fmt(mdc.compensiTutor) }}</dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-4">
+              <dt class="text-slate-600">Rimborsi tutor</dt>
+              <dd class="font-medium text-red-700 tabular-nums whitespace-nowrap">− € {{ fmt(mdc.rimborsiTutor) }}</dd>
+            </div>
+          </dl>
+
+          <div class="mt-3 pt-2 border-t-2 border-slate-300 flex items-baseline justify-between gap-4">
+            <span class="font-bold uppercase tracking-wide text-slate-700">Margine di contribuzione</span>
+            <span class="text-lg font-bold tabular-nums whitespace-nowrap" :class="mdc.margine >= 0 ? 'text-cyan-700' : 'text-rose-700'">
+              = € {{ fmt(mdc.margine) }}
+              <span v-if="mdc.percentuale !== null" class="text-sm font-semibold">({{ pct(mdc.percentuale) }}%)</span>
+            </span>
+          </div>
+
+          <dl class="space-y-2 mt-4">
+            <div class="flex items-baseline justify-between gap-4">
+              <dt class="text-slate-600">Spese fisse del periodo</dt>
+              <dd class="font-medium text-slate-800 tabular-nums whitespace-nowrap">€ {{ fmt(mdc.costiFissi) }}</dd>
+            </div>
+            <div class="flex items-baseline justify-between gap-4">
+              <dt class="font-medium text-slate-700">Incasso che serve per andare in pari</dt>
+              <dd class="font-semibold text-slate-900 tabular-nums whitespace-nowrap">
+                {{ mdc.incassoPareggio === null ? 'non raggiungibile' : `= € ${fmt(mdc.incassoPareggio)}` }}
+              </dd>
+            </div>
+          </dl>
+
+          <!-- La stessa cosa detta a parole -->
+          <p
+            class="mt-4 rounded-lg p-3 leading-relaxed"
+            :class="mdc.percentuale === null
+              ? 'bg-slate-50 text-slate-800'
+              : mdc.incassoPareggio === null || mdc.mancaAlPareggio ? 'bg-rose-50 text-rose-900' : 'bg-cyan-50 text-cyan-900'"
+          >
+            <template v-if="mdc.percentuale === null">
+              Nel periodo non ci sono entrate: non si può dire quanta parte ne resta dopo i tutor,
+              e quindi nemmeno quanto serve incassare per andare in pari.
+            </template>
+            <template v-else-if="mdc.incassoPareggio === null">
+              Con questi costi variabili non si va in pari: compensi e rimborsi dei tutor si prendono
+              tutte le entrate, e per le spese fisse non resta niente.
+            </template>
+            <template v-else>
+              Su ogni 100 € incassati ne restano <strong>{{ pct(mdc.percentuale) }}</strong> per le spese fisse.
+              Per coprirle servono <strong>€ {{ fmt(mdc.incassoPareggio) }}</strong> di entrate:
+              ne hai fatte <strong>€ {{ fmt(mdc.entrate) }}</strong><template v-if="mdc.mancaAlPareggio">,
+              ti mancano <strong>€ {{ fmt(mdc.mancaAlPareggio) }}</strong></template>.
+            </template>
+          </p>
+
+          <p class="mt-3 text-xs text-slate-500 leading-relaxed">
+            I compensi contano quando li paghi, non quando la lezione si fa: preso da solo, un mese
+            può sembrare migliore o peggiore del vero. Su più mesi si compensa.
+          </p>
+        </div>
+      </template>
+    </UModal>
+
     <!-- ─── MODAL DATI FATTURA (numero + data emissione) ─── -->
     <UModal v-model:open="modalDatiFatturaAperto" title="Dati fattura">
       <template #body>
@@ -1125,7 +1237,7 @@
 <script setup lang="ts">
 import { z } from 'zod'
 import { labelMetodo, labelTipo, METODI_MOVIMENTO_ITEMS } from '~/utils/contabilita'
-import { CAT, mappaEtichette } from '#shared/accounting-categories'
+import { CAT, CATEGORIE_BOLLO, mappaEtichette } from '#shared/accounting-categories'
 
 definePageMeta({ middleware: ['admin-only'] })
 
@@ -1304,6 +1416,19 @@ const entrateNecessarie = computed(() => {
   if (!d) return 0
   return Number((sostituzioni.value.usciteRestanti + (d.costiFissi.periodo ?? 0)).toFixed(2))
 })
+
+// ─── N7 — Margine di contribuzione (card + popup con il conto) ───
+// Tutti i numeri li calcola il server (getDashboard): qui si mostrano soltanto.
+const modalMdcAperto = ref(false)
+const mdc = computed(() => (dash.value as any)?.margineContribuzione as {
+  entrate: number; compensiTutor: number; rimborsiTutor: number; costiVariabili: number; margine: number
+  percentuale: number | null; costiFissi: number; incassoPareggio: number | null; mancaAlPareggio: number | null
+} | undefined)
+
+// 58.3 → "58": nelle frasi "58% delle entrate" e "ne restano 58" basta l'intero
+function pct(n: number): string {
+  return n.toLocaleString('it-IT', { maximumFractionDigits: 0 })
+}
 
 // "1 mese", "2 mesi", "1,5 mesi": i periodi non sempre coincidono con mesi interi
 function etichettaMesi(mesi: number): string {
@@ -1514,17 +1639,33 @@ async function inviaFattura(entry: any, emessa: boolean, numero?: string, data?:
   }
 }
 
+// Marca da bollo (F1): il server dice cosa è successo al bollo da 2 € e il messaggio
+// lo riporta. Già versato con l'F24 → avviso giallo: l'operazione è riuscita, il bollo resta.
+type EsitoBollo = 'CREATO' | 'RIMOSSO' | 'GIA_VERSATO' | null | undefined
+function toastConBollo(titolo: string, bollo: EsitoBollo, icon = 'i-heroicons-check-circle') {
+  if (bollo === 'GIA_VERSATO') {
+    toast.add({
+      title: titolo,
+      description: 'Il bollo di questo incasso è già stato versato con l\'F24: resta registrato.',
+      color: 'warning',
+      icon: 'i-heroicons-exclamation-triangle',
+    })
+    return
+  }
+  const coda = bollo === 'CREATO' ? ' — creato anche il bollo da 2 €' : bollo === 'RIMOSSO' ? ' — tolto anche il bollo da 2 €' : ''
+  toast.add({ title: titolo + coda, color: 'success', icon })
+}
+
 // Movimento in entrata senza flag fattura: lo aggiunge alle "fatture da emettere".
 // Manuale → flag sul movimento; automatico → flag sul pagamento di origine.
+// Sopra 77,47 € il server crea anche il bollo.
 async function richiediFattura(entry: any) {
   toggling.value = entry.id
   try {
-    if (entry.paymentId) {
-      await $fetch(`/api/payments/${entry.paymentId}/invoice`, { method: 'PUT', body: { richiedeFattura: true } })
-    } else {
-      await $fetch(`/api/accounting/entries/${entry.id}`, { method: 'PUT', body: { richiedeFattura: true } })
-    }
-    toast.add({ title: 'Aggiunto alle fatture da emettere', color: 'success', icon: 'i-heroicons-document-plus' })
+    const res = entry.paymentId
+      ? await $fetch<{ bollo?: EsitoBollo }>(`/api/payments/${entry.paymentId}/invoice`, { method: 'PUT', body: { richiedeFattura: true } })
+      : await $fetch<{ bollo?: EsitoBollo }>(`/api/accounting/entries/${entry.id}`, { method: 'PUT', body: { richiedeFattura: true } })
+    toastConBollo('Aggiunto alle fatture da emettere', res?.bollo, 'i-heroicons-document-plus')
     refreshAll()
   } catch (err: any) {
     toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Operazione non riuscita', color: 'error' })
@@ -1604,7 +1745,7 @@ async function salvaMovimento() {
   salvandoMovimento.value = true
   try {
     const isProventi = nuovoMovimento.tipo === 'PROVENTI_DIVERSI'
-    await $fetch('/api/accounting/entries', {
+    const res = await $fetch<{ bollo?: EsitoBollo }>('/api/accounting/entries', {
       method: 'POST',
       body: {
         tipo: nuovoMovimento.tipo,
@@ -1623,7 +1764,7 @@ async function salvaMovimento() {
         dataFattura: nuovoMovimento.dataFattura || undefined,
       }
     })
-    toast.add({ title: 'Movimento registrato', color: 'success' })
+    toastConBollo('Movimento registrato', res?.bollo)
     modalNuovoMovimentoAperto.value = false
     nuovoMovimento.importo = 0
     nuovoMovimento.descrizione = ''
@@ -1670,11 +1811,12 @@ async function confermaIncasso() {
   const debito = isDebitoDaSaldare.value
   salvandoIncasso.value = true
   try {
-    await $fetch(`/api/accounting/entries/${movimentoDaSaldare.value.id}`, {
+    // Un credito con fattura, appena incassato sopra 77,47 €, riceve il suo bollo
+    const res = await $fetch<{ bollo?: EsitoBollo }>(`/api/accounting/entries/${movimentoDaSaldare.value.id}`, {
       method: 'PUT',
       body: { tipo: debito ? 'USCITA' : 'ENTRATA', data: datiIncasso.data, metodoPagamento: datiIncasso.metodo },
     })
-    toast.add({ title: debito ? 'Debito pagato' : 'Credito incassato', color: 'success', icon: 'i-heroicons-check-circle' })
+    toastConBollo(debito ? 'Debito pagato' : 'Credito incassato', res?.bollo)
     modalIncassoAperto.value = false
     movimentoDaSaldare.value = null
     refreshAll()
@@ -1698,8 +1840,8 @@ async function eseguiElimina(mode: 'delete' | 'storno') {
   if (!movimentoDaEliminare.value) return
   eliminando.value = mode
   try {
-    await $fetch(`/api/accounting/entries/${movimentoDaEliminare.value.id}`, { method: 'DELETE', query: { mode } })
-    toast.add({ title: mode === 'storno' ? 'Storno creato' : 'Movimento eliminato', color: 'success' })
+    const res = await $fetch<{ bollo?: EsitoBollo }>(`/api/accounting/entries/${movimentoDaEliminare.value.id}`, { method: 'DELETE', query: { mode } })
+    toastConBollo(mode === 'storno' ? 'Storno creato' : 'Movimento eliminato', res?.bollo)
     modalEliminaAperto.value = false
     movimentoDaEliminare.value = null
     refreshAll()
@@ -1732,7 +1874,7 @@ function apriModifica(row: any) {
 async function salvaModifica() {
   salvandoModifica.value = true
   try {
-    await $fetch(`/api/accounting/entries/${modificaMovimento.id}`, {
+    const res = await $fetch<{ bollo?: EsitoBollo }>(`/api/accounting/entries/${modificaMovimento.id}`, {
       method: 'PUT',
       body: {
         tipo:            modificaMovimento.tipo,
@@ -1744,7 +1886,7 @@ async function salvaModifica() {
         richiedeFattura: ['ENTRATA', 'CREDITO'].includes(modificaMovimento.tipo) ? modificaMovimento.richiedeFattura : false,
       },
     })
-    toast.add({ title: 'Movimento aggiornato', color: 'success' })
+    toastConBollo('Movimento aggiornato', res?.bollo)
     modalModificaAperto.value = false
     refreshAll()
   } catch (err: any) {

@@ -1,10 +1,10 @@
 import { db } from '../database/client'
 import { accountingEntries, packages, payments, students } from '../database/schema'
-import { and, count, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, count, desc, eq, sql } from 'drizzle-orm'
 import { computePackageStates } from './package.service'
 import { conFattura, rimuoviSuffissoFattura } from '#shared/fattura'
-import { CAT, CATEGORIE_BOLLO } from '#shared/accounting-categories'
-import { registraBolloInTransazione, riferimentoBollo } from './bollo.service'
+import { CAT } from '#shared/accounting-categories'
+import { notaBolloPagamento, registraBolloInTransazione, riferimentoBollo, togliBolloInTransazione, type EsitoBollo } from './bollo.service'
 import type { CreatePaymentInput, PaymentQuery, UpdatePaymentInput } from '#shared/schemas/payment.schema'
 
 // ─────────────────────────────────────────────
@@ -145,47 +145,99 @@ export async function createPayment(data: CreatePaymentInput) {
 // Aggiorna accounting_entries.fatturaEmessa (non la tabella payments).
 // Questo è il progetto "Penna Indelebile": i pagamenti non si modificano,
 // si aggiorna solo il movimento contabile collegato.
+// Marca da bollo (F1): se "richiede fattura" si accende o si spegne, qui nasce o se ne
+// va anche il bollo da 2 € (il pagamento restituisce cosa è successo in `bollo`).
 // ─────────────────────────────────────────────
 
 export async function toggleInvoiceStatus(
   paymentId: string,
   data: { fatturaEmessa?: boolean; richiedeFattura?: boolean; numeroFattura?: string; dataFattura?: string },
-) {
-  // Trova il movimento contabile collegato a questo pagamento (relazione 1:1)
-  const [entry] = await db
-    .select()
-    .from(accountingEntries)
-    .where(eq(accountingEntries.paymentId, paymentId))
-    .limit(1)
+): Promise<{ movimento: typeof accountingEntries.$inferSelect; bollo: EsitoBollo } | null> {
+  // In transazione: flag della fattura e righe del bollo cambiano insieme, o per niente.
+  return await db.transaction(async (tx) => {
+    // Trova il movimento contabile collegato a questo pagamento (relazione 1:1)
+    const [entry] = await tx
+      .select()
+      .from(accountingEntries)
+      .where(eq(accountingEntries.paymentId, paymentId))
+      .limit(1)
 
-  if (!entry) return null
+    if (!entry) return null
 
-  // Eccezione alla "Penna Indelebile": richiedeFattura è un flag amministrativo,
-  // non tocca importi né date del pagamento.
-  if (data.richiedeFattura !== undefined) {
-    await db
-      .update(payments)
-      .set({ richiedeFattura: data.richiedeFattura, updatedAt: new Date() })
-      .where(eq(payments.id, paymentId))
-  }
+    let bollo: EsitoBollo = null
 
-  if (data.fatturaEmessa === undefined) return entry
+    // Eccezione alla "Penna Indelebile": richiedeFattura è un flag amministrativo,
+    // non tocca importi né date del pagamento.
+    if (data.richiedeFattura !== undefined) {
+      // FOR UPDATE sul solo pagamento: un doppio clic aspetta qui il primo, e poi
+      // legge la fattura già accesa → non tocca il bollo una seconda volta.
+      const [pay] = await tx
+        .select({
+          richiedeFattura:  payments.richiedeFattura,
+          importo:          payments.importo,
+          metodoPagamento:  payments.metodoPagamento,
+          dataPagamento:    payments.dataPagamento,
+          packageId:        payments.packageId,
+          nomePacchetto:    packages.nome,
+          studentFirstName: students.firstName,
+          studentLastName:  students.lastName,
+        })
+        .from(payments)
+        .innerJoin(packages, eq(payments.packageId, packages.id))
+        .innerJoin(students, eq(packages.studentId, students.id))
+        .where(eq(payments.id, paymentId))
+        .for('update', { of: payments })
 
-  // Numero+data fattura: accodati alla descrizione se emessa, rimossi se annullata
-  const changes: Record<string, unknown> = { fatturaEmessa: data.fatturaEmessa, updatedAt: new Date() }
-  if (data.fatturaEmessa && data.numeroFattura) {
-    changes.descrizione = conFattura(entry.descrizione, data.numeroFattura, data.dataFattura ?? new Date().toISOString().slice(0, 10))
-  } else if (!data.fatturaEmessa) {
-    changes.descrizione = rimuoviSuffissoFattura(entry.descrizione)
-  }
+      await tx
+        .update(payments)
+        .set({ richiedeFattura: data.richiedeFattura, updatedAt: new Date() })
+        .where(eq(payments.id, paymentId))
 
-  const [updated] = await db
-    .update(accountingEntries)
-    .set(changes as any)
-    .where(eq(accountingEntries.id, entry.id))
-    .returning()
+      // Marca da bollo (F1): conta il PASSAGGIO, non il valore. Se la fattura era già
+      // richiesta e il bollo non c'è, qualcuno ha tolto la spunta nel modulo del
+      // pagamento: quella scelta si rispetta.
+      if (pay && !pay.richiedeFattura && data.richiedeFattura) {
+        // La fattura si accende adesso: sopra 77,47 € nasce il bollo, con la data e
+        // il metodo del pagamento (il servizio controlla soglia e doppioni).
+        const creato = await registraBolloInTransazione(tx, {
+          paymentId,
+          packageId:       pay.packageId,
+          importoPagato:   parseFloat(pay.importo),
+          richiedeFattura: true,
+          metodoPagamento: pay.metodoPagamento,
+          data:            pay.dataPagamento,
+          riferimento:     riferimentoBollo(`${pay.studentFirstName} ${pay.studentLastName}`, pay.nomePacchetto),
+        })
+        if (creato) bollo = 'CREATO'
+      } else if (pay?.richiedeFattura && !data.richiedeFattura) {
+        // La fattura si spegne: senza fattura il bollo non è dovuto. Se è già stato
+        // versato con l'F24 resta dov'è (e la pagina lo dice).
+        bollo = await togliBolloInTransazione(tx, [notaBolloPagamento(paymentId)])
+        if (bollo === 'RIMOSSO') {
+          // Il pagamento torna "senza bollo": se la fattura si riaccende, rinasce.
+          await tx.update(payments).set({ bolloRegistratoAt: null }).where(eq(payments.id, paymentId))
+        }
+      }
+    }
 
-  return updated ?? null
+    if (data.fatturaEmessa === undefined) return { movimento: entry, bollo }
+
+    // Numero+data fattura: accodati alla descrizione se emessa, rimossi se annullata
+    const changes: Record<string, unknown> = { fatturaEmessa: data.fatturaEmessa, updatedAt: new Date() }
+    if (data.fatturaEmessa && data.numeroFattura) {
+      changes.descrizione = conFattura(entry.descrizione, data.numeroFattura, data.dataFattura ?? new Date().toISOString().slice(0, 10))
+    } else if (!data.fatturaEmessa) {
+      changes.descrizione = rimuoviSuffissoFattura(entry.descrizione)
+    }
+
+    const [updated] = await tx
+      .update(accountingEntries)
+      .set(changes as any)
+      .where(eq(accountingEntries.id, entry.id))
+      .returning()
+
+    return updated ? { movimento: updated, bollo } : null
+  })
 }
 
 // ─────────────────────────────────────────────
@@ -352,21 +404,9 @@ export async function deletePayment(paymentId: string) {
     // con una colonna (paymentId è UNIQUE ed è già presa dal movimento dell'entrata),
     // quindi non sparirebbero da sole. Se restassero, resterebbe anche un debito
     // verso lo Stato per una fattura che non esiste più.
-    const righeBollo = await tx
-      .select({ id: accountingEntries.id, versamentoEntryId: accountingEntries.versamentoEntryId })
-      .from(accountingEntries)
-      .where(and(
-        inArray(accountingEntries.categoria, [...CATEGORIE_BOLLO]),
-        eq(accountingEntries.note, `bolloPaymentId:${paymentId}`),
-      ))
-
-    if (righeBollo.some(r => r.versamentoEntryId)) {
+    const bollo = await togliBolloInTransazione(tx, [notaBolloPagamento(paymentId)])
+    if (bollo === 'GIA_VERSATO') {
       throw new Error('Il bollo di questo pagamento è già stato versato con l\'F24: il pagamento non si può più eliminare. Registra semmai uno storno.')
-    }
-    if (righeBollo.length > 0) {
-      // Basta cancellarle: sono gemelle, il vincolo CASCADE porta via anche l'altra
-      // se qui ne dovesse restare fuori una.
-      await tx.delete(accountingEntries).where(inArray(accountingEntries.id, righeBollo.map(r => r.id)))
     }
 
     // Ripristina il saldo del pacchetto (atomico)
@@ -396,6 +436,7 @@ export async function deletePayment(paymentId: string) {
     // Elimina il pagamento → la scrittura contabile sparisce via CASCADE
     await tx.delete(payments).where(eq(payments.id, paymentId))
 
-    return { ok: true }
+    // bollo: 'RIMOSSO' se se n'è andato anche il bollo, così il messaggio lo dice
+    return { ok: true, bollo }
   })
 }

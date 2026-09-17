@@ -1,8 +1,9 @@
 import { db } from '../database/client'
 import { accountingEntries, payments } from '../database/schema'
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
-import { CAT } from '#shared/accounting-categories'
+import { CAT, CATEGORIE_BOLLO } from '#shared/accounting-categories'
 import { IMPORTO_BOLLO, serveBollo } from '#shared/bollo'
+import { rimuoviSuffissoFattura } from '#shared/fattura'
 import { inCentesimi, inEuro } from '../utils/arrotondamenti'
 
 // ─────────────────────────────────────────────
@@ -22,7 +23,16 @@ import { inCentesimi, inEuro } from '../utils/arrotondamenti'
 // contanti e banca. Ed è giusto: quei 2 € li hai davvero in cassa finché non li versi.
 // ─────────────────────────────────────────────
 
-type Transazione = Parameters<Parameters<typeof db.transaction>[0]>[0]
+export type Transazione = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/** Cosa è successo al bollo dopo un'operazione: lo legge la pagina per scriverlo nel messaggio. */
+export type EsitoBollo = 'CREATO' | 'RIMOSSO' | 'GIA_VERSATO' | null
+
+// Il legame fra il bollo e il suo incasso vive nelle note delle due righe (vedi sotto):
+// "bolloPaymentId:…" per un pagamento pacchetto, "bolloEntryId:…" per un movimento
+// inserito a mano. Il formato si scrive qui una volta sola.
+export const notaBolloPagamento = (paymentId: string) => `bolloPaymentId:${paymentId}`
+export const notaBolloMovimento = (entryId: string) => `bolloEntryId:${entryId}`
 
 /** Il riferimento che compare in coda alla descrizione: "Luca Rossi · Superiori 2026/2027". */
 export function riferimentoBollo(nomeStudente: string, nomePacchetto: string): string {
@@ -64,15 +74,30 @@ export async function registraBolloInTransazione(
 
   if (segnati.length === 0) return null // bollo già registrato su questo pagamento
 
-  const base = {
-    importo:   IMPORTO_BOLLO.toFixed(2),
-    data:      dati.data,
-    packageId: dati.packageId,
+  return await inserisciCoppiaBollo(tx, {
+    data:            dati.data,
+    packageId:       dati.packageId,
     // Il bollo non può usare paymentId (la colonna è UNIQUE ed è già presa dal
     // movimento del pagamento). Il legame col pagamento vive qui, nelle note, come
     // si fa già per i compensi tutor: serve a ritrovare il bollo se il pagamento
     // viene cancellato, e a riaprire la strada se il bollo viene cancellato a mano.
-    note:      `bolloPaymentId:${dati.paymentId}`,
+    note:            notaBolloPagamento(dati.paymentId),
+    metodoPagamento: dati.metodoPagamento,
+    riferimento:     dati.riferimento,
+  })
+}
+
+// Le due righe gemelle vere e proprie, uguali per pagamenti e movimenti manuali.
+// Restituisce l'id dell'ENTRATA.
+async function inserisciCoppiaBollo(
+  tx: Transazione,
+  dati: { data: Date; packageId: string | null; note: string; metodoPagamento: string | null; riferimento: string },
+): Promise<string> {
+  const base = {
+    importo:   IMPORTO_BOLLO.toFixed(2),
+    data:      dati.data,
+    packageId: dati.packageId,
+    note:      dati.note,
   }
 
   const [entrata] = await tx.insert(accountingEntries).values({
@@ -101,6 +126,80 @@ export async function registraBolloInTransazione(
     .where(eq(accountingEntries.id, entrata.id))
 
   return entrata.id
+}
+
+// ─────────────────────────────────────────────
+// IL BOLLO DEI MOVIMENTI INSERITI A MANO
+//
+// Un'entrata registrata a mano (anche la gamba ENTRATA dei "Proventi diversi", o un
+// credito appena incassato) con fattura richiesta e sopra 77,47 € vuole il suo bollo,
+// come un pagamento pacchetto. Qui non c'è un pagamento su cui mettere il lucchetto:
+// il lucchetto è il movimento stesso, bloccato finché la transazione non finisce.
+// ─────────────────────────────────────────────
+
+/** Il bollo serve a questo movimento così com'è adesso? */
+export function bolloServeAlMovimento(e: {
+  tipo: string; importo: string; richiedeFattura: boolean; categoria: string | null; paymentId: string | null
+}): boolean {
+  if (e.tipo !== 'ENTRATA') return false           // un credito non ancora incassato non ha il bollo
+  if (e.paymentId) return false                    // i pagamenti pacchetto hanno la loro strada
+  if (e.categoria && CATEGORIE_BOLLO.includes(e.categoria)) return false // il bollo di un bollo no
+  if (e.categoria === CAT.RETTIFICA) return false  // una rettifica dei saldi non è un incasso
+  return serveBollo(parseFloat(e.importo), e.richiedeFattura)
+}
+
+/**
+ * Crea il bollo di un movimento manuale DENTRO la transazione di chi lo chiama.
+ * Non fa nulla se il bollo non serve o se c'è già: doppio clic e richieste rimandate
+ * non devono mai produrre due bolli sullo stesso incasso.
+ */
+export async function registraBolloMovimentoInTransazione(tx: Transazione, entryId: string): Promise<EsitoBollo> {
+  // FOR UPDATE: se due richieste arrivano insieme, la seconda aspetta qui che la prima
+  // abbia finito, e il controllo qui sotto trova già il bollo appena creato.
+  const [origine] = await tx.select().from(accountingEntries).where(eq(accountingEntries.id, entryId)).for('update')
+  if (!origine || !bolloServeAlMovimento(origine)) return null
+
+  const nota = notaBolloMovimento(entryId)
+  const [esistente] = await tx
+    .select({ id: accountingEntries.id })
+    .from(accountingEntries)
+    .where(and(inArray(accountingEntries.categoria, CATEGORIE_BOLLO), eq(accountingEntries.note, nota)))
+    .limit(1)
+  if (esistente) return null
+
+  // Nel riferimento va la descrizione del movimento, senza il suffisso della fattura
+  // e accorciata: il bollo deve restare leggibile nell'elenco "Bolli da versare".
+  const descrizione = rimuoviSuffissoFattura(origine.descrizione).trim()
+  await inserisciCoppiaBollo(tx, {
+    data:            origine.data,
+    packageId:       null,
+    note:            nota,
+    metodoPagamento: origine.metodoPagamento,
+    riferimento:     descrizione.length > 80 ? `${descrizione.slice(0, 79)}…` : descrizione,
+  })
+  return 'CREATO'
+}
+
+/**
+ * Toglie il bollo di un incasso (le due righe gemelle), se non è ancora stato versato.
+ * `note` = i legami da cercare (notaBolloPagamento / notaBolloMovimento).
+ * Già versato con l'F24 → non tocca niente e lo dice: decide chi chiama se è un errore.
+ */
+export async function togliBolloInTransazione(tx: Transazione, note: string[]): Promise<EsitoBollo> {
+  // FOR UPDATE: mentre decidiamo, nessuno può includere questi bolli in un F24.
+  const righe = await tx
+    .select({ id: accountingEntries.id, versamentoEntryId: accountingEntries.versamentoEntryId })
+    .from(accountingEntries)
+    .where(and(inArray(accountingEntries.categoria, CATEGORIE_BOLLO), inArray(accountingEntries.note, note)))
+    .for('update')
+
+  if (righe.some(r => r.versamentoEntryId)) return 'GIA_VERSATO'
+  if (righe.length === 0) return null
+
+  // Basta cancellarle: sono gemelle, il vincolo CASCADE porta via anche l'altra
+  // se qui ne dovesse restare fuori una.
+  await tx.delete(accountingEntries).where(inArray(accountingEntries.id, righe.map(r => r.id)))
+  return 'RIMOSSO'
 }
 
 // ─────────────────────────────────────────────

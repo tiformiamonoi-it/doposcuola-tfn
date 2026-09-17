@@ -1,6 +1,7 @@
 import { db } from '../../../database/client'
 import { accountingEntries } from '../../../database/schema'
 import { createProventiDiversi, canSeeProventiDiversi } from '../../../services/accounting.service'
+import { registraBolloMovimentoInTransazione } from '../../../services/bollo.service'
 import { conFattura } from '#shared/fattura'
 import { z } from 'zod'
 
@@ -46,20 +47,29 @@ export default defineEventHandler(async (event) => {
     ? conFattura(body.descrizione, body.numeroFattura, body.dataFattura ?? body.data ?? new Date().toISOString().slice(0, 10))
     : body.descrizione
 
-  const [entry] = await db
-    .insert(accountingEntries)
-    .values({
-      tipo: body.tipo,
-      importo: body.importo.toFixed(2),
-      descrizione,
-      categoria: body.categoria,
-      metodoPagamento: body.metodoPagamento ?? null,
-      data: body.data ? new Date(body.data) : new Date(),
-      note: body.note ?? null,
-      richiedeFattura: body.richiedeFattura ?? false,
-      fatturaEmessa: emessa,
-    })
-    .returning()
+  const tipo = body.tipo // qui non è più PROVENTI_DIVERSI (TypeScript lo perde dentro la transazione)
 
-  return entry
+  // In transazione: il movimento e il suo eventuale bollo nascono insieme, o per niente.
+  return await db.transaction(async (tx) => {
+    const [entry] = await tx
+      .insert(accountingEntries)
+      .values({
+        tipo,
+        importo: body.importo.toFixed(2),
+        descrizione,
+        categoria: body.categoria,
+        metodoPagamento: body.metodoPagamento ?? null,
+        data: body.data ? new Date(body.data) : new Date(),
+        note: body.note ?? null,
+        richiedeFattura: body.richiedeFattura ?? false,
+        fatturaEmessa: emessa,
+      })
+      .returning()
+    if (!entry) throw new Error('Creazione del movimento fallita')
+
+    // Marca da bollo (F1): un'ENTRATA con fattura sopra 77,47 € vuole il bollo da 2 €.
+    // Un credito no: il bollo nascerà quando verrà incassato.
+    const bollo = await registraBolloMovimentoInTransazione(tx, entry.id)
+    return { ...entry, bollo }
+  })
 })

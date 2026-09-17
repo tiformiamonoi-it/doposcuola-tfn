@@ -6,7 +6,10 @@ import { inCentesimi, inEuro } from '../utils/arrotondamenti'
 import { CAT, CATEGORIE_BOLLO, CATEGORIE_PROVENTI_DIVERSI, EMAILS_PROVENTI_DIVERSI } from '#shared/accounting-categories'
 import { conFattura, rimuoviSuffissoFattura } from '#shared/fattura'
 import { deletePayment } from './payment.service'
-import { getBolliDaVersareTotali } from './bollo.service'
+import {
+  bolloServeAlMovimento, getBolliDaVersareTotali, notaBolloMovimento, registraBolloMovimentoInTransazione,
+  togliBolloInTransazione, type EsitoBollo, type Transazione,
+} from './bollo.service'
 import { deleteTutorPayment, reduceReimbursementOnEntryDelete } from './tutor.service'
 
 // ─────────────────────────────────────────────
@@ -269,7 +272,10 @@ export async function createProventiDiversi(data: {
       .set({ linkedEntryId: uscita.id })
       .where(eq(accountingEntries.id, entrata.id))
 
-    return { ...entrata, linkedEntryId: uscita.id }
+    // Marca da bollo (F1): con fattura e sopra 77,47 € il bollo va sulla gamba ENTRATA.
+    const bollo = await registraBolloMovimentoInTransazione(tx, entrata.id)
+
+    return { ...entrata, linkedEntryId: uscita.id, bollo }
   })
 }
 
@@ -326,6 +332,36 @@ async function netMarginCent(startDate: Date, endDate: Date): Promise<TotaliCent
   }
 
   return { entrate, uscite, margine: entrate - uscite }
+}
+
+// ─────────────────────────────────────────────
+// COSTI VARIABILI — compensi e rimborsi tutor del periodo (margine di contribuzione)
+// Contati come la card "Uscite": per data del movimento (cioè quando sono stati
+// pagati), stesse categorie escluse. Gli storni (reverseTransaction) restano nella
+// stessa categoria e con lo stesso tipo, con l'importo negativo: la somma è già al netto.
+// ─────────────────────────────────────────────
+async function costiVariabiliCent(startDate: Date, endDate: Date): Promise<{ compensi: number; rimborsi: number }> {
+  const escluse = await categorieEscluseDalMargine()
+
+  const [row] = await db
+    .select({
+      compensi: sql<string>`COALESCE(SUM(CASE WHEN ${accountingEntries.categoria} = ${CAT.COMPENSO_TUTOR} THEN ${accountingEntries.importo}::numeric ELSE 0 END), 0)::text`,
+      rimborsi: sql<string>`COALESCE(SUM(CASE WHEN ${accountingEntries.categoria} = ${CAT.RIMBORSO_TUTOR} THEN ${accountingEntries.importo}::numeric ELSE 0 END), 0)::text`,
+    })
+    .from(accountingEntries)
+    .where(
+      and(
+        eq(accountingEntries.tipo, 'USCITA'),
+        gte(accountingEntries.data, startDate),
+        lte(accountingEntries.data, endDate),
+        inArray(accountingEntries.categoria, [CAT.COMPENSO_TUTOR, CAT.RIMBORSO_TUTOR]),
+        // Se da Impostazioni una delle due fosse resa "neutra", è già fuori dalle Uscite:
+        // deve restare fuori anche qui, altrimenti i due conti non tornerebbero.
+        notInArray(accountingEntries.categoria, escluse),
+      )
+    )
+
+  return { compensi: inCentesimi(row?.compensi), rimborsi: inCentesimi(row?.rimborsi) }
 }
 
 export async function getNetMargin(startDate: Date, endDate: Date) {
@@ -758,7 +794,7 @@ export async function getDashboard(startDate: Date, endDate: Date) {
   // F3: periodo e marketing arrivano in CENTESIMI ESATTI perché qui sotto ci si fanno
   // ancora dei conti sopra (il blocco "doposcuola" e il break-even). Si arrotonda solo
   // alla fine, su ciò che viene restituito all'interfaccia.
-  const [periodoCent, perMetodo, saldiCassa, fattureInAttesa, previsioni, marketingCent, speseFisse, fatturato, proventiDiversi, bolliDaVersare, categorieEscluse] = await Promise.all([
+  const [periodoCent, perMetodo, saldiCassa, fattureInAttesa, previsioni, marketingCent, speseFisse, fatturato, proventiDiversi, bolliDaVersare, categorieEscluse, variabiliCent] = await Promise.all([
     netMarginCent(startDate, endDate),
     getMovimentiPerMetodo(startDate, endDate),
     getSaldiCassa(),
@@ -770,6 +806,7 @@ export async function getDashboard(startDate: Date, endDate: Date) {
     getProventiDiversiTotali(startDate, endDate),
     getBolliDaVersareTotali(),
     categorieEscluseDalMargine(),
+    costiVariabiliCent(startDate, endDate),
   ])
 
   const periodo = {
@@ -844,6 +881,23 @@ export async function getDashboard(startDate: Date, endDate: Date) {
     .filter((r) => !r.categoria)
     .map((r) => ({ nome: r.nome || 'Spesa senza nome', totalePeriodo: r.totalePeriodo }))
 
+  // ── Margine di contribuzione: entrate − (compensi + rimborsi tutor) ──
+  // Tutto in centesimi interi; la percentuale e l'incasso di pareggio si calcolano sui
+  // numeri esatti, non su quelli già arrotondati.
+  const costiVariabiliCentTot = variabiliCent.compensi + variabiliCent.rimborsi
+  const mdcCent               = periodoCent.entrate - costiVariabiliCentTot
+  const costiFissiCent        = inCentesimi(costiFissiPeriodo)
+  // Senza entrate la percentuale non esiste (niente divisioni per zero).
+  const percentualeMdc = periodoCent.entrate > 0
+    ? Math.round((mdcCent * 1000) / periodoCent.entrate) / 10
+    : null
+  // Incasso di pareggio = spese fisse ÷ (margine ÷ entrate), scritto come
+  // spese fisse × entrate ÷ margine. Se il margine è zero o negativo non si va in pari:
+  // nessun incasso basta, e non si mostra un numero assurdo.
+  const pareggioCent = periodoCent.entrate > 0 && mdcCent > 0
+    ? Math.round((costiFissiCent * periodoCent.entrate) / mdcCent)
+    : null
+
   return {
     periodo,
     perMetodo,
@@ -868,6 +922,18 @@ export async function getDashboard(startDate: Date, endDate: Date) {
       nonCollegate:   speseNonCollegate,
     },
     breakEven,
+    margineContribuzione: {
+      entrate:         periodo.entrate,
+      compensiTutor:   inEuro(variabiliCent.compensi),
+      rimborsiTutor:   inEuro(variabiliCent.rimborsi),
+      costiVariabili:  inEuro(costiVariabiliCentTot),
+      margine:         inEuro(mdcCent),
+      percentuale:     percentualeMdc,   // es. 58.3; null se nel periodo non ci sono entrate
+      costiFissi:      costiFissiPeriodo,
+      incassoPareggio: pareggioCent === null ? null : inEuro(pareggioCent),
+      // Quanto manca per arrivarci (0 se ci sei già): sottrazione fatta in centesimi.
+      mancaAlPareggio: pareggioCent === null ? null : inEuro(Math.max(0, pareggioCent - periodoCent.entrate)),
+    },
   }
 }
 
@@ -924,9 +990,19 @@ export async function deleteAccountingEntry(
   // paymentId): cancellandone una il database porta via anche la gemella, per via
   // del vincolo CASCADE su linkedEntryId. Al pagamento va però restituita la memoria,
   // altrimenti il suo bollo non si potrebbe più registrare.
-  await db.delete(accountingEntries).where(eq(accountingEntries.id, entryId))
-  await riapriBolloDelPagamento(entry)
-  return { ok: true }
+  return await db.transaction(async (tx) => {
+    // Un'entrata manuale con il suo bollo: il bollo se ne va con lei. Si guarda anche
+    // la gemella, perché cancellare l'uscita dei "Proventi diversi" porta via (CASCADE)
+    // l'entrata, ed è l'entrata ad avere il bollo.
+    const legami = [entry.id, entry.linkedEntryId].filter((id): id is string => !!id).map(notaBolloMovimento)
+    const bollo = await togliBolloInTransazione(tx, legami)
+    if (bollo === 'GIA_VERSATO') {
+      throw new Error('Il bollo di questo movimento è già stato versato con l\'F24: il movimento non si può più eliminare. Registra semmai uno storno.')
+    }
+    await tx.delete(accountingEntries).where(eq(accountingEntries.id, entryId))
+    await riapriBolloDelPagamento(tx, entry)
+    return { ok: true, bollo }
+  })
 }
 
 // ─────────────────────────────────────────────
@@ -959,11 +1035,11 @@ async function vietaSeBolloGiaVersato(entry: { id: string; categoria: string | n
 // Cancellata una riga del bollo, il pagamento torna "senza bollo": così la segreteria
 // può registrarlo di nuovo se l'aveva tolto per sbaglio. Il legame col pagamento è
 // scritto nelle note (bolloPaymentId:…), perché la colonna paymentId è già occupata.
-async function riapriBolloDelPagamento(entry: { categoria: string | null; note: string | null }) {
+async function riapriBolloDelPagamento(tx: Transazione, entry: { categoria: string | null; note: string | null }) {
   if (!isRigaBollo(entry)) return
   const paymentId = entry.note?.match(/bolloPaymentId:([A-Za-z0-9_-]+)/)?.[1]
   if (!paymentId) return
-  await db.update(payments)
+  await tx.update(payments)
     .set({ bolloRegistratoAt: null, updatedAt: new Date() })
     .where(eq(payments.id, paymentId))
 }
@@ -987,43 +1063,61 @@ export async function updateAccountingEntry(
     dataFattura?: string
   },
 ) {
-  const [entry] = await db.select().from(accountingEntries).where(eq(accountingEntries.id, entryId)).limit(1)
-  if (!entry) throw new Error('Movimento non trovato')
+  // In transazione, con il movimento bloccato (FOR UPDATE): la modifica e il suo bollo
+  // vanno insieme, e un doppio clic legge lo stato lasciato dal primo, non quello vecchio.
+  return await db.transaction(async (tx) => {
+    const [entry] = await tx.select().from(accountingEntries).where(eq(accountingEntries.id, entryId)).for('update')
+    if (!entry) throw new Error('Movimento non trovato')
 
-  const hasContentChange = data.tipo !== undefined || data.importo !== undefined
-    || data.descrizione !== undefined || data.categoria !== undefined
-    || data.metodoPagamento !== undefined || data.data !== undefined
+    const hasContentChange = data.tipo !== undefined || data.importo !== undefined
+      || data.descrizione !== undefined || data.categoria !== undefined
+      || data.metodoPagamento !== undefined || data.data !== undefined
 
-  if (isAutoEntry(entry) && hasContentChange) {
-    throw new Error('Questo movimento è automatico: modificalo dal pagamento di origine (oppure eliminalo).')
-  }
+    if (isAutoEntry(entry) && hasContentChange) {
+      throw new Error('Questo movimento è automatico: modificalo dal pagamento di origine (oppure eliminalo).')
+    }
 
-  if (entry.linkedEntryId && hasContentChange) {
-    // Vale per le coppie gemelle: "Proventi diversi" e bollo. Modificarne una sola
-    // gamba sbilancerebbe l'altra, quindi la coppia si elimina e si rifà.
-    const etichetta = isRigaBollo(entry) ? 'del bollo' : '"Proventi diversi"'
-    throw new Error(`Movimento accoppiato ${etichetta}: per correggerlo elimina la coppia e ricreala.`)
-  }
+    if (entry.linkedEntryId && hasContentChange) {
+      // Vale per le coppie gemelle: "Proventi diversi" e bollo. Modificarne una sola
+      // gamba sbilancerebbe l'altra, quindi la coppia si elimina e si rifà.
+      const etichetta = isRigaBollo(entry) ? 'del bollo' : '"Proventi diversi"'
+      throw new Error(`Movimento accoppiato ${etichetta}: per correggerlo elimina la coppia e ricreala.`)
+    }
 
-  const changes: Record<string, unknown> = { updatedAt: new Date() }
-  if (data.fatturaEmessa !== undefined)   changes.fatturaEmessa   = data.fatturaEmessa
-  if (data.richiedeFattura !== undefined) changes.richiedeFattura = data.richiedeFattura
-  if (data.tipo !== undefined)            changes.tipo            = data.tipo
-  if (data.importo !== undefined)         changes.importo         = String(data.importo)
-  if (data.descrizione !== undefined)     changes.descrizione     = data.descrizione
-  if (data.categoria !== undefined)       changes.categoria       = data.categoria
-  if (data.metodoPagamento !== undefined) changes.metodoPagamento = data.metodoPagamento
-  if (data.data !== undefined)            changes.data            = new Date(data.data)
+    const changes: Record<string, unknown> = { updatedAt: new Date() }
+    if (data.fatturaEmessa !== undefined)   changes.fatturaEmessa   = data.fatturaEmessa
+    if (data.richiedeFattura !== undefined) changes.richiedeFattura = data.richiedeFattura
+    if (data.tipo !== undefined)            changes.tipo            = data.tipo
+    if (data.importo !== undefined)         changes.importo         = String(data.importo)
+    if (data.descrizione !== undefined)     changes.descrizione     = data.descrizione
+    if (data.categoria !== undefined)       changes.categoria       = data.categoria
+    if (data.metodoPagamento !== undefined) changes.metodoPagamento = data.metodoPagamento
+    if (data.data !== undefined)            changes.data            = new Date(data.data)
 
-  // Numero+data fattura: si accodano (o si rimuovono) dalla descrizione, non hanno colonna dedicata
-  if (data.fatturaEmessa === true && data.numeroFattura) {
-    const base = (changes.descrizione as string | undefined) ?? entry.descrizione
-    changes.descrizione = conFattura(base, data.numeroFattura, data.dataFattura ?? new Date().toISOString().slice(0, 10))
-  } else if (data.fatturaEmessa === false) {
-    const base = (changes.descrizione as string | undefined) ?? entry.descrizione
-    changes.descrizione = rimuoviSuffissoFattura(base)
-  }
+    // Numero+data fattura: si accodano (o si rimuovono) dalla descrizione, non hanno colonna dedicata
+    if (data.fatturaEmessa === true && data.numeroFattura) {
+      const base = (changes.descrizione as string | undefined) ?? entry.descrizione
+      changes.descrizione = conFattura(base, data.numeroFattura, data.dataFattura ?? new Date().toISOString().slice(0, 10))
+    } else if (data.fatturaEmessa === false) {
+      const base = (changes.descrizione as string | undefined) ?? entry.descrizione
+      changes.descrizione = rimuoviSuffissoFattura(base)
+    }
 
-  const [updated] = await db.update(accountingEntries).set(changes as any).where(eq(accountingEntries.id, entryId)).returning()
-  return updated
+    const [updated] = await tx.update(accountingEntries).set(changes as any).where(eq(accountingEntries.id, entryId)).returning()
+    if (!updated) throw new Error('Movimento non trovato')
+
+    // Marca da bollo (F1) dei movimenti manuali.
+    let bollo: EsitoBollo = null
+    if (entry.richiedeFattura && !updated.richiedeFattura) {
+      // Fattura spenta: il bollo non versato se ne va; quello già versato resta.
+      bollo = await togliBolloInTransazione(tx, [notaBolloMovimento(entryId)])
+    } else if (!bolloServeAlMovimento(entry) && bolloServeAlMovimento(updated)) {
+      // Prima il bollo non serviva e adesso sì: fattura accesa su un'entrata, credito
+      // con fattura appena incassato, importo portato sopra 77,47 €. Se l'importo
+      // scende sotto soglia, invece, il bollo già creato resta (decisione del 14/09).
+      bollo = await registraBolloMovimentoInTransazione(tx, entryId)
+    }
+
+    return { ...updated, bollo }
+  })
 }
