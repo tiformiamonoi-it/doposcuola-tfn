@@ -43,12 +43,12 @@
             <p class="text-[1.15em] font-semibold text-slate-800">{{ giornoEsteso }}</p>
           </div>
           <p class="text-right text-[0.95em] text-slate-700">
-            {{ dati.tutors.length }} tutor<br>{{ dati.badges.length }} prenotazioni
+            {{ tutorInStampa.length }} tutor<br>{{ dati.badges.length }} prenotazioni
           </p>
         </header>
 
         <p v-if="dati.slots.length === 0" class="mt-[1em]">Non ci sono fasce orarie impostate.</p>
-        <p v-else-if="dati.tutors.length === 0" class="mt-[1em]">Nessun tutor in questo giorno.</p>
+        <p v-else-if="tutorInStampa.length === 0" class="mt-[1em]">Nessun alunno assegnato ai tutor in questo giorno.</p>
 
         <!-- La stessa griglia dello schermo: righe i tutor, colonne le fasce orarie -->
         <table v-else class="mt-[0.6em] w-full table-fixed border-collapse">
@@ -66,7 +66,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="tutor in dati.tutors" :key="tutor.id" class="break-inside-avoid">
+            <tr v-for="tutor in tutorInStampa" :key="tutor.id" class="break-inside-avoid">
               <th scope="row" class="border border-slate-500 px-[0.4em] py-[0.25em] text-left align-top font-semibold break-words">
                 {{ tutor.name }}
               </th>
@@ -129,6 +129,13 @@ const { data: dati, pending, error } = useLazyFetch<MatchingDelGiorno>(`/api/mat
 
 const tabellone = computed(() => dividiTabellone(dati.value ?? { tutors: [], badges: [], slots: [] }))
 
+// Sulla carta vanno solo i tutor con almeno un alunno in una fascia (richiesta del
+// titolare): una riga vuota non serve a chi legge il foglio in sala e ruba spazio,
+// cioè rimpicciolisce il testo di tutte le altre. A schermo, nel Matching, restano
+// tutti: lì le righe vuote servono per assegnare.
+const tutorInStampa = computed(() => (dati.value?.tutors ?? []).filter(t =>
+  (dati.value?.slots ?? []).some(s => (tabellone.value.perCasella.get(chiaveCasella(t.id, s.id))?.length ?? 0) > 0)))
+
 // "Martedì 16 settembre 2026"
 const giornoEsteso = computed(() => giornoValido
   ? format(parseISO(giorno), 'EEEE d MMMM yyyy', { locale: it }).replace(/^\w/, c => c.toUpperCase())
@@ -161,7 +168,7 @@ async function adattaAlFoglio() {
   if (!dati.value) return
   // Si misura col carattere vero, non con quello di riserva mostrato mentre si scarica
   await document.fonts?.ready
-  const minimo = dati.value.tutors.length > MAX_TUTOR_UN_FOGLIO ? CORPO_PIU_FOGLI : 7
+  const minimo = tutorInStampa.value.length > MAX_TUTOR_UN_FOGLIO ? CORPO_PIU_FOGLI : 7
   for (const pt of CORPI_PT.filter(pt => pt >= minimo)) {
     corpo.value = pt
     await nextTick()
