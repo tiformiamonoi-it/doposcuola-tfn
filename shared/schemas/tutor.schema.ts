@@ -75,6 +75,8 @@ export const UpdateTutorSchema = z.object({
   // il service lo azzera da solo, così un eventuale rientro nel fisso riparte da capo
   // e non resuscita i mesi vecchi.
   forfaitDal:        MeseForfaitOpz,
+  // Interruttore "Sempre disponibile (lunedì–venerdì)": vedi tutorProfiles.sempreDisponibile
+  sempreDisponibile: z.boolean().optional(),
   active:            z.boolean().optional(),
 })
 export type UpdateTutorInput = z.infer<typeof UpdateTutorSchema>

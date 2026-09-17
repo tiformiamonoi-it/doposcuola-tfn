@@ -74,6 +74,11 @@ export const tutorProfiles = pgTable('tutor_profiles', {
   // difetto anche sui dati vecchi che non possiamo controllare uno per uno; sta
   // scritta una volta sola in shared/compenso-tutor.ts e la usano tutti.
   forfaitDal:        date('forfait_dal', { mode: 'string' }),
+  // "SEMPRE DISPONIBILE (lunedì–venerdì)": lo accendono Admin e Super Tutor dalla scheda.
+  // Il tutor risulta disponibile tutti i giorni feriali senza spuntare niente (chiusure
+  // escluse) e toglie lui i giorni in cui non c'è: quei giorni stanno in tutor_assenze.
+  // Il sabato resta a spunta. Se il tutor è anche FORFAIT vincono le regole del fisso.
+  sempreDisponibile: boolean('sempre_disponibile').notNull().default(false),
   createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt:    timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
@@ -88,6 +93,33 @@ export const tutorAvailabilities = pgTable('tutor_availabilities', {
 }, (t) => ({
   uniqueUserDate: uniqueIndex('availability_user_date_unique').on(t.userId, t.date),
   dateIdx:        index('availability_date_idx').on(t.date),
+}))
+
+// I GIORNI IN CUI UN TUTOR "SEMPRE DISPONIBILE" NON C'È.
+//
+// Per chi ha tutorProfiles.sempreDisponibile acceso il calendario è girato: dal lunedì
+// al venerdì c'è d'ufficio, e l'unica cosa da scrivere è quando MANCA. È la stessa
+// idea delle assenze degli alunni delle medie (vedi assenze.ts).
+//
+// PERCHÉ UNA TABELLA A PARTE e non righe in tutor_availabilities: lì una riga vuol
+// dire "ci sono", qui una riga vuol dire "non ci sono". Mescolandole, il significato
+// di ogni riga dipenderebbe dall'interruttore di oggi: spegnendolo, le assenze già
+// segnate diventerebbero di colpo "disponibilità" e il tutor comparirebbe proprio nei
+// giorni in cui aveva detto di non esserci. Così invece, a interruttore spento, queste
+// righe restano dove sono e semplicemente nessuno le legge.
+export const tutorAssenze = pgTable('tutor_assenze', {
+  id:     text('id').primaryKey().$defaultFn(cuid),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // Il giorno in cui non c'è: giorno civile 'AAAA-MM-GG', mai timestamptz
+  // (stessa ragione di tutorAvailabilities.date).
+  date:   date('date', { mode: 'string' }).notNull(),
+  // CHI l'ha segnata: il tutor dal suo calendario o la segreteria dal Matching.
+  // 'set null': se quell'account sparisce, l'assenza resta.
+  createdByUserId: text('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  uniqueUserDate: uniqueIndex('tutor_assenze_user_date_unique').on(t.userId, t.date),
+  dateIdx:        index('tutor_assenze_date_idx').on(t.date),
 }))
 
 // I BIGLIETTI D'INGRESSO "scegli la tua password".

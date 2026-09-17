@@ -1,6 +1,7 @@
 import { eq, and, gte, lte, ne } from 'drizzle-orm'
 import { db } from '../../database/client'
 import * as tables from '../../database/schema'
+import { giornoFeriale, tutorDUfficio } from '../../services/disponibilita-tutor.service'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -34,33 +35,18 @@ export default defineEventHandler(async (event) => {
     notes: a.notes || '',
     subjects: a.user.tutorProfile?.materie || [],
     // Ha una riga di disponibilità → l'admin può toglierla dal giorno
-    daDisponibilita: true,
+    rimovibile: true,
   }))
 
-  // Tutor a fisso mensile (FORFAIT): sempre disponibili dal lunedì al venerdì,
-  // anche senza aver spuntato la disponibilità (salvo chiusure del centro).
-  const giornoSettimana = new Date(`${targetDate}T00:00:00Z`).getUTCDay()
-  if (giornoSettimana >= 1 && giornoSettimana <= 5) {
+  // Tutor d'ufficio dal lunedì al venerdì, anche senza aver spuntato niente (salvo
+  // chiusure del centro): i FORFAIT e i "sempre disponibili" senza assenza quel giorno.
+  // La regola sta in disponibilita-tutor.service.ts, la stessa del calendario del tutor.
+  if (giornoFeriale(targetDate)) {
     const chiusura = await db.query.closureDates.findFirst({
       where: eq(tables.closureDates.date, targetDate),
     })
     if (!chiusura) {
-      const forfaitTutors = await db
-        .select({
-          id:        tables.users.id,
-          firstName: tables.users.firstName,
-          lastName:  tables.users.lastName,
-          phone:     tables.users.phone,
-          materie:   tables.tutorProfiles.materie,
-        })
-        .from(tables.users)
-        .innerJoin(tables.tutorProfiles, eq(tables.tutorProfiles.userId, tables.users.id))
-        .where(and(
-          eq(tables.users.active, true),
-          eq(tables.tutorProfiles.modalitaPagamento, 'FORFAIT'),
-        ))
-
-      for (const t of forfaitTutors) {
+      for (const t of await tutorDUfficio(targetDate)) {
         if (!tutors.some(x => x.id === t.id)) {
           tutors.push({
             id: t.id,
@@ -68,7 +54,9 @@ export default defineEventHandler(async (event) => {
             phone: t.phone,
             notes: '',
             subjects: t.materie || [],
-            daDisponibilita: false,
+            // Il sempre disponibile si toglie dal giorno (diventa un'assenza);
+            // il FORFAIT no: col fisso mensile lun-ven c'è sempre.
+            rimovibile: !t.forfait,
           })
         }
       }
@@ -104,6 +92,8 @@ export default defineEventHandler(async (event) => {
       badges.push({
         subjectId: subjectRel.id,
         bookingId: b.id,
+        // Serve alla pagina per riconoscere lo stesso alunno (N4, regola in shared/matching.ts)
+        studentId: b.studentId,
         studentName: b.studentName,
         studentSurname: b.studentSurname,
         studentPhone: b.studentPhone,

@@ -29,10 +29,14 @@
         <div class="flex flex-wrap gap-4 text-xs mb-4 text-slate-500">
           <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-sm bg-primary-100 border border-primary-300"></div> Disponibile</div>
           <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-sm bg-white border border-slate-200"></div> Non disponibile</div>
+          <div v-if="sempreDisponibile" class="flex items-center gap-1"><div class="w-3 h-3 rounded-sm bg-red-50 border border-red-200"></div> Assente</div>
           <div class="flex items-center gap-1"><div class="w-3 h-3 rounded-sm bg-slate-100 border border-slate-200"></div> Non selezionabile (passato, chiusura, domenica)</div>
         </div>
         <p v-if="forfait" class="text-xs text-primary-600 mb-4 font-medium">
           Con il fisso mensile sei sempre disponibile dal lunedì al venerdì: puoi aggiungere disponibilità solo il sabato.
+        </p>
+        <p v-else-if="sempreDisponibile" class="text-xs text-primary-600 mb-4 font-medium">
+          Sei sempre disponibile dal lunedì al venerdì: tocca un giorno per segnare che quel giorno non ci sei.
         </p>
         <p class="text-xs text-slate-400 mb-4">La disponibilità di oggi si può modificare solo entro le 9:30.</p>
 
@@ -55,7 +59,9 @@
             :class="[
               motivoBlocco(day.dateStr)
                 ? (isDisponibile(day.dateStr) ? 'bg-primary-50/50 border-primary-100 text-primary-300 cursor-not-allowed' : 'bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed')
-                : (isDisponibile(day.dateStr) ? 'bg-primary-50 border-primary-300 text-primary-700 font-bold' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300')
+                : (isDisponibile(day.dateStr) ? 'bg-primary-50 border-primary-300 text-primary-700 font-bold'
+                  : isAssente(day.dateStr) ? 'bg-red-50 border-red-200 text-red-600 line-through hover:border-red-300'
+                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300')
             ]"
             :disabled="salvandoGiorno === day.dateStr || !!motivoBlocco(day.dateStr)"
             :title="motivoBlocco(day.dateStr) ?? ''"
@@ -116,16 +122,37 @@ const { data: availData, refresh: refreshAvail } = useLazyFetch<any>('/api/tutor
 
 const forfait = computed(() => availData.value?.forfait ?? false)
 
-function isFerialeForfait(dateStr: string) {
+// Sempre disponibile (il server lo manda false se il tutor è anche a fisso mensile)
+const sempreDisponibile = computed(() => availData.value?.sempreDisponibile ?? false)
+const assenze = computed(() => new Set<string>(availData.value?.assenze ?? []))
+
+function isFeriale(dateStr: string) {
   const giorno = new Date(dateStr + 'T00:00:00Z').getUTCDay()
-  return forfait.value && giorno >= 1 && giorno <= 5
+  return giorno >= 1 && giorno <= 5
+}
+
+function isFerialeForfait(dateStr: string) {
+  return forfait.value && isFeriale(dateStr)
+}
+
+// Giorno feriale non chiuso di un tutor sempre disponibile: c'è d'ufficio
+function isFerialeSempreDisponibile(dateStr: string) {
+  return sempreDisponibile.value && isFeriale(dateStr) && !chiusure.value.has(dateStr)
 }
 
 function isDisponibile(dateStr: string) {
   // Fisso mensile: lun-ven sempre disponibile d'ufficio (salvo chiusure)
   if (isFerialeForfait(dateStr) && !chiusure.value.has(dateStr)) return true
   const lista = availData.value?.disponibilita ?? []
-  return lista.some((a: any) => format(new Date(a.date), 'yyyy-MM-dd') === dateStr)
+  const spuntato = lista.some((a: any) => format(new Date(a.date), 'yyyy-MM-dd') === dateStr)
+  // Sempre disponibile: c'è, a meno che non abbia segnato l'assenza (stessa regola del server)
+  if (isFerialeSempreDisponibile(dateStr)) return spuntato || !assenze.value.has(dateStr)
+  return spuntato
+}
+
+// Il giorno feriale in cui il tutor sempre disponibile ha detto "non ci sono"
+function isAssente(dateStr: string) {
+  return isFerialeSempreDisponibile(dateStr) && !isDisponibile(dateStr)
 }
 
 // ─── Giorni bloccati: passati, oggi dopo le 9:30 (ora del SERVER), domeniche, chiusure ───

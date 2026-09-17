@@ -314,6 +314,8 @@ export async function getTutorById(id: string) {
       // Serve alla scheda per scrivere "fisso mensile da settembre 2026" e per
       // capire quali righe della tabella compensi sono ancora a ore.
       forfaitDal:        tutorProfiles.forfaitDal,
+      // Interruttore della scheda: il badge "Sempre disponibile lun–ven" e il modale Modifica
+      sempreDisponibile: tutorProfiles.sempreDisponibile,
     })
     .from(users)
     .leftJoin(tutorProfiles, eq(tutorProfiles.userId, users.id))
@@ -385,7 +387,7 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
   const userFields    = ['firstName', 'lastName', 'email', 'phone', 'role', 'active']
   const profileFields = ['indirizzo', 'citta', 'cap', 'codiceFiscale', 'partitaIva',
                          'dataNascita', 'materie', 'noteInterne', 'modalitaPagamento',
-                         'importoForfait', 'forfaitDal']
+                         'importoForfait', 'forfaitDal', 'sempreDisponibile']
 
   for (const [key, val] of Object.entries(data)) {
     if (val === undefined) continue

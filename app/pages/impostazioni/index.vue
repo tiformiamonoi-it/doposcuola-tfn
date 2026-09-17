@@ -599,7 +599,7 @@
           </template>
           <div class="space-y-4">
             <p class="text-xs text-slate-500">
-              Nei giorni di chiusura il centro non è prenotabile e i tutor a fisso mensile non risultano disponibili.
+              Nei giorni di chiusura il centro non è prenotabile e i tutor a fisso mensile o «sempre disponibili» non risultano disponibili.
               Prima di chiudere o riaprire un giorno il gestionale ti dice che cosa c'è già in quella data.
             </p>
              <div class="flex items-end gap-3">

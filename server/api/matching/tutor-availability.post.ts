@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { eq, and } from 'drizzle-orm'
 import { db } from '../../database/client'
-import { tutorAvailabilities } from '../../database/schema'
+import { tutorAvailabilities, tutorAssenze, closureDates } from '../../database/schema'
+import { giornoFeriale, regolaFerialeDelTutor } from '../../services/disponibilita-tutor.service'
 
 const schema = z.object({
   tutorId:  z.string().min(1),
@@ -21,6 +22,30 @@ export default defineEventHandler(async (event) => {
   }
 
   const { tutorId, date, presente } = await readValidatedBody(event, schema.parse)
+
+  // Tutor "sempre disponibile" (non FORFAIT) in un giorno feriale: c'è d'ufficio, quindi
+  // toglierlo vuol dire segnargli l'ASSENZA, e rimetterlo vuol dire cancellarla —
+  // come se l'avesse toccato lui nel suo calendario. Resta scritto chi l'ha fatto.
+  // Nei giorni di chiusura d'ufficio non c'è nessuno: lì vale la spunta, come per tutti.
+  if (
+    giornoFeriale(date)
+    && await regolaFerialeDelTutor(tutorId) === 'SEMPRE_DISPONIBILE'
+    && !await db.query.closureDates.findFirst({ where: eq(closureDates.date, date) })
+  ) {
+    if (presente) {
+      await db.delete(tutorAssenze).where(and(eq(tutorAssenze.userId, tutorId), eq(tutorAssenze.date, date)))
+      return { status: 'added' }
+    }
+    await db.insert(tutorAssenze)
+      .values({ userId: tutorId, date, createdByUserId: user.id })
+      .onConflictDoNothing()
+    // Un'eventuale spunta di quel giorno lo farebbe ricomparire: via anche quella
+    await db.delete(tutorAvailabilities).where(and(
+      eq(tutorAvailabilities.userId, tutorId),
+      eq(tutorAvailabilities.date, date),
+    ))
+    return { status: 'removed' }
+  }
 
   if (presente) {
     await db.insert(tutorAvailabilities)

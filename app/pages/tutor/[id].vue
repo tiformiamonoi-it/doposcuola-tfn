@@ -37,6 +37,9 @@
                 />
               </span>
             </div>
+            <UBadge v-if="tutor.sempreDisponibile" color="info" variant="subtle" icon="i-heroicons-calendar-days" class="mt-2">
+              Sempre disponibile lun–ven
+            </UBadge>
           </div>
           <div class="flex items-center gap-2">
             <UBadge :color="tutor.active ? 'success' : 'neutral'" variant="subtle">
@@ -505,6 +508,18 @@
               <UInput v-model="datiModifica.forfaitDal" type="month" class="w-full" />
             </UFormField>
           </div>
+          <!-- Chi c'è quasi tutti i giorni non deve spuntarli uno per uno: segna solo quando manca -->
+          <div>
+            <USwitch
+              v-model="datiModifica.sempreDisponibile"
+              label="Sempre disponibile (lunedì–venerdì)"
+              description="Risulta disponibile dal lunedì al venerdì senza spuntare niente. Il tutor toglie i giorni in cui non c'è."
+            />
+            <p v-if="datiModifica.modalitaPagamento === 'FORFAIT'" class="text-xs text-slate-500 mt-1">
+              Con il fisso mensile è già sempre disponibile dal lunedì al venerdì (e non può togliere giorni):
+              questo interruttore conta solo se torna a ore.
+            </p>
+          </div>
           <UFormField name="noteInterne" label="Note interne">
             <UTextarea v-model="datiModifica.noteInterne" :rows="3" class="w-full" />
           </UFormField>
@@ -698,6 +713,8 @@ interface SchedaTutor {
   importoForfait: string | null
   /** Primo giorno del mese da cui vale il fisso ('AAAA-MM-01'), o null se non indicato */
   forfaitDal: string | null
+  /** Interruttore "Sempre disponibile (lunedì–venerdì)"; null se il profilo manca */
+  sempreDisponibile: boolean | null
 }
 
 /** GET /api/tutors/:id/compensation — una riga per mese. */
@@ -965,6 +982,7 @@ const datiModifica = reactive({
   // Il campo <input type="month"> vuole 'AAAA-MM', la colonna a database è un giorno
   // ('AAAA-MM-01'): qui si tiene la forma del modulo, il server rimette il giorno.
   forfaitDal: meseDiGiorno(tutor.value?.forfaitDal ?? ''),
+  sempreDisponibile: tutor.value?.sempreDisponibile ?? false,
   noteInterne: tutor.value?.noteInterne ?? '',
   password: '', // reset password opzionale: vuoto = non cambiare
 })
@@ -994,6 +1012,7 @@ watch(tutor, (t) => {
     // corrente, che è anche quello che il server userebbe. Salvando, la cosa si fissa
     // nero su bianco e non resta più affidata alla regola di riserva.
     forfaitDal: meseDiGiorno(t.forfaitDal ?? '') || (t.modalitaPagamento === 'FORFAIT' ? meseDiOggi() : ''),
+    sempreDisponibile: t.sempreDisponibile ?? false,
     noteInterne: t.noteInterne ?? '',
     password: '',
   })

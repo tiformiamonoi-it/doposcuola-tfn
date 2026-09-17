@@ -218,6 +218,13 @@
       "when": 1789415557958,
       "tag": "0030_parallel_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1789658750849,
+      "tag": "0031_perpetual_vin_gonzales",
+      "breakpoints": true
     }
   ]
 }
