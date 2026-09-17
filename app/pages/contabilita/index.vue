@@ -565,10 +565,87 @@
           </UFormField>
         </div>
 
-        <UTable :data="entries" :columns="colonneEntries" :loading="pendingEntries">
+        <!-- ─── TELEFONO: una scheda per movimento ─── -->
+        <!-- La tabella sul telefono non ci sta. In cima tipo e importo (quello che
+             si cerca), sotto la descrizione, poi data e metodo. La fattura resta
+             visibile perché è uno stato da vedere a colpo d'occhio; le altre azioni
+             stanno nel menù "⋯", con le stesse regole della tabella
+             (vedi azioniMovimento nello script). -->
+        <div class="lg:hidden space-y-3">
+          <div v-if="pendingEntries && entries.length === 0" class="space-y-3">
+            <USkeleton v-for="n in 5" :key="n" class="h-28 w-full rounded-xl" />
+          </div>
+
+          <div
+            v-for="e in entries"
+            :key="e.id"
+            class="rounded-xl ring-1 ring-slate-200 p-3 transition-opacity"
+            :class="{ 'opacity-60': pendingEntries }"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                <UBadge :color="coloreTipoMovimento(e.tipo)" variant="subtle" size="sm">
+                  {{ labelTipo(e.tipo) }}
+                </UBadge>
+                <UBadge color="neutral" variant="outline" size="sm">{{ labelCategoria(e.categoria) }}</UBadge>
+              </div>
+              <span class="text-base font-semibold whitespace-nowrap" :class="eInUscita(e) ? 'text-error-600' : 'text-slate-800'">
+                {{ eInUscita(e) ? '-' : '' }}€ {{ fmt(parseFloat(e.importo)) }}
+              </span>
+            </div>
+
+            <p class="text-sm text-slate-700 mt-2 break-words">
+              {{ e.descrizione }}
+              <NuxtLink
+                v-if="nomeTutor(e)"
+                :to="`/tutor/${e.tutorId}`"
+                class="font-medium text-primary-600 underline"
+              >· {{ nomeTutor(e) }}</NuxtLink>
+            </p>
+            <p class="text-xs text-slate-500 mt-1">
+              {{ formatData(e.data) }} · {{ labelMetodo(e.metodoPagamento) }}
+            </p>
+            <!-- Sul telefono il simbolo ↔ va spiegato a parole: il fumetto col mouse qui non c'è -->
+            <p v-if="e.linkedEntryId" class="text-xs text-slate-500 mt-1">
+              ↔ Movimento accoppiato 'Proventi diversi': entrata e uscita gemelle
+            </p>
+
+            <div class="flex items-center gap-2 mt-2">
+              <UButton
+                v-if="e.richiedeFattura"
+                :icon="e.fatturaEmessa ? 'i-heroicons-check-circle' : 'i-heroicons-exclamation-circle'"
+                :color="e.fatturaEmessa ? 'success' : 'warning'"
+                variant="soft" class="min-h-11"
+                :loading="toggling === e.id"
+                @click="toggleFattura(e)"
+              >
+                {{ e.fatturaEmessa ? 'Fattura emessa' : 'Fattura da emettere' }}
+              </UButton>
+              <UDropdownMenu :items="azioniMovimento(e)">
+                <UButton
+                  icon="i-heroicons-ellipsis-vertical" color="neutral" variant="ghost"
+                  class="size-11 justify-center ml-auto -mr-1" aria-label="Altre azioni sul movimento"
+                />
+              </UDropdownMenu>
+            </div>
+          </div>
+
+          <div v-if="!pendingEntries && entries.length === 0" class="py-10 text-center">
+            <UIcon name="i-heroicons-list-bullet" class="w-10 h-10 text-slate-300 mx-auto mb-3" />
+            <p class="text-slate-500 text-sm">Nessun movimento nel periodo o coi filtri scelti.</p>
+          </div>
+
+          <!-- Stessa paginazione della tabella; sul telefono mostra meno numeri per starci in larghezza -->
+          <div v-if="metaEntries && metaEntries.totalPages > 1" class="flex justify-center border-t border-slate-100 pt-4">
+            <UPagination v-model:page="filtroEntries.page" :total="metaEntries.total" :items-per-page="filtroEntries.limit" :sibling-count="1" @update:page="cambiaPagina" />
+          </div>
+        </div>
+
+        <!-- ─── COMPUTER: tabella ─── -->
+        <UTable :data="entries" :columns="colonneEntries" :loading="pendingEntries" class="hidden lg:block">
           <template #data-cell="{ row }">{{ formatData(row.original.data) }}</template>
           <template #tipo-cell="{ row }">
-            <UBadge :color="row.original.tipo === 'ENTRATA' ? 'success' : row.original.tipo === 'USCITA' ? 'error' : row.original.tipo === 'CREDITO' ? 'indigo' : row.original.tipo === 'DEBITO' ? 'pink' : row.original.tipo === 'NOTA' ? 'warning' : 'neutral'" variant="subtle" size="xs">
+            <UBadge :color="coloreTipoMovimento(row.original.tipo)" variant="subtle" size="xs">
               {{ labelTipo(row.original.tipo) }}
             </UBadge>
           </template>
@@ -593,8 +670,8 @@
             <span class="text-sm text-slate-600">{{ labelMetodo(row.original.metodoPagamento) }}</span>
           </template>
           <template #importo-cell="{ row }">
-            <span class="font-medium" :class="row.original.tipo === 'USCITA' || row.original.tipo === 'DEBITO' ? 'text-error-600' : 'text-slate-800'">
-              {{ row.original.tipo === 'USCITA' || row.original.tipo === 'DEBITO' ? '-' : '' }}€ {{ fmt(parseFloat(row.original.importo)) }}
+            <span class="font-medium" :class="eInUscita(row.original) ? 'text-error-600' : 'text-slate-800'">
+              {{ eInUscita(row.original) ? '-' : '' }}€ {{ fmt(parseFloat(row.original.importo)) }}
             </span>
           </template>
           <!-- E1 — Colonna fattura (dove richiesta; sulle entrate manuali si attiva al volo; sulle automatiche col bottone nascosto, visibile al passaggio del mouse) -->
@@ -610,7 +687,7 @@
                 />
               </UTooltip>
             </template>
-            <UTooltip v-else-if="row.original.tipo === 'ENTRATA' && !CATEGORIE_BOLLO.includes(row.original.categoria ?? '') && (isManuale(row.original) || row.original.paymentId)" text="Aggiungi alle fatture da emettere">
+            <UTooltip v-else-if="puoChiedereFattura(row.original)" text="Aggiungi alle fatture da emettere">
               <UButton
                 icon="i-heroicons-document-plus"
                 color="neutral" variant="ghost" size="xs"
@@ -623,14 +700,14 @@
           </template>
           <template #azioni-cell="{ row }">
             <div class="flex justify-end gap-1">
-              <UTooltip v-if="row.original.tipo === 'CREDITO' && isManuale(row.original)" text="Segna come incassato (diventa un'Entrata)">
+              <UTooltip v-if="row.original.tipo === 'CREDITO' && puoSegnareSaldato(row.original)" text="Segna come incassato (diventa un'Entrata)">
                 <UButton
                   icon="i-heroicons-banknotes"
                   size="xs" color="indigo" variant="ghost"
                   @click="apriIncasso(row.original)"
                 />
               </UTooltip>
-              <UTooltip v-if="row.original.tipo === 'DEBITO' && isManuale(row.original)" text="Segna come pagato (diventa un'Uscita)">
+              <UTooltip v-if="row.original.tipo === 'DEBITO' && puoSegnareSaldato(row.original)" text="Segna come pagato (diventa un'Uscita)">
                 <UButton
                   icon="i-heroicons-banknotes"
                   size="xs" color="pink" variant="ghost"
@@ -638,13 +715,13 @@
                 />
               </UTooltip>
               <UButton
-                v-if="isManuale(row.original) && !row.original.linkedEntryId"
+                v-if="puoModificare(row.original)"
                 icon="i-heroicons-pencil-square"
                 size="xs" color="neutral" variant="ghost"
                 title="Modifica"
                 @click="apriModifica(row.original)"
               />
-              <UTooltip v-else :text="row.original.linkedEntryId ? 'Movimento accoppiato: elimina la coppia e ricreala' : 'Movimento automatico: modificalo dal pagamento di origine'">
+              <UTooltip v-else :text="motivoNonModificabile(row.original)">
                 <UButton icon="i-heroicons-pencil-square" size="xs" color="neutral" variant="ghost" disabled />
               </UTooltip>
               <UButton
@@ -656,7 +733,7 @@
             </div>
           </template>
         </UTable>
-        <div class="mt-4 flex justify-center border-t border-slate-100 pt-4" v-if="metaEntries && metaEntries.totalPages > 1">
+        <div class="mt-4 hidden lg:flex justify-center border-t border-slate-100 pt-4" v-if="metaEntries && metaEntries.totalPages > 1">
           <UPagination v-model:page="filtroEntries.page" :total="metaEntries.total" :items-per-page="filtroEntries.limit" @update:page="cambiaPagina" />
         </div>
       </UCard>
@@ -1790,6 +1867,62 @@ function isAuto(row: any) {
 }
 function isManuale(row: any) {
   return !isAuto(row)
+}
+
+// Le regole di "che cosa si vede su una riga" dei movimenti. Stanno qui, in un
+// posto solo, perché le usano sia la tabella (computer) sia le schede (telefono):
+// se un giorno ne cambia una, cambia per tutte e due le viste.
+
+// Uscite e debiti: importo in rosso e col "-" davanti
+function eInUscita(row: any) {
+  return row.tipo === 'USCITA' || row.tipo === 'DEBITO'
+}
+function coloreTipoMovimento(tipo: string) {
+  if (tipo === 'ENTRATA') return 'success'
+  if (tipo === 'USCITA')  return 'error'
+  if (tipo === 'CREDITO') return 'indigo'
+  if (tipo === 'DEBITO')  return 'pink'
+  if (tipo === 'NOTA')    return 'warning'
+  return 'neutral'
+}
+// Entrata senza fattura (bolli esclusi), manuale o nata da un pagamento:
+// si può aggiungere alle fatture da emettere
+function puoChiedereFattura(row: any) {
+  return !row.richiedeFattura
+    && row.tipo === 'ENTRATA'
+    && !CATEGORIE_BOLLO.includes(row.categoria ?? '')
+    && (isManuale(row) || !!row.paymentId)
+}
+// Credito da incassare o debito da pagare, scritto a mano
+function puoSegnareSaldato(row: any) {
+  return (row.tipo === 'CREDITO' || row.tipo === 'DEBITO') && isManuale(row)
+}
+function puoModificare(row: any) {
+  return isManuale(row) && !row.linkedEntryId
+}
+function motivoNonModificabile(row: any) {
+  return row.linkedEntryId
+    ? 'Movimento accoppiato: elimina la coppia e ricreala'
+    : 'Movimento automatico: modificalo dal pagamento di origine'
+}
+
+// Il menù "⋯" delle schede da telefono: le stesse azioni dei bottoni della
+// tabella, con le stesse regole qui sopra. Sul telefono non c'è il "passaggio del
+// mouse", quindi "Aggiungi alle fatture" sta sempre nel menù quando è possibile.
+function azioniMovimento(row: any) {
+  const azioni: Record<string, unknown>[] = []
+  if (puoSegnareSaldato(row)) {
+    azioni.push(row.tipo === 'DEBITO'
+      ? { label: 'Segna come pagato', description: 'Diventa un\'Uscita', icon: 'i-heroicons-banknotes', onSelect: () => apriIncasso(row) }
+      : { label: 'Segna come incassato', description: 'Diventa un\'Entrata', icon: 'i-heroicons-banknotes', onSelect: () => apriIncasso(row) })
+  }
+  if (puoChiedereFattura(row)) {
+    azioni.push({ label: 'Aggiungi alle fatture da emettere', icon: 'i-heroicons-document-plus', onSelect: () => richiediFattura(row) })
+  }
+  azioni.push(puoModificare(row)
+    ? { label: 'Modifica', icon: 'i-heroicons-pencil-square', onSelect: () => apriModifica(row) }
+    : { label: 'Modifica', description: motivoNonModificabile(row), icon: 'i-heroicons-pencil-square', disabled: true })
+  return [azioni, [{ label: 'Elimina', icon: 'i-heroicons-trash', color: 'error', onSelect: () => apriElimina(row) }]]
 }
 
 // ─── "Segna saldato": Credito → Entrata, Debito → Uscita ───

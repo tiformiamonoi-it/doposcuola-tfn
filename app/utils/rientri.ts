@@ -30,6 +30,8 @@ export interface RigaRientro {
   dataRisposta: string | null
   note: string | null
   aggiornatoDaNome: string | null
+  /** true = l'ultima risposta l'ha data un genitore dal portale */
+  dalPortale: boolean
   /** Ultima lezione fatta ('AAAA-MM-GG'); null = non ha mai iniziato */
   ultimaLezione: string | null
   haPacchettoAttivo: boolean
@@ -60,6 +62,8 @@ export interface RispostaRientri {
   inizio: string
   /** Gli anni consultabili nel menu dello storico, dal più recente */
   anni: string[]
+  /** L'interruttore "Chiedi la conferma alle famiglie dal portale" */
+  confermaPortale: boolean
   items: RigaRientro[]
   kpi: KpiRientri
 }

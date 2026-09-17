@@ -3,6 +3,7 @@ import type { SQL } from 'drizzle-orm'
 import { db } from '../database/client'
 import { contacts, contactFigli, lessons, lessonStudents, packages, students, studentConfirmations, systemConfigs, users } from '../database/schema'
 import { oggiRomeStr } from '../utils/tutor-time-window'
+import { creaNotifica } from './notifiche.service'
 import { annoScolasticoDa, inizioAnnoProposto, inizioCampagna } from '#shared/rientri'
 import type { StatoRientro } from '#shared/rientri'
 import type { ListRientriQuery, SetRientroInput } from '#shared/schemas/confirmation.schema'
@@ -13,6 +14,9 @@ import type { ListRientriQuery, SetRientroInput } from '#shared/schemas/confirma
 // Chiavi in system_configs (le stesse che si vedono in Impostazioni)
 export const CHIAVE_ANNO   = 'anno_scolastico_corrente'
 export const CHIAVE_INIZIO = 'anno_scolastico_inizio'
+// L'interruttore della pagina Rientri "Chiedi la conferma alle famiglie dal
+// portale": 'true' = acceso. Riga assente = spento.
+export const CHIAVE_CONFERMA_PORTALE = 'rientri_conferma_portale'
 
 // Neutralizza i caratteri jolly di LIKE/ILIKE nel testo digitato dall'utente.
 // (Postgres usa '\' come carattere di escape predefinito.)
@@ -60,6 +64,30 @@ export async function anniDisponibili(): Promise<string[]> {
 }
 
 // ─────────────────────────────────────────────
+// L'INTERRUTTORE DELLA DOMANDA ALLE FAMIGLIE
+// Spento di default: la domanda compare nel portale solo quando la segreteria
+// decide che è il momento di farla.
+// ─────────────────────────────────────────────
+
+export async function confermaPortaleAccesa(): Promise<boolean> {
+  const [riga] = await db
+    .select({ value: systemConfigs.value })
+    .from(systemConfigs)
+    .where(eq(systemConfigs.key, CHIAVE_CONFERMA_PORTALE))
+    .limit(1)
+
+  return (riga?.value ?? '').trim() === 'true'
+}
+
+export async function impostaConfermaPortale(accesa: boolean): Promise<boolean> {
+  const value = accesa ? 'true' : 'false'
+  await db.insert(systemConfigs)
+    .values({ key: CHIAVE_CONFERMA_PORTALE, value })
+    .onConflictDoUpdate({ target: systemConfigs.key, set: { value, updatedAt: new Date() } })
+  return accesa
+}
+
+// ─────────────────────────────────────────────
 // LISTA + NUMERI DELLE CARD — GET /api/confirmations
 // Una sola risposta. Le letture partono tutte insieme (Promise.all) e si
 // uniscono in memoria: sono ~100 righe, nessuna query dentro un ciclo.
@@ -79,6 +107,8 @@ export interface RigaRientro {
   dataRisposta: string | null
   note: string | null
   aggiornatoDaNome: string | null
+  /** true = l'ultima risposta l'ha data un genitore dal portale */
+  dalPortale: boolean
   /** Giorno civile dell'ultima lezione fatta ('AAAA-MM-GG'), null = mai partito */
   ultimaLezione: string | null
   haPacchettoAttivo: boolean
@@ -142,7 +172,7 @@ export async function listRientri(q: ListRientriQuery) {
   const haFattoLezione = sql`EXISTS (SELECT 1 FROM lesson_students ls JOIN lessons l ON l.id = ls.lesson_id WHERE ls.student_id = ${students.id})`
   const dal = inizioCampagna(annoRichiesto)
 
-  const [righe, lezioni, pacchetti, [kpiAlunni], [kpiContatti], [kpiNuovi], anniConRighe] = await Promise.all([
+  const [righe, lezioni, pacchetti, [kpiAlunni], [kpiContatti], [kpiNuovi], anniConRighe, confermaPortale] = await Promise.all([
     // 1) L'elenco: alunni attivi + la loro risposta (se già data)
     db.select({
       studentId:    students.id,
@@ -159,6 +189,9 @@ export async function listRientri(q: ListRientriQuery) {
       dataRisposta: sql<string | null>`to_char(${studentConfirmations.dataRisposta}, 'YYYY-MM-DD')`,
       note:         studentConfirmations.note,
       aggiornatoDaNome: nomeCompleto(users.id, users.firstName, users.lastName),
+      // Dal ruolo di chi ha scritto per ultimo: nessuna colonna in più da tenere
+      // allineata. I genitori scrivono nel quaderno solo dal portale.
+      dalPortale:   sql<boolean>`COALESCE(${users.role} = 'GENITORE', false)`,
     })
       .from(students)
       .leftJoin(studentConfirmations, conferma)
@@ -229,6 +262,9 @@ export async function listRientri(q: ListRientriQuery) {
 
     // 6) Gli anni già presenti nel quaderno: alimentano il menu dello storico
     anniDisponibili(),
+
+    // 7) L'interruttore "Chiedi la conferma alle famiglie dal portale"
+    confermaPortaleAccesa(),
   ])
 
   // ── Unione in memoria (niente query dentro il ciclo) ──
@@ -285,6 +321,7 @@ export async function listRientri(q: ListRientriQuery) {
     annoCorrente: corrente.anno,
     inizio,
     anni,
+    confermaPortale,
     items,
     kpi: {
       daSentire:                Number(kpiAlunni?.daSentire ?? 0),
@@ -358,6 +395,11 @@ export async function setRientro(
   // Le note si toccano solo se sono state inviate (undefined = "lascia com'è")
   const note = dati.note !== undefined ? (dati.note ?? null) : (esistente?.note ?? null)
 
+  // "Chi ha risposto" cambia solo quando cambia la RISPOSTA. Una nota aggiunta dalla
+  // segreteria a una risposta data dalla famiglia nel portale non deve farla passare
+  // per risposta della segreteria: la famiglia la vedrebbe bloccata senza motivo.
+  const autore = esistente && esistente.stato === dati.stato ? (esistente.aggiornatoDaUserId ?? userId) : userId
+
   const [salvata] = await db.insert(studentConfirmations)
     .values({
       anno,
@@ -365,7 +407,7 @@ export async function setRientro(
       stato: dati.stato,
       dataRisposta,
       note,
-      aggiornatoDaUserId: userId,
+      aggiornatoDaUserId: autore,
     })
     .onConflictDoUpdate({
       target: [studentConfirmations.anno, studentConfirmations.studentId],
@@ -373,7 +415,7 @@ export async function setRientro(
         stato: dati.stato,
         dataRisposta,
         note,
-        aggiornatoDaUserId: userId,
+        aggiornatoDaUserId: autore,
         updatedAt: new Date(),
       },
     })
@@ -381,6 +423,151 @@ export async function setRientro(
 
   if (!salvata) throw new Error('Salvataggio della risposta non riuscito')
   return salvata
+}
+
+// ─────────────────────────────────────────────
+// LA DOMANDA ALLE FAMIGLIE — portale del GENITORE
+// «Luca torna da noi quest'anno?» Sì / Non lo so ancora / No.
+// ─────────────────────────────────────────────
+
+/** Le risposte che può dare una famiglia: "Da sentire" non è una risposta. */
+export type RispostaFamiglia = Exclude<StatoRientro, 'DA_SENTIRE'>
+
+// Come la risposta suona nel titolo del campanellino ("Rientri: Luca Rossi — torna")
+const FRASE_CAMPANELLINO: Record<RispostaFamiglia, string> = {
+  CONFERMATO: 'torna',
+  IN_FORSE:   'non lo sa ancora',
+  NON_TORNA:  'non torna',
+}
+
+/**
+ * La famiglia può rispondere (o cambiare idea) finché l'alunno è "da sentire"
+ * oppure finché l'ultima parola l'ha detta un genitore, anche l'altro genitore.
+ * Se la risposta l'ha scritta la segreteria vale quella: ne ha parlato con
+ * qualcuno, e il portale non deve poterla cambiare di nascosto.
+ * Autore sconosciuto (utente cancellato) = come la segreteria: meglio chiuso.
+ */
+function famigliaPuoRispondere(stato: string | null, ruoloAutore: string | null): boolean {
+  return (stato ?? 'DA_SENTIRE') === 'DA_SENTIRE' || ruoloAutore === 'GENITORE'
+}
+
+/** Il quaderno dell'anno, agganciato all'alunno e a chi ha scritto per ultimo. */
+const confermaDellAnno = (anno: string) => and(
+  eq(studentConfirmations.studentId, students.id),
+  eq(studentConfirmations.anno, anno),
+)
+
+/**
+ * I figli ATTIVI (fra quelli indicati) con la risposta dell'anno corrente.
+ * Interruttore spento = nessun figlio: il portale non mostra niente.
+ * Le note NON escono mai da qui: sono appunti della segreteria.
+ */
+export async function rientriDellaFamiglia(studentIds: string[]) {
+  const [{ anno }, accesa] = await Promise.all([getAnnoCorrente(), confermaPortaleAccesa()])
+  if (!accesa || studentIds.length === 0) return { anno, figli: [] }
+
+  const righe = await db
+    .select({
+      studentId:    students.id,
+      firstName:    students.firstName,
+      lastName:     students.lastName,
+      stato:        studentConfirmations.stato,
+      dataRisposta: sql<string | null>`to_char(${studentConfirmations.dataRisposta}, 'YYYY-MM-DD')`,
+      ruoloAutore:  users.role,
+    })
+    .from(students)
+    .leftJoin(studentConfirmations, confermaDellAnno(anno))
+    .leftJoin(users, eq(studentConfirmations.aggiornatoDaUserId, users.id))
+    .where(and(inArray(students.id, studentIds), eq(students.active, true)))
+    .orderBy(students.firstName)
+
+  return {
+    anno,
+    figli: righe.map((r) => ({
+      studentId:     r.studentId,
+      firstName:     r.firstName,
+      lastName:      r.lastName,
+      stato:         (r.stato ?? 'DA_SENTIRE') as StatoRientro,
+      dataRisposta:  r.dataRisposta,
+      puoRispondere: famigliaPuoRispondere(r.stato, r.ruoloAutore),
+    })),
+  }
+}
+
+/**
+ * Salva la risposta di un genitore. Chi chiama ha già verificato che l'alunno
+ * sia collegato a quel genitore.
+ */
+export async function rispondiRientroDalPortale(input: {
+  studentId: string
+  stato: RispostaFamiglia
+  nota?: string | null
+  genitore: { id: string; firstName: string; lastName: string }
+}) {
+  const [{ anno }, accesa] = await Promise.all([getAnnoCorrente(), confermaPortaleAccesa()])
+  if (!accesa) {
+    throw new Error('In questo momento non raccogliamo le risposte dal portale: scrivici o chiamaci.')
+  }
+
+  const [riga] = await db
+    .select({
+      firstName:   students.firstName,
+      lastName:    students.lastName,
+      active:      students.active,
+      stato:       studentConfirmations.stato,
+      note:        studentConfirmations.note,
+      ruoloAutore: users.role,
+    })
+    .from(students)
+    .leftJoin(studentConfirmations, confermaDellAnno(anno))
+    .leftJoin(users, eq(studentConfirmations.aggiornatoDaUserId, users.id))
+    .where(eq(students.id, input.studentId))
+    .limit(1)
+
+  if (!riga || !riga.active) throw new Error('Alunno non trovato')
+  if (!famigliaPuoRispondere(riga.stato, riga.ruoloAutore)) {
+    throw new Error('La risposta l\'abbiamo già registrata noi: se è cambiato qualcosa, scrivici o chiamaci.')
+  }
+
+  const nomeGenitore = `${input.genitore.firstName} ${input.genitore.lastName}`.trim()
+  const nota = input.nota?.trim() || null
+
+  // La nota della famiglia si AGGIUNGE in fondo a quella che c'è, non la
+  // sostituisce: nello stesso campo la segreteria può aver già scritto i suoi
+  // appunti ("richiamare dopo il 15"), che non vanno persi. Nessuna nota = il
+  // campo resta com'è.
+  // ponytail: il tetto di 2000 è quello della finestra della nota in segreteria;
+  // oltre si taglia la coda (servono decine di risposte con nota per arrivarci).
+  let note: string | undefined
+  if (nota) {
+    const [, mese, giorno] = oggiRomeStr().split('-')
+    const aggiunta = `${nomeGenitore} dal portale (${giorno}/${mese}): ${nota}`
+    note = [riga.note, aggiunta].filter(Boolean).join('\n').slice(0, 2000)
+  }
+
+  const salvata = await setRientro(input.studentId, anno, { stato: input.stato, note }, input.genitore.id)
+
+  // Il campanellino DOPO il salvataggio: se l'avviso non parte, la risposta
+  // della famiglia resta comunque scritta, ed è lei che conta.
+  try {
+    const nomeAlunno = `${riga.firstName} ${riga.lastName}`.trim()
+    const notaBreve = nota && nota.length > 120 ? `${nota.slice(0, 120)}…` : nota
+    await creaNotifica({
+      tipo:      'GENERICA',
+      titolo:    `Rientri: ${nomeAlunno} — ${FRASE_CAMPANELLINO[input.stato]}`.slice(0, 200),
+      messaggio: `Risposta di ${nomeGenitore} dal portale` + (notaBreve ? ` — «${notaBreve}»` : ''),
+      link:      '/rientri',
+      entityType: 'rientro',
+      entityId:   salvata.id,
+      // Ogni risposta è una notizia a sé, anche quando la famiglia cambia idea
+      evitaDoppioni: false,
+    })
+  } catch (err) {
+    console.warn('[rientri] risposta dal portale salvata ma notifica non creata:', err)
+  }
+
+  // Al portale torna solo ciò che serve: mai le note della segreteria
+  return { studentId: salvata.studentId, stato: salvata.stato, dataRisposta: salvata.dataRisposta }
 }
 
 // ─────────────────────────────────────────────

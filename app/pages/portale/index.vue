@@ -32,6 +32,11 @@
       @update:open="chiudiInvitoConsensi"
     />
 
+    <!-- ═══ «TORNA DA NOI QUEST'ANNO?» ═══
+         Solo per i genitori, e solo quando la segreteria l'ha acceso nella
+         pagina Rientri: il riquadro si nasconde da solo se non c'è niente da chiedere. -->
+    <DomandaRientro v-if="!isStudente" />
+
     <!-- ═══ GIORNATE MATERIE SPECIALI DEL MESE ═══ -->
     <UCard v-if="giornateSpecialiMese.length" class="border border-amber-200 bg-amber-50/60">
       <div class="flex items-start gap-3">

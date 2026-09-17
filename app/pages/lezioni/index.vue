@@ -42,8 +42,76 @@
       />
     </div>
 
-    <!-- Tabella lezioni -->
-    <div class="bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm overflow-hidden">
+    <!-- ─── TELEFONO: una scheda per lezione ─── -->
+    <!-- La tabella sul telefono non ci sta. In cima quando e con chi (è quello che
+         si cerca scorrendo), sotto tipo, alunni e compenso. Toccare la scheda apre
+         i dettagli; il menù "⋯" ha le stesse voci della tabella. -->
+    <div class="lg:hidden space-y-3">
+      <div v-if="pending && lezioni.length === 0" class="space-y-3">
+        <USkeleton v-for="n in 5" :key="n" class="h-24 w-full rounded-2xl" />
+      </div>
+
+      <div
+        v-for="l in lezioni"
+        :key="l.id"
+        class="bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-4 flex items-start gap-2 transition-opacity"
+        :class="{ 'opacity-60': pending }"
+      >
+        <button type="button" class="flex-1 min-w-0 text-left" @click="apriDettaglio(l)">
+          <span class="block font-semibold text-slate-900">
+            {{ formatDataConGiorno(l.data) }}
+            <span v-if="l.timeSlot" class="font-normal text-slate-500">
+              · {{ l.timeSlot.oraInizio.substring(0,5) }} - {{ l.timeSlot.oraFine.substring(0,5) }}
+            </span>
+          </span>
+          <span class="block text-sm text-slate-700 truncate">{{ l.tutor?.firstName }} {{ l.tutor?.lastName }}</span>
+          <span class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-sm">
+            <UBadge :color="coloreTipo(l.tipo)" variant="subtle" size="sm" class="font-medium uppercase tracking-wide text-xs">
+              {{ l.tipo }}
+            </UBadge>
+            <!-- Sul telefono il segno di spunta va con la scritta: l'icona da sola non si capisce -->
+            <span v-if="l.confermata" class="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+              <UIcon name="i-heroicons-check-badge" class="w-4 h-4" />
+              Visione confermata
+            </span>
+            <span class="inline-flex items-center gap-1 text-slate-600">
+              <UIcon name="i-heroicons-users" class="w-4 h-4 text-slate-400" />
+              {{ l.lessonStudents?.length === 1 ? '1 alunno' : `${l.lessonStudents?.length ?? 0} alunni` }}
+            </span>
+            <span class="ml-auto font-bold text-emerald-700">
+              € {{ l.compensoTutor ? parseFloat(l.compensoTutor).toFixed(2) : '—' }}
+            </span>
+          </span>
+          <span v-if="l.note" class="block text-xs text-slate-500 mt-2 line-clamp-2">{{ l.note }}</span>
+        </button>
+        <UDropdownMenu :items="azioniLezione(l)">
+          <UButton
+            icon="i-heroicons-ellipsis-vertical" color="neutral" variant="ghost"
+            class="size-11 justify-center -mr-2 -mt-2" aria-label="Altre azioni sulla lezione"
+          />
+        </UDropdownMenu>
+      </div>
+
+      <div v-if="!pending && lezioni.length === 0" class="py-16 text-center bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm">
+        <UIcon name="i-heroicons-calendar-days" class="w-12 h-12 text-slate-300 mx-auto mb-3" />
+        <h3 class="text-lg font-bold text-slate-700">Nessuna lezione</h3>
+        <p class="text-slate-500 text-sm mt-1">Non ci sono lezioni nel periodo o coi filtri selezionati.</p>
+      </div>
+
+      <!-- Stessa paginazione della tabella; sul telefono mostra meno numeri per starci in larghezza -->
+      <div v-if="meta && meta.totalPages > 1" class="flex justify-center py-2">
+        <UPagination
+          v-model:page="pagina"
+          :total="meta.total"
+          :items-per-page="50"
+          :sibling-count="1"
+          @update:page="cambiaPagina"
+        />
+      </div>
+    </div>
+
+    <!-- Tabella lezioni (da computer) -->
+    <div class="hidden lg:block bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm overflow-hidden">
       <UTable
         :data="lezioni"
         :columns="colonne"
@@ -105,14 +173,7 @@
         <!-- Colonna Azioni -->
         <template #azioni-cell="{ row }">
           <div class="flex justify-end">
-            <UDropdownMenu
-              :items="[
-                [
-                  { label: 'Dettagli', icon: 'i-heroicons-document-magnifying-glass', onSelect: () => apriDettaglio(row.original) },
-                  { label: 'Vai al Calendario', icon: 'i-heroicons-calendar-days', onSelect: () => vaiAlCalendario(row.original) },
-                ]
-              ]"
-            >
+            <UDropdownMenu :items="azioniLezione(row.original)">
               <UButton icon="i-heroicons-ellipsis-horizontal" color="neutral" variant="ghost" size="sm" />
             </UDropdownMenu>
           </div>
@@ -314,6 +375,15 @@ function apriDettaglio(row: any) {
 function vaiAlCalendario(lezione: any) {
   const data = lezione.data?.slice(0, 10) // prende YYYY-MM-DD
   navigateTo(`/calendario?data=${data}`)
+}
+
+// Le voci del menù "⋯" di una lezione. Stanno in un posto solo perché le usano
+// sia la tabella (computer) sia le schede (telefono): così non possono divergere.
+function azioniLezione(lezione: any) {
+  return [[
+    { label: 'Dettagli', icon: 'i-heroicons-document-magnifying-glass', onSelect: () => apriDettaglio(lezione) },
+    { label: 'Vai al Calendario', icon: 'i-heroicons-calendar-days', onSelect: () => vaiAlCalendario(lezione) },
+  ]]
 }
 
 const toast = useToast()

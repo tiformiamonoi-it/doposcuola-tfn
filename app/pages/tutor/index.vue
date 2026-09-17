@@ -51,8 +51,91 @@
       </label>
     </div>
 
-    <!-- Tabella -->
-    <UCard :ui="{ body: 'p-0' }">
+    <!-- ─── TELEFONO: una scheda per tutor ─── -->
+    <!-- La tabella sul telefono non ci sta. In cima chi è e se è attivo, poi le due
+         cose che servono in giro: quanto gli si deve (tocca per il dettaglio mese
+         per mese) e i tasti per chiamarlo o scrivergli. Il menù "⋯" ha le stesse
+         voci della tabella. -->
+    <div class="lg:hidden space-y-3">
+      <div v-if="pending && tutors.length === 0" class="space-y-3">
+        <USkeleton v-for="n in 4" :key="n" class="h-28 w-full rounded-2xl" />
+      </div>
+
+      <div
+        v-for="t in tutors"
+        :key="t.id"
+        class="bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-4 space-y-3 transition-opacity"
+        :class="{ 'opacity-60': pending }"
+      >
+        <div class="flex items-center gap-2">
+          <NuxtLink :to="`/tutor/${t.id}`" class="flex items-center gap-3 flex-1 min-w-0 min-h-11">
+            <span
+              class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
+              :class="[coloreAvatar(t.id).bg, coloreAvatar(t.id).text]"
+            >
+              {{ inizialiDa(t.firstName, t.lastName) }}
+            </span>
+            <span class="min-w-0">
+              <span class="block font-semibold text-slate-900 truncate">{{ t.lastName }} {{ t.firstName }}</span>
+              <span class="block text-xs text-slate-500 truncate">{{ t.email }}</span>
+            </span>
+          </NuxtLink>
+          <UBadge :color="t.active ? 'success' : 'neutral'" variant="subtle">
+            {{ t.active ? 'Attivo' : 'Inattivo' }}
+          </UBadge>
+          <UDropdownMenu :items="azioniTutor(t)">
+            <UButton
+              icon="i-heroicons-ellipsis-vertical" variant="ghost" color="neutral"
+              class="size-11 justify-center -mr-2" :aria-label="`Altre azioni su ${t.lastName} ${t.firstName}`"
+            />
+          </UDropdownMenu>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2 text-sm">
+          <span class="text-slate-600">
+            {{ t.numLezioniMese }} {{ t.numLezioniMese === 1 ? 'lezione' : 'lezioni' }} questo mese
+          </span>
+          <button
+            v-if="t.totaleDaLiquidare > 0.01"
+            type="button"
+            class="ml-auto min-h-11 text-right"
+            @click="apriDettaglioArretrati(t)"
+          >
+            <UBadge color="error" variant="subtle">
+              Da liquidare € {{ t.totaleDaLiquidare.toFixed(2) }}
+            </UBadge>
+            <span class="block text-xs text-slate-500 mt-0.5">
+              {{ t.mesiDaLiquidare }} mes{{ t.mesiDaLiquidare === 1 ? 'e' : 'i' }} · vedi dettaglio
+            </span>
+          </button>
+          <span v-else class="ml-auto text-xs text-slate-500">Niente da liquidare</span>
+        </div>
+
+        <div v-if="t.phone" class="flex items-center gap-2">
+          <UButton
+            icon="i-heroicons-phone" variant="soft" color="neutral" class="min-h-11"
+            :to="`tel:${normalizzaTelefono(t.phone)}`"
+            :aria-label="`Chiama ${t.phone}`"
+          >
+            {{ t.phone }}
+          </UButton>
+          <UButton
+            icon="i-heroicons-chat-bubble-left-ellipsis" variant="soft" color="success" class="size-11 justify-center"
+            :to="`https://wa.me/${normalizzaTelefono(t.phone).replace('+', '')}`"
+            target="_blank"
+            aria-label="Scrivi su WhatsApp"
+          />
+        </div>
+      </div>
+
+      <div v-if="!pending && tutors.length === 0" class="py-12 text-center bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm">
+        <UIcon name="i-heroicons-academic-cap" class="w-10 h-10 text-slate-300 mx-auto mb-3" />
+        <p class="text-slate-500 text-sm">Nessun tutor trovato</p>
+      </div>
+    </div>
+
+    <!-- Tabella (da computer) -->
+    <UCard :ui="{ body: 'p-0' }" class="hidden lg:block">
       <UTable :data="tutors" :columns="colonne" :loading="pending">
 
         <template #nome-cell="{ row }">
@@ -207,6 +290,8 @@
 </template>
 
 <script setup lang="ts">
+import { inizialiDa, coloreAvatar } from '~/utils/avatar'
+
 definePageMeta({ middleware: ['admin-or-super'] })
 
 const toast = useToast()

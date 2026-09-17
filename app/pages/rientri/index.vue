@@ -46,6 +46,22 @@
       :title="`Stai guardando l'appello dell'anno ${anno}: è solo consultazione.`"
     />
 
+    <!-- ═══ LA DOMANDA ALLE FAMIGLIE DAL PORTALE ═══ -->
+    <!-- Vale per l'anno corrente: sugli anni passati non c'è niente da chiedere -->
+    <div v-else-if="data" class="bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm px-4 py-3">
+      <USwitch
+        :model-value="confermaPortale"
+        :loading="salvandoConfermaPortale"
+        :disabled="salvandoConfermaPortale"
+        label="Chiedi la conferma alle famiglie dal portale"
+        :description="confermaPortale
+          ? `Acceso: nella home del portale ogni genitore trova la domanda «torna da noi quest'anno (${anno})?» per i suoi figli. Le risposte arrivano qui con la scritta «dal portale» e nel campanellino. Quelle che segnate voi la famiglia le vede, ma non le può cambiare.`
+          : 'Spento: le famiglie non vedono nessuna domanda. Se lo accendi, dal portale potranno dirti da sole se i ragazzi tornano.'"
+        :ui="{ label: 'text-slate-800', description: 'text-slate-500' }"
+        @update:model-value="cambiaConfermaPortale"
+      />
+    </div>
+
     <!-- ═══ CARD DI RIEPILOGO (cliccabili = filtro rapido) ═══ -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <div
@@ -127,6 +143,7 @@
                 {{ labelStatoRientro(r.stato) }}
               </UBadge>
               <p v-if="r.dataRisposta" class="text-[11px] text-slate-400 mt-1">{{ formatGiorno(r.dataRisposta) }}</p>
+              <p v-if="r.dalPortale" class="text-[11px] font-medium text-tfn-600 mt-0.5">dal portale</p>
             </div>
           </div>
 
@@ -176,6 +193,8 @@
               block
               :color="coloreStatoRientro(risposta.value)"
               :variant="r.stato === risposta.value ? 'solid' : 'outline'"
+              :aria-pressed="r.stato === risposta.value"
+              :title="r.stato === risposta.value ? 'Premi di nuovo per tornare a Da sentire' : undefined"
               :loading="inSalvataggio === `${r.studentId}|${risposta.value}`"
               @click="() => rispondi(r, risposta.value)"
             >
@@ -243,6 +262,8 @@
               <p v-if="row.original.dataRisposta" class="text-[11px] text-slate-400 mt-1">
                 {{ formatGiorno(row.original.dataRisposta) }}
               </p>
+              <!-- L'ultima risposta l'ha data la famiglia: la segreteria può sempre sovrascriverla -->
+              <p v-if="row.original.dalPortale" class="text-[11px] font-medium text-tfn-600 mt-0.5">dal portale</p>
             </div>
           </template>
 
@@ -255,6 +276,8 @@
                   size="xs"
                   :color="coloreStatoRientro(risposta.value)"
                   :variant="row.original.stato === risposta.value ? 'solid' : 'outline'"
+                  :aria-pressed="row.original.stato === risposta.value"
+                  :title="row.original.stato === risposta.value ? 'Premi di nuovo per tornare a Da sentire' : undefined"
                   :loading="inSalvataggio === `${row.original.studentId}|${risposta.value}`"
                   @click="() => rispondi(row.original, risposta.value)"
                 >
@@ -412,6 +435,7 @@ const anno         = ref('')
 const annoCorrente = ref('')
 const anni         = ref<string[]>([])
 const inizio = ref('')
+const confermaPortale = ref(false)
 
 watchEffect(() => {
   righe.value  = (data.value?.items ?? []).map((r) => ({ ...r }))
@@ -420,7 +444,31 @@ watchEffect(() => {
   annoCorrente.value = data.value?.annoCorrente ?? ''
   anni.value         = data.value?.anni ?? []
   inizio.value = data.value?.inizio ?? ''
+  confermaPortale.value = Boolean(data.value?.confermaPortale)
 })
+
+// ─── Interruttore: chiedi la conferma alle famiglie dal portale ───
+// Si sposta subito; se il salvataggio non riesce torna dov'era.
+const salvandoConfermaPortale = ref(false)
+
+async function cambiaConfermaPortale(accesa: boolean) {
+  if (salvandoConfermaPortale.value) return
+  const prima = confermaPortale.value
+  confermaPortale.value = accesa
+  salvandoConfermaPortale.value = true
+  try {
+    await $fetch('/api/confirmations/conferma-portale', { method: 'PUT', body: { accesa } })
+    toast.add({
+      title: accesa ? 'Domanda accesa nel portale famiglie' : 'Domanda spenta nel portale famiglie',
+      color: 'success',
+    })
+  } catch (err: any) {
+    confermaPortale.value = prima
+    toast.add({ title: err?.data?.statusMessage ?? 'Non è stato possibile cambiare l\'interruttore', color: 'error' })
+  } finally {
+    salvandoConfermaPortale.value = false
+  }
+}
 
 // ─── Storico: gli anni passati si guardano soltanto ───
 const anniItems = computed(() => anni.value.map((a) => ({ label: a, value: a })))
@@ -545,12 +593,17 @@ function spostaContatori(riga: RigaRientro, da: StatoRientro, a: StatoRientro) {
   }
 }
 
-async function rispondi(riga: RigaRientro, stato: StatoRientro) {
-  // Premere di nuovo il bottone già acceso non fa nulla; sugli anni passati nemmeno
-  if (soloLettura.value || riga.stato === stato || inSalvataggio.value) return
+async function rispondi(riga: RigaRientro, premuto: StatoRientro) {
+  // Sugli anni passati non si tocca niente
+  if (soloLettura.value || inSalvataggio.value) return
+
+  // Premere di nuovo il bottone già acceso lo spegne: l'alunno torna "Da sentire".
+  // Serve a correggere un clic sbagliato e a riaprire la domanda a una famiglia che
+  // nel portale vede la risposta bloccata (quella della segreteria vince sempre).
+  const stato: StatoRientro = riga.stato === premuto ? 'DA_SENTIRE' : premuto
 
   // Chiave "alunno|risposta": la rotellina gira solo sul bottone premuto
-  inSalvataggio.value = `${riga.studentId}|${stato}`
+  inSalvataggio.value = `${riga.studentId}|${premuto}`
   const precedente = riga.stato
   try {
     const res = await $fetch<{ data: { stato: StatoRientro; dataRisposta: string | null; note: string | null } }>(
@@ -559,6 +612,8 @@ async function rispondi(riga: RigaRientro, stato: StatoRientro) {
     )
     riga.stato        = res.data?.stato ?? stato
     riga.dataRisposta = res.data?.dataRisposta ?? null
+    // Da adesso la risposta è della segreteria: la famiglia la vede in sola lettura
+    riga.dalPortale   = false
     spostaContatori(riga, precedente, riga.stato)
   } catch (err: any) {
     toast.add({ title: err?.data?.statusMessage ?? 'Non è stato possibile salvare la risposta', color: 'error' })
@@ -591,6 +646,8 @@ async function salvaNota() {
       body: { stato: riga.stato, note: testoNota.value },
     })
     riga.note = res.data?.note ?? null
+    // Salvare la nota riscrive anche la risposta a nome della segreteria (come sul server)
+    riga.dalPortale = false
     modalNotaAperta.value = false
     toast.add({ title: 'Nota salvata', color: 'success' })
   } catch (err: any) {

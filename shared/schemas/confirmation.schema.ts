@@ -60,6 +60,23 @@ export const DisattivaNonRientratiSchema = z.object({
   anno: annoScolastico.optional(),
 })
 
+// ─────────────────────────────────────────────
+// PUT /api/confirmations/conferma-portale — l'interruttore della domanda alle famiglie
+// ─────────────────────────────────────────────
+export const ConfermaPortaleSchema = z.object({
+  accesa: z.boolean({ message: 'Valore dell\'interruttore non valido' }),
+})
+
+// ─────────────────────────────────────────────
+// POST /api/portal/rientri — la risposta di un genitore dal portale
+// ─────────────────────────────────────────────
+export const RispostaFamigliaSchema = z.object({
+  studentId: z.string().min(1, 'Manca l\'alunno'),
+  // "Da sentire" non è una risposta che può dare una famiglia
+  stato: z.enum(['CONFERMATO', 'IN_FORSE', 'NON_TORNA'], { message: 'Risposta non valida' }),
+  nota:  z.string().trim().max(500, 'La nota non può superare 500 caratteri').optional(),
+})
+
 export type ListRientriQuery       = z.infer<typeof ListRientriQuerySchema>
 export type SetRientroInput        = z.infer<typeof SetRientroSchema>
 export type DisattivaNonRientratiInput = z.infer<typeof DisattivaNonRientratiSchema>
