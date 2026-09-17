@@ -100,6 +100,20 @@ export const ESITI_INTERAZIONE = [
 
 export type EsitoInterazione = (typeof ESITI_INTERAZIONE)[number]['value']
 
+// LA RIGA "CONVERTITO IN …"
+// Quando un contatto diventa alunno o tutor il gestionale scrive da solo una riga
+// nel diario: «Convertito in studente: Luca Rossi». È un fatto da ricordare, non
+// una conversazione con la persona: non deve contare come "primo contatto" né
+// come "ultimo contatto" (altrimenti la data diventerebbe quella della conversione).
+// Nel database non c'è una colonna per distinguerla, e aggiungerla vorrebbe dire
+// cambiare lo schema per una riga sola: la si riconosce da com'è fatta. La scrive
+// soltanto il gestionale, sempre con queste parole, tipo Altro e canale Altro.
+export const INIZIO_NOTA_CONVERSIONE = 'Convertito in '
+
+export function eRigaDiConversione(riga: { tipo: string; canale: string; note: string | null }): boolean {
+  return riga.tipo === 'ALTRO' && riga.canale === 'ALTRO' && (riga.note ?? '').startsWith(INIZIO_NOTA_CONVERSIONE)
+}
+
 // ─────────────────────────────────────────────
 // Elenchi dei soli valori — servono a z.enum() negli schemi Zod
 // ─────────────────────────────────────────────

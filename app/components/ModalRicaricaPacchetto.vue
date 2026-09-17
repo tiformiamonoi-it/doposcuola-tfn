@@ -2,6 +2,13 @@
   <UModal v-model:open="isOpen" title="Nuova Ricarica">
     <template #body>
       <div class="space-y-4">
+        <!-- Libretto sospeso: la ricarica resta permessa (decisione del titolare),
+             ma chi la registra deve sapere che quelle ore restano ferme.
+             `sospeso` arriva da /api/packages, da cui leggono entrambe le pagine
+             che aprono questa finestra (Pacchetti e scheda studente). -->
+        <UAlert v-if="pacchetto?.sospeso" color="warning" variant="subtle"
+          title="Questo libretto è sospeso: la ricarica si registra, ma le ore non si potranno usare finché non lo riattivi."
+        />
         <UAlert v-if="pacchetto" color="info" variant="subtle"
           :title="pacchetto.nome"
           description="Il libretto si ricarica a ore: scrivi quante ne aggiungi e il prezzo si calcola da solo."

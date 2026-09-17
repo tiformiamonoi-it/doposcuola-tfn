@@ -56,26 +56,35 @@ export async function listStudents(query: StudentQuery) {
     )
   }
 
-  if (query.packageStatus && query.packageStatus !== 'all') {
-    if (query.packageStatus === 'NESSUNO') {
-      conditions.push(
-        notExists(
-          db.select({ id: packages.id }).from(packages).where(and(eq(packages.studentId, students.id), pacchettoAperto()))
-        )
+  if (query.packageStatus === 'NESSUNO') {
+    conditions.push(
+      notExists(
+        db.select({ id: packages.id }).from(packages).where(and(eq(packages.studentId, students.id), pacchettoAperto()))
       )
-    } else {
-      conditions.push(
-        exists(
-          db.select({ id: packages.id }).from(packages).where(
-            and(
-              eq(packages.studentId, students.id),
-              pacchettoAperto(),
-              arrayContains(packages.stati, [query.packageStatus as any])
-            )
+    )
+  }
+
+  // Stato, tipo e modello del pacchetto si controllano tutti insieme, su UNO STESSO
+  // pacchetto aperto. Perché: con tre controlli separati, chi ha un libretto
+  // "Da pagare" e un mensile già saldato uscirebbe cercando "Mensile + Da pagare",
+  // anche se nessuno dei suoi pacchetti è davvero un mensile da pagare.
+  // (Con "Nessun pacchetto" + un tipo scelto la lista resta vuota: è giusto così,
+  // le due richieste si contraddicono.)
+  const statoPacchetto = query.packageStatus !== 'all' && query.packageStatus !== 'NESSUNO' ? query.packageStatus : undefined
+  if (statoPacchetto || query.packageTipo || query.standardPackageId) {
+    conditions.push(
+      exists(
+        db.select({ id: packages.id }).from(packages).where(
+          and(
+            eq(packages.studentId, students.id),
+            pacchettoAperto(),
+            statoPacchetto ? arrayContains(packages.stati, [statoPacchetto]) : undefined,
+            query.packageTipo ? eq(packages.tipo, query.packageTipo) : undefined,
+            query.standardPackageId ? eq(packages.standardPackageId, query.standardPackageId) : undefined,
           )
         )
       )
-    }
+    )
   }
 
   const where = and(...conditions)
@@ -109,12 +118,13 @@ export async function listStudents(query: StudentQuery) {
   let studentPackages: {
     id: string, nome: string, studentId: string, stati: string[], createdAt: Date, oreResiduo: string | null, tipo: string | null,
     oreAcquistate: string, importoResiduo: string, dataScadenza: Date | null, giorniResiduo: number | null, sospeso: boolean | null,
-    dataInizio: Date,
+    dataInizio: Date, standardPackageId: string | null,
   }[] = []
   if (studentIds.length > 0) {
     studentPackages = await db.select({
       id: packages.id,
       nome: packages.nome,
+      standardPackageId: packages.standardPackageId,
       studentId: packages.studentId,
       stati: packages.stati,
       createdAt: packages.createdAt,
@@ -166,7 +176,10 @@ export async function listStudents(query: StudentQuery) {
         sospeso:        p.sospeso,
       }) as string[] }))
 
+    // In ordine di creazione anche per gli inattivi: il "pacchetto in corso" qui sotto
+    // (pkgAttivo) finisce nel file Excel e deve essere sempre lo stesso, non a caso.
     const pkgs = pkgsAll.filter(p => !p.stati.includes('CHIUSO'))
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
 
     let globalStatus = 'Inattivo'
     let statusColor = 'neutral'
@@ -176,8 +189,6 @@ export async function listStudents(query: StudentQuery) {
        statusColor = 'success'
 
        if (pkgs.length > 0) {
-         pkgs.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-
          // Priorità di PRESENTAZIONE del badge: nel database il pacchetto resta DA_PAGARE
          // (contabilità, filtri e conteggi non cambiano), ma un saldo aperto su un pacchetto
          // NON ancora iniziato non è un'urgenza e non deve dipingere l'alunno di rosso.
@@ -211,6 +222,9 @@ export async function listStudents(query: StudentQuery) {
 
     // Pacchetto attivo più rilevante (il primo non chiuso)
     const pkgAttivo = pkgs[0]
+    const pkgDelFiltro = pkgs.find(p =>
+      (!query.packageTipo || p.tipo === query.packageTipo)
+      && (!query.standardPackageId || p.standardPackageId === query.standardPackageId)) ?? pkgAttivo
     const hasPacchetti = pkgsAll.length > 0
 
     // Selezionabile per una lezione se ha ALMENO un pacchetto ancora "buono":
@@ -245,6 +259,13 @@ export async function listStudents(query: StudentQuery) {
       statusColor,
       pkgOreResiduo: pkgAttivo?.oreResiduo ?? null,
       pkgTipo: pkgAttivo?.tipo ?? null,
+      // Nome e modello del pacchetto in corso: servono all'esportazione in Excel.
+      // Se l'elenco è filtrato per tipo o modello, si racconta il pacchetto che ha
+      // fatto entrare l'alunno nel filtro: chi filtra "Mensile" e ha anche un
+      // libretto aperto deve leggere il mensile nel file, non il libretto.
+      pkgNome: pkgDelFiltro?.nome ?? null,
+      pkgStandardPackageId: pkgDelFiltro?.standardPackageId ?? null,
+      pkgTipoDelFiltro: pkgDelFiltro?.tipo ?? null,
       hasPacchetti,
       blockLabel,
       pacchettiAttivi,

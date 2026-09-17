@@ -238,6 +238,10 @@ export const StudentQuerySchema = z.object({
   search:   z.string().optional(),
   active:   z.enum(['true', 'false']).optional(),
   packageStatus: z.enum(['DA_PAGARE', 'DA_RINNOVARE', 'SCADUTO', 'ATTIVO', 'NESSUNO', 'all']).optional(),
+  // Solo chi ha un pacchetto in corso di quel tipo e/o nato da quel modello
+  // (standard_packages.id). Se arrivano insieme, valgono sullo stesso pacchetto.
+  packageTipo:       z.enum(['ORE', 'MENSILE', 'A_CONSUMO']).optional(),
+  standardPackageId: z.string().optional(),
   hideInactive: z.enum(['true', 'false']).optional(),
   // Data della lezione che si sta creando ('YYYY-MM-DD'): serve al picker per NON
   // bloccare i mensili a giorni finiti che hanno GIÀ una lezione in quella data

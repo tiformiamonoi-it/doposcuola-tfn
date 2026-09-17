@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    return await createNote(result.data, { id: sessionUser.id, role: sessionUser.role })
+    return await createNote(result.data, sessionUser)
   } catch (err: any) {
     if (err.statusCode) throw err
     throw toHttpError(err)

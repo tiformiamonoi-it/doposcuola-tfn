@@ -197,10 +197,12 @@
             tiene su una riga sola). Dove ci stanno tutte, l'aspetto non cambia.
           -->
           <UTabs
+            v-model="linguettaAperta"
             :items="tabItems"
+            value-key="slot"
             class="w-full"
             :ui="{ list: 'overflow-x-auto scrollbar-nascosta', trigger: 'shrink-0', label: 'text-clip whitespace-nowrap' }"
-            @update:model-value="portaInVistaLinguetta"
+            @update:model-value="linguettaScelta"
           >
             <template #panoramica>
               <div class="space-y-6 mt-4">
@@ -1272,6 +1274,32 @@ async function portaInVistaLinguetta() {
   contenitoreTabs.value
     ?.querySelector<HTMLElement>('[data-slot="trigger"][data-state="active"]')
     ?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+}
+
+// La linguetta aperta. Il valore di ogni linguetta è il nome del suo slot
+// (value-key="slot"), così l'indirizzo può chiederne una per nome.
+// ?tab=note è il link degli avvisi del campanellino sulle note: apre subito le
+// Note, sia arrivando sulla pagina sia se si è GIÀ sulla scheda di questo alunno
+// (lì cambia solo l'indirizzo e Nuxt non ricarica la pagina: va osservato).
+const router = useRouter()
+const linguettaAperta = ref<string | number>('panoramica')
+watch(() => route.query.tab, (tab) => {
+  if (tab === 'note') {
+    linguettaAperta.value = 'note'
+    portaInVistaLinguetta()
+  }
+}, { immediate: true })
+// Arrivando da un avviso la striscia non è ancora disegnata quando il watch parte:
+// da telefono la linguetta Note resterebbe fuori schermo a destra.
+onMounted(() => { if (route.query.tab === 'note') portaInVistaLinguetta() })
+
+function linguettaScelta() {
+  portaInVistaLinguetta()
+  // Scelta a mano un'altra linguetta, ?tab=note non è più vero: si toglie
+  // dall'indirizzo. Così ricaricando non si torna alle Note e, soprattutto, un
+  // secondo clic su un avviso dello stesso alunno cambia di nuovo l'indirizzo e
+  // riapre le Note (a indirizzo identico il clic non farebbe niente).
+  if (route.query.tab) router.replace({ query: { ...route.query, tab: undefined } })
 }
 
 const filtroLezioni = reactive({ dataInizio: '', dataFine: '' })

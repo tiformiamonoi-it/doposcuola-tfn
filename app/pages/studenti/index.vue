@@ -2,18 +2,28 @@
   <div class="space-y-6">
 
     <!-- Intestazione pagina -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h2 class="text-xl font-semibold text-slate-900">Studenti</h2>
         <p class="text-sm text-slate-500 mt-0.5">{{ meta?.total ?? 0 }} studenti totali</p>
       </div>
-      <UButton
-        v-if="isAdmin"
-        icon="i-heroicons-plus"
-        @click="() => { wizardAperto = true }"
-      >
-        Nuovo Studente
-      </UButton>
+      <div class="flex items-center gap-2">
+        <UTooltip v-if="puoEsportare" text="Scarica in Excel gli studenti con i filtri e la ricerca attivi">
+          <UButton
+            icon="i-heroicons-arrow-down-tray" variant="soft" color="neutral"
+            :loading="esportando" @click="esportaCsv"
+          >
+            Esporta CSV
+          </UButton>
+        </UTooltip>
+        <UButton
+          v-if="isAdmin"
+          icon="i-heroicons-plus"
+          @click="() => { wizardAperto = true }"
+        >
+          Nuovo Studente
+        </UButton>
+      </div>
     </div>
 
     <!-- Tessere di riepilogo (cliccabili = filtro rapido) -->
@@ -70,6 +80,21 @@
         ]"
         class="w-full sm:w-48"
 
+      />
+      <USelect
+        v-model="filtroTipo"
+        :items="[
+          { label: 'Tipo pacchetto: Tutti', value: 'all' },
+          ...Object.entries(TIPI_PACCHETTO).map(([value, label]) => ({ label, value })),
+        ]"
+        class="w-full sm:w-48"
+        aria-label="Filtra per tipo di pacchetto in corso"
+      />
+      <USelect
+        v-model="filtroModello"
+        :items="opzioniModello"
+        class="w-full sm:w-56"
+        aria-label="Filtra per modello di pacchetto in corso"
       />
       <UCheckbox
         v-model="nascondiInattivi"
@@ -215,6 +240,7 @@
 
 <script setup lang="ts">
 import { inizialiDa, coloreAvatar } from '~/utils/avatar'
+import { livelloDaClasse, etichettaLivello } from '#shared/livello-scolastico'
 
 definePageMeta({ middleware: ['admin-or-super'] })
 
@@ -236,8 +262,36 @@ const search = ref('')
 const filtroAttivo = ref('all')
 const filtroPacchetto = ref('all')
 const nascondiInattivi = ref(true)
+// Tipo e modello del pacchetto IN CORSO ('all' = nessun filtro)
+const filtroTipo = ref('all')
+const filtroModello = ref('all')
 const pagina = ref(1)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
+
+// Le etichette dei tipi di pacchetto come le dice la segreteria: servono sia alla
+// tendina del filtro sia alla colonna "Tipo pacchetto" del file Excel.
+const TIPI_PACCHETTO: Record<string, string> = { ORE: 'A ore', MENSILE: 'Mensile', A_CONSUMO: 'Libretto' }
+
+// ─── Modelli di pacchetto (Impostazioni) per il filtro "Modello" ───
+// Servono anche quelli archiviati: tanti alunni hanno ancora in corso un pacchetto
+// nato da un modello che poi è stato tolto dal listino. L'indirizzo restituisce O
+// gli attivi O gli archiviati, quindi le chiamate sono due (e partono insieme).
+const { data: modelliAttivi }     = useLazyFetch('/api/standard-packages')
+const { data: modelliArchiviati } = useLazyFetch('/api/standard-packages?archiviati=1')
+
+const modelli = computed(() => [
+  ...(modelliAttivi.value ?? []).map((t) => ({ id: t.id, nome: t.nome, label: t.nome })),
+  ...(modelliArchiviati.value ?? []).map((t) => ({ id: t.id, nome: t.nome, label: `${t.nome} (archiviato)` })),
+])
+
+const opzioniModello = computed(() => [
+  { label: 'Modello: Tutti', value: 'all' },
+  ...modelli.value.map((m) => ({ label: m.label, value: m.id })),
+])
+
+// Cambiando un filtro si torna a pagina 1: da pagina 3 di una lista lunga si
+// poteva finire su una pagina vuota di una lista diventata corta.
+watch([search, filtroAttivo, filtroPacchetto, nascondiInattivi, filtroTipo, filtroModello], () => { pagina.value = 1 })
 
 // ─── La forma di una riga dell'elenco ───
 // Sono le colonne della tabella `students` (quelle che questa pagina mostra) più
@@ -263,6 +317,20 @@ type RigaStudente = {
   globalStatus: string
   /** Il colore del badge, deciso dal server: sono gli unici quattro che usa */
   statusColor: 'success' | 'warning' | 'error' | 'neutral'
+  // Da qui in giù: campi che servono solo all'esportazione in Excel
+  dataNascita: string | null
+  studentPhone: string | null
+  parentPhone: string | null
+  parentRelazione: string | null
+  parent2Name: string | null
+  parent2Relazione: string | null
+  parent2Phone: string | null
+  parent2Email: string | null
+  active: boolean
+  /** Il pacchetto in corso (il più vecchio non chiuso, o quello che risponde ai filtri tipo/modello): nome, tipo e modello */
+  pkgNome: string | null
+  pkgTipoDelFiltro: string | null
+  pkgStandardPackageId: string | null
 }
 
 type ElencoStudenti = {
@@ -270,19 +338,26 @@ type ElencoStudenti = {
   meta: { page: number; limit: number; total: number; totalPages: number }
 }
 
+// I filtri attivi, in un posto solo: li usano sia la lista sia l'esportazione in Excel
+const filtriAttivi = computed(() => ({
+  search:  search.value   || undefined,
+  active:  filtroAttivo.value === 'all' ? undefined : filtroAttivo.value,
+  packageStatus: filtroPacchetto.value === 'all' ? undefined : filtroPacchetto.value,
+  hideInactive: nascondiInattivi.value ? 'true' : undefined,
+  packageTipo:       filtroTipo.value === 'all' ? undefined : filtroTipo.value,
+  standardPackageId: filtroModello.value === 'all' ? undefined : filtroModello.value,
+  sortBy:  'lastName',
+  sortDir: 'asc',
+}))
+
 // ─── Fetch studenti ───
 const { data, pending, refresh } = useLazyFetch<ElencoStudenti>('/api/students', {
   query: computed(() => ({
-    search:  search.value   || undefined,
-    active:  filtroAttivo.value === 'all' ? undefined : filtroAttivo.value,
-    packageStatus: filtroPacchetto.value === 'all' ? undefined : filtroPacchetto.value,
-    hideInactive: nascondiInattivi.value ? 'true' : undefined,
+    ...filtriAttivi.value,
     page:    pagina.value,
     limit:   20,
-    sortBy:  'lastName',
-    sortDir: 'asc',
   })),
-  watch: [pagina, filtroAttivo, filtroPacchetto, nascondiInattivi],
+  watch: [pagina, filtroAttivo, filtroPacchetto, nascondiInattivi, filtroTipo, filtroModello],
 })
 
 const studenti = computed(() => data.value?.data ?? [])
@@ -315,7 +390,8 @@ const tesseraAttiva = computed(() => {
   if (filtroPacchetto.value === 'DA_RINNOVARE') return 'daRinnovare'
   if (filtroPacchetto.value !== 'all')          return null
   if (filtroAttivo.value === 'true')            return 'attivi'
-  if (filtroAttivo.value === 'all' && !search.value) return 'totali'
+  // "Studenti totali" è accesa solo se la lista mostra davvero tutti
+  if (filtroAttivo.value === 'all' && !search.value && filtroTipo.value === 'all' && filtroModello.value === 'all') return 'totali'
   return null
 })
 
@@ -324,6 +400,8 @@ function filtraDaTessera(key: string) {
   const giaAttiva = tesseraAttiva.value === key
   filtroAttivo.value = 'all'
   filtroPacchetto.value = 'all'
+  filtroTipo.value = 'all'
+  filtroModello.value = 'all'
   pagina.value = 1
   if (!giaAttiva) {
     if (key === 'attivi')      filtroAttivo.value = 'true'
@@ -354,6 +432,77 @@ function onSearch() {
   }, 350)
 }
 
+// ─── Esporta in Excel (filtri e ricerca attivi, tutte le pagine) ───
+// NEL FILE NON FINISCONO: codice fiscale, partita IVA, indirizzi (via, città, CAP),
+// note, bisogni speciali, consensi e date di nascita dei genitori. Sono dati
+// delicati, e un file CSV viaggia su chiavette, email e computer di casa: una volta
+// uscito dal gestionale non lo si può più richiamare. Chi ne ha bisogno li trova
+// nella scheda dello studente.
+const esportando = ref(false)
+
+async function esportaCsv() {
+  esportando.value = true
+  try {
+    // 2000 per pagina è il massimo che il server accetta: di solito basta una
+    // chiamata sola, ma se un giorno gli studenti fossero di più si prosegue.
+    const righe: RigaStudente[] = []
+    let page = 1
+    let totalPages = 1
+    do {
+      const res = await $fetch<ElencoStudenti>('/api/students', {
+        query: { ...filtriAttivi.value, page, limit: 2000 },
+      })
+      righe.push(...res.data)
+      totalPages = res.meta.totalPages
+      page++
+    } while (page <= totalPages)
+
+    const nomeModello = new Map(modelli.value.map((m) => [m.id, m.nome]))
+
+    const intestazione = [
+      'Cognome', 'Nome', 'Data di nascita', 'Livello', 'Classe', 'Scuola',
+      'Telefono alunno', 'Email alunno',
+      'Genitore 1', 'Parentela genitore 1', 'Telefono genitore 1', 'Email genitore 1',
+      'Genitore 2', 'Parentela genitore 2', 'Telefono genitore 2', 'Email genitore 2',
+      'Pacchetto in corso', 'Tipo pacchetto', 'Modello', 'Stato', 'Attivo',
+    ]
+
+    const corpo = righe.map((s) => {
+      const livello = livelloDaClasse(s.classe)
+      return [
+        s.lastName,
+        s.firstName,
+        s.dataNascita ? formatData(s.dataNascita) : '',
+        livello ? etichettaLivello(livello) : '',
+        s.classe ?? '',
+        s.scuola ?? '',
+        s.studentPhone ?? '',
+        s.studentEmail ?? '',
+        s.parentName ?? '',
+        s.parentRelazione ?? '',
+        s.parentPhone ?? '',
+        s.parentEmail ?? '',
+        s.parent2Name ?? '',
+        s.parent2Relazione ?? '',
+        s.parent2Phone ?? '',
+        s.parent2Email ?? '',
+        s.pkgNome ?? '',
+        s.pkgTipoDelFiltro ? (TIPI_PACCHETTO[s.pkgTipoDelFiltro] ?? s.pkgTipoDelFiltro) : '',
+        s.pkgStandardPackageId ? (nomeModello.get(s.pkgStandardPackageId) ?? '') : '',
+        s.globalStatus,
+        s.active ? 'Sì' : 'No',
+      ]
+    })
+
+    scaricaCsv(`studenti-${oggiISO()}.csv`, righeInCsv(intestazione, corpo))
+    toast.add({ title: `Esportati ${righe.length} studenti`, color: 'success' })
+  } catch {
+    toast.add({ title: 'Non è stato possibile creare il file', color: 'error' })
+  } finally {
+    esportando.value = false
+  }
+}
+
 
 // ─── Wizard crea ───
 const wizardAperto = ref(false)
@@ -361,4 +510,9 @@ const wizardAperto = ref(false)
 // Creazione studenti riservata alla segreteria (il server blocca comunque i TUTOR)
 const { user: sessionUser } = useUserSession()
 const isAdmin = computed(() => ['ADMIN', 'SUPER_TUTOR'].includes(sessionUser.value?.role ?? ''))
+
+// Il file Excel lo scarica solo l'ADMIN. È un limite dell'interfaccia, non del
+// server: il SUPER_TUTOR quegli stessi dati li legge già nell'elenco, qui si evita
+// solo che escano in blocco dal gestionale.
+const puoEsportare = computed(() => sessionUser.value?.role === 'ADMIN')
 </script>

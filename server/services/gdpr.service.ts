@@ -9,6 +9,7 @@
 import { db } from '../database/client'
 import { students, studentParents, studentNotes, bookings, users, packages, payments, packageRecharges, lessons, lessonStudents, contacts, contactInteractions, contactFigli } from '../database/schema'
 import { and, eq, ne, inArray, isNull, lt, sql } from 'drizzle-orm'
+import { INIZIO_NOTA_CONVERSIONE } from '#shared/contatti'
 
 export async function anonymizeStudent(id: string) {
   const [student] = await db.select().from(students).where(eq(students.id, id)).limit(1)
@@ -124,6 +125,21 @@ export async function anonymizeStudent(id: string) {
       ...figliEliminati.map((f) => f.contactId),
       ...contattiScollegati.map((c) => c.id),
     ])
+
+    // La riga di diario «Convertito in studente: Luca Rossi» porta il nome in chiaro.
+    // Nei contatti che verranno anonimizzati qui sotto sparisce con tutte le altre
+    // note; ma in quelli che restano (hanno un altro figlio) va tolto il nome
+    // almeno lì. Resta il fatto, "un figlio è diventato alunno", che non identifica
+    // nessuno. Il prefisso non cambia, così la riga continua a non contare come
+    // conversazione (vedi eRigaDiConversione).
+    if (daControllare.size > 0) {
+      await tx.update(contactInteractions)
+        .set({ note: `${INIZIO_NOTA_CONVERSIONE}studente: (alunno anonimizzato)` })
+        .where(and(
+          inArray(contactInteractions.contactId, [...daControllare]),
+          eq(contactInteractions.note, `${INIZIO_NOTA_CONVERSIONE}studente: ${`${student.firstName} ${student.lastName}`.trim()}`),
+        ))
+    }
 
     let contattiAnonimizzati = 0
     for (const contactId of daControllare) {

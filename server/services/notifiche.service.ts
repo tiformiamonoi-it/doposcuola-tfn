@@ -223,6 +223,24 @@ export async function segnaTutteLette(userId: string) {
   return { ok: true, quante: righe.length }
 }
 
+// Segna lette le notifiche ancora aperte di UNA pratica (es. entityType 'nota' +
+// l'id della nota). Serve quando la pratica si chiude da sola: una nota approvata
+// non ha più niente da chiedere, e lasciare acceso il suo avviso farebbe credere
+// che manchi ancora qualcosa. Stessa regola di segnaLetta: chi chiude resta scritto.
+export async function segnaLetteDellaPratica(entityType: string, entityId: string, userId: string) {
+  const righe = await db
+    .update(notifiche)
+    .set({ lettaAt: new Date(), lettaDaUserId: userId })
+    .where(and(
+      isNull(notifiche.lettaAt),
+      eq(notifiche.entityType, entityType),
+      eq(notifiche.entityId, entityId),
+    ))
+    .returning({ id: notifiche.id })
+
+  return { ok: true, quante: righe.length }
+}
+
 // ─────────────────────────────────────────────
 // CREA UNA NOTIFICA
 // Non serve ancora a nessuna pagina: la useranno i consensi. Sta qui perché la

@@ -18,12 +18,13 @@
                   Scarica il template
                 </a>
               </li>
-              <li>Aprilo con Excel, riempi una riga per ogni persona e cancella le due righe di esempio.</li>
+              <li>Aprilo con Excel, riempi una riga per ogni persona e cancella le righe di esempio.</li>
               <li>Salva mantenendo il formato CSV, poi ricaricalo qui sotto.</li>
             </ol>
             <p class="text-xs text-slate-500">
               Le colonne che non ti servono si lasciano vuote. La colonna «tipo» vuota vale
               <strong>{{ labelTipo(tipoDefault) }}</strong>, cioè la scheda che hai aperto.
+              La colonna «data_conversione» conta solo per chi è «Convertito»: vuota vale oggi.
             </p>
           </div>
 
@@ -90,7 +91,10 @@
                     </td>
                     <td class="px-3 py-2 text-slate-600">{{ r.dati.telefono || r.dati.email || r.dati.socialLink }}</td>
                     <td class="px-3 py-2">{{ labelCanale(r.dati.canaleOrigine) }}</td>
-                    <td class="px-3 py-2">{{ labelStato(r.dati.stato) }}</td>
+                    <td class="px-3 py-2">
+                      {{ labelStato(r.dati.stato) }}<span v-if="r.dataConversione" class="text-slate-500">
+                        dal {{ formatGiorno(r.dataConversione) }}</span>
+                    </td>
                     <td class="px-3 py-2">{{ r.dati.prossimoRicontatto ? formatGiorno(r.dati.prossimoRicontatto) : '—' }}</td>
                   </tr>
                 </tbody>
@@ -226,7 +230,7 @@ const campoFile  = ref<HTMLInputElement | null>(null)
 const nomeFile   = ref('')
 const erroreFile = ref('')
 
-const righeValide = ref<Array<{ numeroRiga: number; grezza: RigaImportContatto; dati: CreateContactInput }>>([])
+const righeValide = ref<Array<{ numeroRiga: number; grezza: RigaImportContatto; dati: CreateContactInput; dataConversione: string | null }>>([])
 const righeErrate = ref<Array<{ numeroRiga: number; motivo: string }>>([])
 
 const importando = ref(false)
@@ -361,7 +365,7 @@ async function onFileScelto(evento: Event) {
       })
 
       const risultato = normalizzaRigaImport(grezza, props.tipoDefault)
-      if (risultato.ok) valide.push({ numeroRiga: riga.numeroRiga, grezza, dati: risultato.dati })
+      if (risultato.ok) valide.push({ numeroRiga: riga.numeroRiga, grezza, dati: risultato.dati, dataConversione: risultato.dataConversione })
       else errate.push({ numeroRiga: riga.numeroRiga, motivo: risultato.errori.join(' · ') })
     }
 

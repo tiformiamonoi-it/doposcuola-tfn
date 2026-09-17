@@ -158,7 +158,7 @@
 
         <!-- Diario ancora vuoto: scorciatoia per segnare quando ci si è sentiti la prima volta -->
         <UButton
-          v-if="contatto.interazioni.length === 0 && !contatto.anonimizzatoAt"
+          v-if="conversazioni.length === 0 && !contatto.anonimizzatoAt"
           icon="i-heroicons-clock" size="xs" variant="soft"
           @click="() => { modalInterazioneAperta = true }"
         >
@@ -348,7 +348,7 @@
 // Pannello laterale con tutti i dati di una persona e lo storico dei contatti.
 import {
   labelTipo, labelStato, labelCanale, labelRuoloMarketing, labelRuoloDoposcuola,
-  labelTipoInterazione, labelEsito,
+  labelTipoInterazione, labelEsito, eRigaDiConversione,
 } from '#shared/contatti'
 import {
   STATI_ITEMS, nomeContatto, formatGiorno, formatQuando, iconaInterazione,
@@ -414,10 +414,14 @@ const mostraFigli = computed(() => {
   return Boolean(c && c.tipo === 'DOPOSCUOLA' && !candidatoTutor.value && !c.anonimizzatoAt)
 })
 
+// Le righe del diario che sono conversazioni vere: senza «Convertito in …», che
+// il gestionale scrive da solo quando il contatto diventa alunno o tutor.
+const conversazioni = computed(() => (contatto.value?.interazioni ?? []).filter((r) => !eRigaDiConversione(r)))
+
 // La prima volta che ci si è sentiti: il diario arriva dal più recente al più
 // vecchio, quindi la prima interazione è l'ultima della lista. Diario vuoto = riga nascosta.
 const primoContatto = computed(() => {
-  const righe = contatto.value?.interazioni ?? []
+  const righe = conversazioni.value
   const prima = righe[righe.length - 1]
   return prima ? formatQuando(prima.data) : null
 })

@@ -40,10 +40,14 @@ export interface RigaImportContatto {
   /** Solo Doposcuola: "Possibile studente" o "Possibile tutor" (vuoto = studente) */
   ruolo_doposcuola?: string
   note?: string
+  /** Facoltativa, conta solo con stato "Convertito": il giorno in cui è diventato cliente */
+  data_conversione?: string
 }
 
 export type EsitoRigaImport =
-  | { ok: true;  dati: CreateContactInput }
+  // dataConversione sta fuori da `dati` perché il modulo "Nuovo contatto" non la
+  // chiede: esiste solo nell'import. 'AAAA-MM-GG', null = il giorno dell'import.
+  | { ok: true;  dati: CreateContactInput; dataConversione: string | null }
   | { ok: false; errori: string[] }
 
 /** Le colonne del template, nell'ordine in cui compaiono nel file. */
@@ -51,6 +55,9 @@ export const COLONNE_IMPORT = [
   'tipo', 'nome', 'cognome', 'telefono', 'email', 'social', 'fonte', 'stato',
   'prossimo_ricontatto', 'nome_studente', 'classe_scuola', 'materie',
   'azienda', 'servizio_interesse', 'ruolo_marketing', 'ruolo_doposcuola', 'note',
+  // In fondo: aggiunta dopo, così chi ha già un file fatto col modello vecchio
+  // ritrova tutte le altre colonne al loro posto
+  'data_conversione',
 ] as const
 
 // ─────────────────────────────────────────────
@@ -212,6 +219,17 @@ export function normalizzaRigaImport(
   if (!giorno.ok) errori.push(`Data del prossimo ricontatto non valida: «${dataScritta}» (usa gg/mm/aaaa)`)
   else prossimoRicontatto = giorno.valore
 
+  // Quando è diventato cliente: si legge come le altre date del file e conta solo
+  // per chi è "Convertito". Con un altro stato la colonna si ignora del tutto
+  // (nemmeno un refuso lì dentro deve far scartare la riga). Vuota = oggi.
+  let dataConversione: string | null = null
+  const conversioneScritta = (riga.data_conversione ?? '').trim()
+  if (stato === 'CONVERTITO') {
+    const giornoConversione = normalizzaGiornoImport(conversioneScritta)
+    if (!giornoConversione.ok) errori.push(`Data di conversione non valida: «${conversioneScritta}» (usa gg/mm/aaaa)`)
+    else dataConversione = giornoConversione.valore
+  }
+
   const cognome           = testo('Cognome', riga.cognome, 100)
   const nomeStudente      = testo('Nome studente', riga.nome_studente, 200)
   const classeScuola      = testo('Classe/Scuola', riga.classe_scuola, 200)
@@ -233,6 +251,7 @@ export function normalizzaRigaImport(
 
   return {
     ok: true,
+    dataConversione,
     dati: {
       tipo,
       nome: nome as string,

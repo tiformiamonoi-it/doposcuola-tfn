@@ -265,6 +265,7 @@ export const ImportContactsSchema = z.object({
       ruolo_marketing:     cellaImport,
       ruolo_doposcuola:    cellaImport,
       note:                cellaImport,
+      data_conversione:    cellaImport,
     }),
   )
     .min(1, 'Nessuna riga da importare')

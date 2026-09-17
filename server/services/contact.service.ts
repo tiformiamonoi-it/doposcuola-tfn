@@ -9,7 +9,7 @@ import { oggiRomeStr } from '../utils/tutor-time-window'
 // non conosce i contatti, così non si creano import circolari)
 import { getAnnoCorrente, setRientro } from './confirmation.service'
 import { normalizzaTelefono, sembraTelefono, sembraEmail } from '#shared/phone'
-import { STATI_CHIUSI } from '#shared/contatti'
+import { STATI_CHIUSI, INIZIO_NOTA_CONVERSIONE } from '#shared/contatti'
 import type { TipoContatto } from '#shared/contatti'
 import { normalizzaRigaImport } from '#shared/contatti-import'
 import type { RigaImportContatto } from '#shared/contatti-import'
@@ -629,6 +629,32 @@ async function segnaRientroConfermato(studentId: string, userId: string) {
   }
 }
 
+/**
+ * La riga di diario «Convertito in studente: Luca Rossi» (o «in tutor: …»).
+ * Va scritta DENTRO la transazione del collegamento: o ci sono tutti e due, o
+ * nessuno dei due. Chi la chiama deve prima essere sicuro che il collegamento
+ * sia nuovo: un doppio clic non deve scriverla due volte.
+ * Non tocca "ultimo contatto": non è una conversazione (vedi eRigaDiConversione).
+ */
+async function annotaConversione(
+  tx: Transazione,
+  contactId: string,
+  inCosa: 'studente' | 'tutor',
+  persona: { firstName: string; lastName: string },
+  userId: string,
+) {
+  await tx.insert(contactInteractions).values({
+    contactId,
+    tipo:            'ALTRO',
+    direzione:       'EFFETTUATA',
+    canale:          'ALTRO',
+    esito:           null,
+    note:            `${INIZIO_NOTA_CONVERSIONE}${inCosa}: ${`${persona.firstName} ${persona.lastName}`.trim()}`,
+    data:            new Date(),
+    createdByUserId: userId,
+  })
+}
+
 export async function updateContact(id: string, data: UpdateContactInput, userId: string) {
   const [esistente] = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1)
   if (!esistente) throw new Error('Contatto non trovato')
@@ -689,6 +715,25 @@ export async function updateContact(id: string, data: UpdateContactInput, userId
       if (virtualeConsumato && famiglia) Object.assign(changes, SENZA_CAMPI_VECCHI)
     }
     const [riga] = await tx.update(contacts).set(changes).where(eq(contacts.id, id)).returning()
+
+    // Diventato alunno ("Crea studente" di una scheda aperta da prima) o tutor
+    // ("Crea tutor") proprio con QUESTA modifica? Allora una riga nel diario.
+    // Si guarda il collegamento che CAMBIA, non lo stato: rimandare la stessa
+    // richiesta, o rimettere a mano "Convertito" su un contatto già collegato,
+    // non deve scriverla un'altra volta.
+    if (riga?.stato === 'CONVERTITO') {
+      if (riga.studentId && riga.studentId !== esistente.studentId) {
+        const [studente] = await tx.select({ firstName: students.firstName, lastName: students.lastName })
+          .from(students).where(eq(students.id, riga.studentId)).limit(1)
+        if (studente) await annotaConversione(tx, id, 'studente', studente, userId)
+      }
+      if (riga.tutorUserId && riga.tutorUserId !== esistente.tutorUserId) {
+        const [tutor] = await tx.select({ firstName: users.firstName, lastName: users.lastName })
+          .from(users).where(eq(users.id, riga.tutorUserId)).limit(1)
+        if (tutor) await annotaConversione(tx, id, 'tutor', tutor, userId)
+      }
+    }
+
     return riga
   })
 
@@ -717,12 +762,16 @@ export async function updateContact(id: string, data: UpdateContactInput, userId
 
 export async function collegaFiglio(contactId: string, input: CollegaFiglioInput, userId: string) {
   const esito = await db.transaction(async (tx) => {
-    const [contatto] = await tx.select().from(contacts).where(eq(contacts.id, contactId)).limit(1)
+    // FOR UPDATE: due chiamate insieme sullo stesso contatto (doppio clic) passano
+    // una alla volta. Così la seconda vede il collegamento già fatto dalla prima
+    // (giaCollegato) e non scrive una seconda riga di diario.
+    const [contatto] = await tx.select().from(contacts).where(eq(contacts.id, contactId)).limit(1).for('update')
     if (!contatto) throw new Error('Contatto non trovato')
     if (contatto.anonimizzatoAt) throw new Error('Questa scheda è stata svuotata dalla pulizia privacy: non si può più collegare')
     if (!eFamiglia(contatto)) throw new Error('Solo i possibili studenti del Doposcuola hanno figli da collegare')
 
-    const [studente] = await tx.select({ id: students.id }).from(students).where(eq(students.id, input.studentId)).limit(1)
+    const [studente] = await tx.select({ id: students.id, firstName: students.firstName, lastName: students.lastName })
+      .from(students).where(eq(students.id, input.studentId)).limit(1)
     if (!studente) throw new Error('Studente non trovato')
 
     // Si ragiona sugli stessi figli che l'utente vede (ripiego compreso): figlioId
@@ -769,6 +818,11 @@ export async function collegaFiglio(contactId: string, input: CollegaFiglioInput
     }
 
     const [aggiornato] = await tx.update(contacts).set(changes).where(eq(contacts.id, contactId)).returning()
+
+    // Una riga di diario per OGNI figlio che diventa alunno (due fratelli = due
+    // righe), ma mai due per lo stesso collegamento
+    if (!giaCollegato) await annotaConversione(tx, contactId, 'studente', studente, userId)
+
     return { aggiornato, giaCollegato }
   })
 
@@ -867,7 +921,13 @@ export async function importContacts(
             doposcuolaRuolo:    d.doposcuolaRuolo ?? 'STUDENTE',
             privacyInformata:   d.privacyInformata,
             createdByUserId:    userId,
-            convertitoAt:       d.stato === 'CONVERTITO' ? new Date() : null,
+            // Con la colonna "data_conversione" il giorno scritto nel file, alle 12:00
+            // UTC (in Italia le 13 o le 14): a mezzogiorno nessun fuso orario sposta la
+            // data di un giorno, quindi il conteggio "Convertiti nel mese", che ragiona
+            // in ora italiana, la mette nel mese giusto anche se è il 1° o il 31.
+            convertitoAt:       d.stato !== 'CONVERTITO' ? null
+              : esito.dataConversione ? new Date(`${esito.dataConversione}T12:00:00.000Z`)
+              : new Date(),
           }).returning({ id: contacts.id })
 
           // Il figlio della riga (colonne nome_studente, classe_scuola, materie),
@@ -968,10 +1028,16 @@ export async function deleteInteraction(contactId: string, interactionId: string
 
     if (!eliminata) throw new Error('Interazione non trovata')
 
-    // "Ultimo contatto" ricalcolato dal diario rimasto
+    // "Ultimo contatto" ricalcolato dal diario rimasto, senza le righe «Convertito
+    // in …»: non sono conversazioni (vedi eRigaDiConversione in shared/contatti.ts,
+    // qui la stessa regola scritta per il database)
     const [ultima] = await tx.select({ quando: sql<Date | null>`MAX(${contactInteractions.data})` })
       .from(contactInteractions)
-      .where(eq(contactInteractions.contactId, contactId))
+      .where(and(
+        eq(contactInteractions.contactId, contactId),
+        sql`NOT (${contactInteractions.tipo} = 'ALTRO' AND ${contactInteractions.canale} = 'ALTRO'
+          AND coalesce(${contactInteractions.note}, '') LIKE ${`${INIZIO_NOTA_CONVERSIONE}%`})`,
+      ))
 
     const [contatto] = await tx.update(contacts)
       .set({ ultimoContattoAt: ultima?.quando ?? null, updatedAt: new Date() })
