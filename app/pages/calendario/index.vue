@@ -447,7 +447,8 @@ const timeSlots = computed(() => {
     id: s.id,
     start: s.oraInizio,
     end: s.oraFine,
-    label: `${s.oraInizio.substring(0,5)}-${s.oraFine.substring(0,5)}`
+    label: `${s.oraInizio.substring(0,5)}-${s.oraFine.substring(0,5)}`,
+    sempreVisibile: s.sempreVisibile
   }))
 })
 
@@ -456,8 +457,6 @@ const dateChiusure = computed(() => {
   // Il campo si chiama `date` (era letto come `c.data`: chiusure mai evidenziate)
   return (closuresRes.value || []).map((c: any) => c.date)
 })
-
-const standardSlotStarts = computed(() => timeSlots.value.map((s: any) => s.start))
 
 const { data: tutorsRes } = useFetch('/api/tutors?active=true', { lazy: true })
 const tutorsOptions = computed(() => {
@@ -642,12 +641,9 @@ function toggleAllDays() {
 // ==========================================
 // LOGICA GRIGLIA
 // ==========================================
+// Slot standard sempre; gli altri solo se quel giorno hanno lezioni (utils/slotCalendario)
 function getActiveSlotsForDay(giorno: any) {
-  if (giorno.lezioniBase.length === 0) {
-    return timeSlots.value.filter(s => standardSlotStarts.value.includes(s.start))
-  }
-  const usedIds = new Set(giorno.lezioniBase.map((l: any) => l.timeSlotId))
-  return timeSlots.value.filter(s => standardSlotStarts.value.includes(s.start) || usedIds.has(s.id))
+  return slotVisibiliNelGiorno(timeSlots.value, giorno.lezioniBase)
 }
 
 function getStudentsInSlot(giorno: any, tutorId: string, slotId: string) {

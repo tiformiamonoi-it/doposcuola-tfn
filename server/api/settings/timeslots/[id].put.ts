@@ -1,5 +1,5 @@
 import { UpdateTimeSlotSchema } from '#shared/schemas/timeslot.schema'
-import { updateTimeSlot } from '../../../services/timeslot.service'
+import { updateTimeSlot, setSlotSempreVisibile } from '../../../services/timeslot.service'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -11,5 +11,7 @@ export default defineEventHandler(async (event) => {
   }
   const updated = await updateTimeSlot(id, parsed.data)
   if (!updated) throw createError({ statusCode: 404, statusMessage: 'Slot non trovato' })
+  // "Sempre visibile nel calendario" vive in system_configs, non nella tabella slot
+  if (typeof body?.sempreVisibile === 'boolean') await setSlotSempreVisibile(id, body.sempreVisibile)
   return updated
 })

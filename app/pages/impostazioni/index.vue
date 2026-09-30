@@ -179,6 +179,13 @@
             <span v-if="s.descrizione" class="text-sm text-slate-500 hidden sm:inline-block">{{ s.descrizione }}</span>
           </div>
           <div class="flex items-center gap-3">
+            <UCheckbox
+              :model-value="s.sempreVisibile"
+              :disabled="!s.active"
+              label="Sempre visibile nel calendario"
+              :ui="{ label: 'text-xs text-slate-500' }"
+              @update:model-value="toggleSempreVisibile(s, $event === true)"
+            />
             <USwitch :model-value="s.active" @update:model-value="toggleSlot(s, $event)" />
             <UButton icon="i-heroicons-trash" variant="ghost" color="error" size="xs" :loading="eliminandoSlot === s.id" @click="eliminaSlot(s)" />
           </div>
@@ -1255,6 +1262,16 @@ async function creaSlot() {
 async function toggleSlot(slot: any, val: boolean) {
   try {
     await $fetch(`/api/settings/timeslots/${slot.id}`, { method: 'PUT', body: { active: val } })
+    refreshSlots()
+  } catch (err: any) {
+    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile modificare', color: 'error' })
+  }
+}
+
+// Se spento, lo slot compare nel calendario solo nei giorni in cui ha lezioni
+async function toggleSempreVisibile(slot: any, val: boolean) {
+  try {
+    await $fetch(`/api/settings/timeslots/${slot.id}`, { method: 'PUT', body: { sempreVisibile: val } })
     refreshSlots()
   } catch (err: any) {
     toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile modificare', color: 'error' })
