@@ -92,8 +92,6 @@
 </template>
 
 <script setup lang="ts">
-import { livelloDaClasse, postoFisso } from '#shared/livello-scolastico'
-
 const route = useRoute()
 const { user } = useUserSession()
 
@@ -104,34 +102,15 @@ const prenotazioneAbilitata = computed(() =>
   students.value.some((s: any) => s.abilitatoPrenotazioneOnline)
 )
 
-// LA VOCE "ASSENZE" NON C'È PER TUTTI (voce G1 del piano).
+// LA VOCE "ASSENZE" NON C'È PIÙ (N9, 17/09/2026).
 //
-// La prenotazione al contrario nasce per chi NON prenota: elementari e medie.
-// Lì il posto c'è sempre e l'unica cosa da dire è quando NON si viene. Per una
-// famiglia di soli ragazzi delle superiori quel bottone non servirebbe a niente
-// e ruberebbe spazio sulla striscia in fondo allo schermo, che su un telefono è
-// già piena.
-//
-// ⚠️ LE ELEMENTARI C'ERANO RIMASTE FUORI: qui si guardava solo 'MEDIE', così un
-// genitore di un bambino delle elementari non aveva NESSUN modo di avvisare che
-// oggi non viene. Non prenotare e non poter nemmeno disdire è il peggiore dei
-// due mondi. Ora vale la stessa regola di sempre, scritta una volta sola in
-// shared/livello-scolastico.ts.
-//
-// Compare quindi se almeno un figlio ha il posto fisso (elementari o medie)
-// OPPURE se il livello non si capisce (classe vuota o scritta in modo strano):
-// in quel caso non si indovina — si mostra la voce e sarà la famiglia a sapere
-// se le serve.
-const mostraAssenze = computed(() =>
-  students.value.some((s: any) => {
-    const l = livelloDaClasse(s.classe)
-    return postoFisso(l) || l === null
-  }),
-)
-
+// Nasceva per elementari e medie, che non prenotavano, ma nessuno l'ha mai usata.
+// Adesso elementari e medie prenotano come tutti, scegliendo le materie (quando
+// non si sanno ci sono le voci generiche "Elementari" e "Medie"), e chi non viene
+// annulla la prenotazione. La segreteria può ancora annotare un'assenza dal
+// Calendario, quando la famiglia telefona.
 const allNavItems = computed(() => [
   { icon: 'i-heroicons-home',          label: 'Home',    route: '/portale',          always: true },
-  { icon: 'i-heroicons-hand-raised',   label: 'Assenze', route: '/portale/assenze',  always: mostraAssenze.value },
   { icon: 'i-heroicons-calendar-days', label: 'Prenota', route: '/portale/prenota',  always: false },
   // "Comunicazioni", non più "Note": le firma a volte la segreteria e a volte
   // una persona con nome e cognome, quindi "note del tutor" era falso già nel
@@ -149,12 +128,7 @@ const isStudente = computed(() => user.value?.role === 'STUDENTE')
 const visibleNavItems = computed(() =>
   allNavItems.value
     .filter(item => !(isStudente.value && item.route === '/portale/note'))
-    // "Assenze" segue la sua regola (mostraAssenze, messo dentro `always`), non
-    // quella della prenotazione online: un ragazzo delle medie che la famiglia non
-    // ha abilitato a prenotare deve comunque poter dire che oggi non viene.
-    .filter(item => item.route === '/portale/assenze'
-      ? item.always
-      : (item.always || prenotazioneAbilitata.value || isStudente.value))
+    .filter(item => item.always || prenotazioneAbilitata.value || isStudente.value)
 )
 
 function isActive(path: string) {

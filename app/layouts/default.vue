@@ -367,6 +367,7 @@ const navItems = computed(() => {
       { icon: 'i-heroicons-identification', label: 'Il mio profilo', route: '/area-tutor/profilo' },
     ]
   }
+  const isAdmin = user.value?.role === 'ADMIN'
   return [
     { icon: 'i-heroicons-squares-2x2',  label: 'Dashboard',    route: '/' },
     { icon: 'i-heroicons-calendar',      label: 'Calendario',   route: '/calendario' },
@@ -378,10 +379,15 @@ const navItems = computed(() => {
     { icon: 'i-heroicons-list-bullet',   label: 'Lezioni',      route: '/lezioni' },
     { icon: 'i-heroicons-academic-cap',  label: 'Tutor',        route: '/tutor' },
     { icon: 'i-heroicons-phone-arrow-down-left', label: 'Contatti', route: '/contatti' },
-    { icon: 'i-heroicons-banknotes',     label: 'Contabilità',  route: '/contabilita' },
+    // Contabilità e Impostazioni sono pagine solo per l'Admin (middleware admin-only):
+    // al Super Tutor non si mostrano voci che poi lo rimandano indietro.
+    ...(isAdmin ? [{ icon: 'i-heroicons-banknotes', label: 'Contabilità', route: '/contabilita' }] : []),
     { icon: 'i-heroicons-document-check',label: 'Matching',     route: '/matching' },
     { icon: 'i-heroicons-user',          label: 'Area Tutor',   route: '/area-tutor' },
-    { icon: 'i-heroicons-cog-6-tooth',   label: 'Impostazioni', route: '/impostazioni' },
+    ...(isAdmin
+      ? [{ icon: 'i-heroicons-cog-6-tooth', label: 'Impostazioni', route: '/impostazioni' }]
+      // Il Super Tutor è anche un tutor: il suo profilo (e il cambio password) gli serve come agli altri
+      : [{ icon: 'i-heroicons-identification', label: 'Il mio profilo', route: '/area-tutor/profilo' }]),
   ]
 })
 

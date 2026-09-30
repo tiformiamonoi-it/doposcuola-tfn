@@ -128,6 +128,99 @@ export async function applicaSupplementoAlPacchetto(bookingId: string) {
   })
 }
 
+// Inverso esatto di applicaSupplementoAlPacchetto: −€ sul prezzo totale, stati ricalcolati,
+// via la riga di nota scritta all'approvazione. La prenotazione torna "da approvare"
+// (il campo supplemento resta). Guardia: se la famiglia ha già pagato il supplemento
+// non si toglie nulla, prima va registrato un rimborso.
+export async function annullaSupplementoDalPacchetto(bookingId: string) {
+  return await db.transaction(async (tx) => {
+    const [booking] = await tx.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1)
+    if (!booking) throw new Error('Prenotazione non trovata')
+    if (!booking.supplementoApplicatoAt || !booking.supplementoPackageId) {
+      throw new Error('Il supplemento non è applicato a nessun pacchetto')
+    }
+
+    const [pkg] = await tx.select().from(packages).where(eq(packages.id, booking.supplementoPackageId)).limit(1)
+    if (!pkg) throw new Error('Il pacchetto su cui era applicato il supplemento non esiste più')
+
+    const importo = parseFloat(booking.supplemento ?? '0')
+    const nuovoPrezzo = parseFloat(pkg.prezzoTotale) - importo
+    const pagato = parseFloat(pkg.importoPagato)
+    if (pagato > nuovoPrezzo) {
+      throw new Error('La famiglia ha già pagato il supplemento: registra prima un rimborso, poi annulla.')
+    }
+    const nuovoResiduo = nuovoPrezzo - pagato
+    const nuoviStati = computePackageStates({
+      oreAcquistate:  pkg.oreAcquistate,
+      oreResiduo:     pkg.oreResiduo,
+      importoResiduo: String(nuovoResiduo),
+      dataScadenza:   pkg.dataScadenza,
+      sospeso:        pkg.sospeso,
+    })
+
+    // Stessa riga che scrive l'approvazione: si toglie la prima uguale; se non c'è
+    // (nota ritoccata a mano) si lascia traccia dell'annullamento.
+    const dataLez = new Date(booking.requestedDate).toLocaleDateString('it-IT')
+    const notaApplicata = `+€${importo.toFixed(2)} supplemento lezione speciale del ${dataLez}`
+    const righe = (pkg.note ?? '').split('\n')
+    const idx = righe.indexOf(notaApplicata)
+    let note: string | null
+    if (idx >= 0) {
+      righe.splice(idx, 1)
+      note = righe.join('\n') || null
+    } else {
+      const traccia = `Annullato supplemento lezione speciale del ${dataLez}`
+      note = pkg.note ? `${pkg.note}\n${traccia}` : traccia
+    }
+
+    await tx.update(packages).set({
+      prezzoTotale:   String(nuovoPrezzo),
+      importoResiduo: String(nuovoResiduo),
+      stati:          nuoviStati,
+      note,
+      updatedAt:      new Date(),
+    }).where(eq(packages.id, pkg.id))
+
+    const [updated] = await tx.update(bookings).set({
+      supplementoApplicatoAt: null,
+      supplementoPackageId:   null,
+      updatedAt:              new Date(),
+    }).where(eq(bookings.id, bookingId)).returning()
+
+    return { booking: updated, packageId: pkg.id, packageNome: pkg.nome }
+  })
+}
+
+// Storico dei supplementi applicati a un pacchetto (per la scheda studente).
+// La materia mostrata è quella speciale della prenotazione (in mancanza, tutte).
+export async function getSupplementiPacchetto(packageId: string) {
+  const rows = await db
+    .select({
+      bookingId:              bookings.id,
+      requestedDate:          bookings.requestedDate,
+      supplemento:            bookings.supplemento,
+      supplementoApplicatoAt: bookings.supplementoApplicatoAt,
+      studentName:            bookings.studentName,
+      studentSurname:         bookings.studentSurname,
+    })
+    .from(bookings)
+    .where(eq(bookings.supplementoPackageId, packageId))
+    .orderBy(desc(bookings.requestedDate))
+  if (rows.length === 0) return []
+
+  const materie = await db
+    .select({ bookingId: bookingSubjects.bookingId, name: bookingSubjects.name })
+    .from(bookingSubjects)
+    .where(inArray(bookingSubjects.bookingId, rows.map((r) => r.bookingId)))
+  const { speciali } = await getConfigMaterieSpeciali()
+
+  return rows.map((r) => {
+    const tutte = materie.filter((m) => m.bookingId === r.bookingId).map((m) => m.name)
+    const specialiQui = tutte.filter((n) => speciali.includes(n))
+    return { ...r, materie: specialiQui.length ? specialiQui : tutte }
+  })
+}
+
 // Crea una prenotazione dal portale famiglie
 export async function createBooking(input: CreateBookingInput, userId: string) {
   const student = await db.query.students.findFirst({

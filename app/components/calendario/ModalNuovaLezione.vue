@@ -126,7 +126,7 @@
                 <!-- Footer Slot (Impostazioni) -->
                 <div class="mt-4 pt-3 border-t border-slate-100 space-y-2">
                   <UCheckbox v-model="slot.mezzaLezione" size="sm" label="Mezza Lezione (per tutti)" />
-                  <UCheckbox v-model="slot.forzaGruppo" :disabled="slot.studenti.length < 1" size="sm" label="Forza GRUPPO (paga come gruppo)" />
+                  <UCheckbox v-if="!isTutor" v-model="slot.forzaGruppo" :disabled="slot.studenti.length < 1" size="sm" label="Forza GRUPPO (paga come gruppo)" />
                 </div>
               </UCard>
             </div>
@@ -160,7 +160,7 @@
                   </div>
                 </div>
               </div>
-              <div class="mt-6 pt-4 border-t border-primary-500 flex justify-between items-end">
+              <div v-if="!isTutor" class="mt-6 pt-4 border-t border-primary-500 flex justify-between items-end">
                 <span class="text-primary-100">Compenso Tutor</span>
                 <span class="text-2xl font-black text-white">€{{ formatCurrency(totalCompenso) }}</span>
               </div>
@@ -206,7 +206,6 @@
 import { ref, computed, watch } from 'vue'
 import { format } from 'date-fns'
 import ModalSelezionaStudenti from '~/components/calendario/ModalSelezionaStudenti.vue'
-import { TARIFFE_DEFAULT, TARIFFE_MEZZA } from '#shared/tariffe'
 
 const emit = defineEmits(['refresh', 'close'])
 const isOpen = defineModel('open', { type: Boolean, default: false })
@@ -257,12 +256,7 @@ const allSlotsOptions = computed(() => (slotsRes.value || []).map((s: any) => ({
 const { data: studentsRes } = useFetch('/api/students?active=true&limit=500&light=true', { lazy: true })
 const studentsOptions = computed(() => (studentsRes.value?.data || []).map((s: any) => ({ label: `${s.firstName} ${s.lastName}`, value: s.id })))
 
-const { data: configsRes } = useFetch('/api/settings/configs', { lazy: true })
-const tariffeConfig = computed(() => {
-  try {
-    return JSON.parse(configsRes.value?.tariffe_tutor ?? 'null') ?? TARIFFE_DEFAULT
-  } catch { return TARIFFE_DEFAULT }
-})
+const { compenso, tipoLezione, isTutor } = useTariffeTutor()
 
 // ==========================================
 // INIT SLOTS
@@ -432,23 +426,12 @@ const totalCompenso = computed(() => {
     const validStudents = slot.studenti.filter((s: any) => s.studentItem && s.packageItem).length
     if (validStudents === 0) return
     
-    let tipo = 'SINGOLA'
-    if (slot.forzaGruppo) tipo = 'GRUPPO'
-    else if (validStudents === 1) tipo = 'SINGOLA'
-    else if (validStudents <= 4) tipo = 'GRUPPO'   // MAXI solo da 5 studenti (come il server)
-    else tipo = 'MAXI'
-    
-    // Mezza lezione: tariffe fisse da shared/tariffe.ts (mezza MAXI = €4,00, NON tariffa/2)
-    // — stessa regola applicata dal server in calcCompenso.
-    const isMezza = slot.mezzaLezione
-    const base = tariffeConfig.value
-    const tariffe: Record<string, number> = {
-      SINGOLA: isMezza ? TARIFFE_MEZZA.SINGOLA : (base.SINGOLA ?? TARIFFE_DEFAULT.SINGOLA),
-      GRUPPO:  isMezza ? TARIFFE_MEZZA.GRUPPO  : (base.GRUPPO  ?? TARIFFE_DEFAULT.GRUPPO),
-      MAXI:    isMezza ? TARIFFE_MEZZA.MAXI    : (base.MAXI    ?? TARIFFE_DEFAULT.MAXI),
-    }
+    // Stessa regola del server (anche Forza Gruppo con 5+ alunni = MAXI)
+    const tipo = tipoLezione(validStudents, slot.forzaGruppo)
 
-    total += tariffe[tipo] || 0
+    // Mezza lezione: tariffe fisse da shared/tariffe.ts (mezza MAXI = €4,00, NON tariffa/2)
+    // — stessa regola applicata dal server in calcCompenso (vedi useTariffeTutor).
+    total += compenso(tipo, slot.mezzaLezione, slot.oraInizio, slot.oraFine)
   })
   return total
 })

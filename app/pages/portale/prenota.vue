@@ -9,51 +9,6 @@
       </UButton>
     </div>
 
-    <!--
-      LA STRADA DELL'ASSENZA (voce G1 del piano).
-      Alle elementari e alle medie il posto c'è sempre: non si prenota, si avvisa
-      quando NON si viene. Il riquadro compare solo quando serve — per loro, e
-      quando il livello non si capisce (classe vuota o scritta in modo strano),
-      perché lì non si indovina: si mostrano tutte e due le strade.
-      La prenotazione resta comunque sotto, per tutti: è la decisione Q9.
-    -->
-    <div
-      v-if="mostraStradaAssenza"
-      class="rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center gap-3"
-      :class="postoFissoStudente ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200 bg-slate-50'"
-    >
-      <UIcon
-        name="i-heroicons-hand-raised"
-        class="w-6 h-6 shrink-0"
-        :class="postoFissoStudente ? 'text-emerald-600' : 'text-slate-400'"
-      />
-      <div class="flex-1 text-sm text-slate-700">
-        <template v-if="postoFissoStudente">
-          <p class="font-medium text-slate-800">
-            Alle {{ livelloStudente === 'ELEMENTARI' ? 'elementari' : 'medie' }} il posto c'è sempre.
-          </p>
-          <p class="text-slate-600 mt-0.5">
-            Non serve prenotare giorno per giorno: avvisaci solo quando <strong>non</strong> viene.
-          </p>
-        </template>
-        <template v-else>
-          <p class="font-medium text-slate-800">Non sappiamo in che classe è.</p>
-          <p class="text-slate-600 mt-0.5">
-            Puoi prenotare una lezione qui sotto, oppure — se il posto ce l'ha già tutti i giorni —
-            dirci soltanto quando non viene.
-          </p>
-        </template>
-      </div>
-      <UButton
-        to="/portale/assenze"
-        color="primary"
-        icon="i-heroicons-hand-raised"
-        class="justify-center shrink-0"
-      >
-        Segnala un'assenza
-      </UButton>
-    </div>
-
     <!-- Stepper -->
     <div class="flex items-center gap-2">
       <template v-for="(label, idx) in steps" :key="idx">
@@ -301,7 +256,6 @@ import { ref, reactive, computed, watchEffect, onMounted } from 'vue'
 import { SUPPLEMENTO_SPECIALE } from '#shared/tariffe'
 import { MATERIE_DEFAULT } from '#shared/materie'
 import { formatImporto } from '~/utils/format'
-import { livelloDaClasse, postoFisso } from '#shared/livello-scolastico'
 
 definePageMeta({
   layout: 'portal',
@@ -523,25 +477,6 @@ const studentSelezionato = computed(() => {
   const s = students.value.find((s: any) => s.id === form.studentId)
   return s ? `${s.firstName} ${s.lastName}` : ''
 })
-
-// ─── G1: il livello scolastico del figlio scelto ───
-// Non è salvato da nessuna parte: si deduce dalla classe scritta in segreteria, e
-// vale `null` quando la classe manca o non si capisce. `null` NON è "superiori":
-// è "non lo sappiamo", ed è per questo che il riquadro qui sopra compare anche in
-// quel caso, mostrando tutte e due le strade invece di sceglierne una a caso.
-const livelloStudente = computed(() => {
-  const s = students.value.find((s: any) => s.id === form.studentId)
-  return livelloDaClasse(s?.classe)
-})
-
-// Elementari e medie insieme: né gli uni né gli altri prenotano, il posto è già
-// loro tutti i giorni. Prima qui c'erano solo le medie, e alle elementari questa
-// strada non veniva nemmeno mostrata.
-const postoFissoStudente = computed(() => postoFisso(livelloStudente.value))
-
-const mostraStradaAssenza = computed(() =>
-  Boolean(form.studentId) && (postoFissoStudente.value || livelloStudente.value === null),
-)
 
 function toggleMateria(m: string) {
   const idx = form.materie.indexOf(m)

@@ -24,7 +24,7 @@
       <UButton icon="i-heroicons-chevron-left" color="neutral" variant="ghost" aria-label="Giorno precedente" @click="cambiaGiorno(-1)" />
       <div class="text-center">
         <div class="font-bold text-slate-900">{{ dataFormattata }}</div>
-        <div class="text-xs text-slate-500">{{ tutors.length }} Tutor | {{ badges.length }} Prenotazioni</div>
+        <div class="text-xs text-slate-500">{{ tutors.length }} Tutor | {{ badges.length }} Prenotazioni | {{ alunniUnici }} Alunni</div>
       </div>
       <UButton icon="i-heroicons-chevron-right" color="neutral" variant="ghost" aria-label="Giorno successivo" @click="cambiaGiorno(1)" />
     </div>
@@ -92,7 +92,18 @@
                 <span class="text-xs font-medium" :class="badge.supplementoApplicato ? 'text-emerald-700' : 'text-amber-800'">
                   ⭐ Speciale fuori data: +€{{ badge.supplemento }}
                 </span>
-                <UBadge v-if="badge.supplementoApplicato" color="success" variant="subtle" size="xs">Applicato al pacchetto</UBadge>
+                <span v-if="badge.supplementoApplicato" class="flex items-center gap-1">
+                  <UBadge color="success" variant="subtle" size="xs">Applicato al pacchetto</UBadge>
+                  <UButton
+                    size="xs"
+                    color="error"
+                    variant="ghost"
+                    :aria-label="`Annulla il supplemento di ${badge.studentName} ${badge.studentSurname}: si toglie dal pacchetto`"
+                    @click="chiediAnnullaSupplemento(badge)"
+                  >
+                    Annulla
+                  </UButton>
+                </span>
                 <UButton
                   v-else
                   size="xs"
@@ -337,6 +348,15 @@
     confirm-color="error"
     @confirm="eseguiEliminazione"
   />
+  <ConfirmDialog
+    v-model:open="supplConfirmOpen"
+    :title="supplConfirmTitle"
+    :description="supplConfirmDescription"
+    :confirm-label="supplConfirmLabel"
+    :confirm-color="supplConfirmColor"
+    :loading="supplConfirmLoading"
+    @confirm="eseguiSupplConferma"
+  />
 </template>
 
 <script setup lang="ts">
@@ -347,7 +367,7 @@ import { SUPPLEMENTO_SPECIALE } from '#shared/tariffe'
 import { MATERIE_DEFAULT } from '#shared/materie'
 import { giornoCivileValido } from '#shared/giorno-civile'
 import {
-  stessoAlunno, nomeBreve, chiaveCasella, dividiTabellone, quantiAlunni,
+  stessoAlunno, nomeBreve, chiaveCasella, dividiTabellone, quantiAlunni, contaAlunniUnici,
   type TutorDelGiorno, type BadgePrenotazione, type SlotOrario, type MatchingDelGiorno,
 } from '#shared/matching'
 
@@ -367,6 +387,8 @@ const loading = ref(false)
 const tutors = ref<TutorDelGiorno[]>([])
 const badges = ref<BadgePrenotazione[]>([])
 const slots = ref<SlotOrario[]>([])
+// Ogni targhetta è una materia: chi ne prenota due conta una volta sola fra gli alunni
+const alunniUnici = computed(() => contaAlunniUnici(badges.value))
 
 const dataFormattata = computed(() => {
   return format(currentDate.value, 'EEEE d MMMM yyyy', { locale: it }).replace(/^\w/, c => c.toUpperCase())
@@ -485,6 +507,33 @@ async function applicaSupplemento(badge: BadgePrenotazione) {
   } finally {
     applicandoSupplemento.value = null
   }
+}
+
+// Annullo dell'OK dato per errore: −€10 dal pacchetto, la prenotazione torna "da approvare"
+const {
+  confirmOpen: supplConfirmOpen, confirmTitle: supplConfirmTitle, confirmDescription: supplConfirmDescription,
+  confirmLabel: supplConfirmLabel, confirmColor: supplConfirmColor, confirmLoading: supplConfirmLoading,
+  chiediConferma: chiediSupplConferma, eseguiConferma: eseguiSupplConferma,
+} = useConfirm()
+function chiediAnnullaSupplemento(badge: BadgePrenotazione) {
+  chiediSupplConferma({
+    title: `Togliere +€${badge.supplemento} dal pacchetto?`,
+    description: `Il supplemento di ${badge.studentName} ${badge.studentSurname} viene tolto dal prezzo del pacchetto e torna da approvare.`,
+    confirmLabel: 'Togli',
+    confirmColor: 'error',
+    attendi: true,
+  }, async () => {
+    try {
+      const res = await $fetch<{ packageNome: string }>(
+        `/api/admin/bookings/${badge.bookingId}/supplemento`, { method: 'DELETE' },
+      )
+      badges.value.forEach(b => { if (b.bookingId === badge.bookingId) b.supplementoApplicato = false })
+      toast.add({ title: 'Supplemento annullato', description: `Tolti €${badge.supplemento} dal pacchetto "${res.packageNome}".`, color: 'success' })
+    } catch (err: any) {
+      toast.add({ title: 'Impossibile annullare il supplemento', description: err?.data?.statusMessage ?? 'Errore imprevisto', color: 'error' })
+      throw err
+    }
+  })
 }
 
 // ─── L'alunno "in mano": quello che si sta trascinando, o quello scelto col clic ───

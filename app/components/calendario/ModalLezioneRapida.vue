@@ -86,7 +86,8 @@
         />
 
         <!-- Anteprima -->
-        <div v-if="students.filter(s => s.studentItem).length > 0" class="bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-wrap gap-4">
+        <!-- Anteprima tipo e compenso: al tutor no (non vede soldi, e il tipo lo decide il server) -->
+        <div v-if="!isTutor && students.filter(s => s.studentItem).length > 0" class="bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-wrap gap-4">
           <div class="flex items-center gap-2">
             <span class="text-slate-500 text-sm">Tipo:</span>
             <UBadge size="sm" :color="calculatedType === 'SINGOLA' ? 'info' : (calculatedType === 'GRUPPO' ? 'success' : 'warning')">
@@ -102,7 +103,7 @@
         <!-- Opzioni -->
         <div class="space-y-3 border-t border-slate-200 pt-4">
           <UCheckbox v-model="mezzaLezioneGlobale" label="Mezza Lezione (applicata a tutti gli studenti)" />
-          <UCheckbox v-model="forzaGruppo" :disabled="students.length < 1" label="Forza tipo GRUPPO (anche per 1 studente)" />
+          <UCheckbox v-if="!isTutor" v-model="forzaGruppo" :disabled="students.length < 1" label="Forza tipo GRUPPO (anche per 1 studente)" />
         </div>
 
         <!-- Note -->
@@ -128,7 +129,6 @@ import { ref, computed, watch } from 'vue'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import ModalSelezionaStudenti from '~/components/calendario/ModalSelezionaStudenti.vue'
-import { TARIFFE_DEFAULT, TARIFFE_MEZZA } from '#shared/tariffe'
 
 const props = defineProps<{
   date: string
@@ -161,28 +161,20 @@ const { data: tutorsRes } = useFetch('/api/tutors?active=true', { lazy: true, im
 const tutorsOptions = computed(() => (tutorsRes.value?.data || []).map((t: any) => ({ label: `${t.firstName} ${t.lastName}`, value: t.id })))
 
 const { data: slotsRes } = useFetch('/api/settings/timeslots?active=true', { lazy: true })
-const timeslotsOptions = computed(() => (slotsRes.value || []).map((s: any) => ({ label: `${s.oraInizio.substring(0,5)} - ${s.oraFine.substring(0,5)}`, value: s.id })))
+const timeslotsOptions = computed(() => (slotsRes.value || []).map((s: any) => ({ label: `${s.oraInizio.substring(0,5)} - ${s.oraFine.substring(0,5)}`, value: s.id, oraInizio: s.oraInizio.substring(0,5), oraFine: s.oraFine.substring(0,5) })))
 
 const canSave = computed(() => {
   return tutorItem.value?.value && timeSlotItem.value?.value && students.value.length > 0 && students.value.every(s => s.studentItem?.value && s.packageItem?.value)
 })
 
-// Calcoli
-const calculatedType = computed(() => {
-  const num = students.value.filter(s => s.studentItem).length
-  if (num === 0) return ''
-  if (forzaGruppo.value) return 'GRUPPO'
-  if (num === 1) return 'SINGOLA'
-  if (num <= 4) return 'GRUPPO'   // MAXI solo da 5 studenti (come il server)
-  return 'MAXI'
-})
+// Anteprima con le tariffe configurate; il valore autoritativo lo calcola il server
+const { compenso, tipoLezione, isTutor } = useTariffeTutor()
 
-const calculatedCompenso = computed(() => {
-  const tipo = calculatedType.value as keyof typeof TARIFFE_DEFAULT
-  if (!tipo) return 0
-  // Anteprima con tariffe di default condivise; il valore autoritativo lo calcola il server
-  return (mezzaLezioneGlobale.value ? TARIFFE_MEZZA[tipo] : TARIFFE_DEFAULT[tipo]) || 0
-})
+// Calcoli (stessa regola del server, anche per Forza Gruppo con 5+ alunni = MAXI)
+const calculatedType = computed(() =>
+  tipoLezione(students.value.filter(s => s.studentItem).length, forzaGruppo.value))
+const calculatedCompenso = computed(() =>
+  compenso(calculatedType.value, mezzaLezioneGlobale.value, timeSlotItem.value?.oraInizio, timeSlotItem.value?.oraFine))
 
 function formatCurrency(val: number) { return val.toFixed(2) }
 function formatDate(dateStr: string) {

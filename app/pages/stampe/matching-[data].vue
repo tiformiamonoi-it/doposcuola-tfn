@@ -12,6 +12,16 @@
         </UButton>
       </div>
 
+      <!-- Quali fasce orarie stampare: una colonna per ogni fascia spuntata -->
+      <fieldset v-if="dati?.slots.length" class="flex flex-wrap items-center gap-x-4 gap-y-2 bg-white rounded-xl border border-slate-200 p-3 text-sm">
+        <legend class="sr-only">Fasce orarie da stampare</legend>
+        <span class="font-medium text-slate-700">Fasce da stampare:</span>
+        <label v-for="slot in dati.slots" :key="slot.id" class="inline-flex items-center gap-1.5 tabular-nums">
+          <input v-model="fasceScelte" type="checkbox" :value="slot.id" class="size-4 accent-tfn-600">
+          {{ slot.label }}
+        </label>
+      </fieldset>
+
       <UAlert
         v-if="errore"
         color="error"
@@ -43,11 +53,12 @@
             <p class="text-[1.15em] font-semibold text-slate-800">{{ giornoEsteso }}</p>
           </div>
           <p class="text-right text-[0.95em] text-slate-700">
-            {{ tutorInStampa.length }} tutor<br>{{ dati.badges.length }} prenotazioni
+            {{ tutorInStampa.length }} tutor<br>{{ badgeInStampa.length }} prenotazioni<br>{{ quantiAlunni(contaAlunniUnici(badgeInStampa)) }}
           </p>
         </header>
 
         <p v-if="dati.slots.length === 0" class="mt-[1em]">Non ci sono fasce orarie impostate.</p>
+        <p v-else-if="slotInStampa.length === 0" class="mt-[1em]">Nessuna fascia oraria scelta: spuntane almeno una qui sopra.</p>
         <p v-else-if="tutorInStampa.length === 0" class="mt-[1em]">Nessun alunno assegnato ai tutor in questo giorno.</p>
 
         <!-- La stessa griglia dello schermo: righe i tutor, colonne le fasce orarie -->
@@ -56,7 +67,7 @@
             <tr>
               <th scope="col" class="w-[14%] border border-slate-500 bg-slate-100 px-[0.4em] py-[0.25em] text-left">Tutor</th>
               <th
-                v-for="slot in dati.slots"
+                v-for="slot in slotInStampa"
                 :key="slot.id"
                 scope="col"
                 class="border border-slate-500 bg-slate-100 px-[0.3em] py-[0.25em] text-center tabular-nums"
@@ -71,7 +82,7 @@
                 {{ tutor.name }}
               </th>
               <td
-                v-for="slot in dati.slots"
+                v-for="slot in slotInStampa"
                 :key="slot.id"
                 class="h-[2em] border border-slate-500 px-[0.35em] py-[0.2em] align-top"
               >
@@ -107,7 +118,7 @@
 import { format, parseISO } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { giornoCivileValido } from '#shared/giorno-civile'
-import { dividiTabellone, chiaveCasella, nomeBreve, type MatchingDelGiorno } from '#shared/matching'
+import { dividiTabellone, chiaveCasella, nomeBreve, quantiAlunni, contaAlunniUnici, type MatchingDelGiorno } from '#shared/matching'
 
 definePageMeta({ layout: false, middleware: ['admin-or-super'] })
 
@@ -127,14 +138,30 @@ const giornoValido = giornoCivileValido(giorno)
 // Gli stessi dati della pagina Matching
 const { data: dati, pending, error } = useLazyFetch<MatchingDelGiorno>(`/api/matching/${giorno}`, { immediate: giornoValido })
 
+// Il tabellone si divide su TUTTE le fasce: chi sta in una fascia non spuntata resta nella
+// sua casella (che semplicemente non si stampa), non finisce fra i "da assegnare".
 const tabellone = computed(() => dividiTabellone(dati.value ?? { tutors: [], badges: [], slots: [] }))
 
-// Sulla carta vanno solo i tutor con almeno un alunno in una fascia (richiesta del
+// Fasce da stampare: di norma quelle del pomeriggio fra le 15 e le 19, poi decide l'admin
+const fasceScelte = ref<string[]>([])
+const slotInStampa = computed(() => (dati.value?.slots ?? []).filter(s => fasceScelte.value.includes(s.id)))
+watch(dati, (d) => {
+  fasceScelte.value = (d?.slots ?? []).filter((s) => {
+    const [inizio = '', fine = ''] = s.id.split('-')
+    return inizio >= '15:00' && fine <= '19:00'
+  }).map(s => s.id)
+}, { immediate: true })
+
+// Le prenotazioni che finiscono sul foglio: nelle fasce scelte, più le "da assegnare"
+const badgeInStampa = computed(() => (dati.value?.badges ?? []).filter(b =>
+  tabellone.value.daAssegnare.includes(b) || fasceScelte.value.includes(b.assignedSlot ?? '')))
+
+// Sulla carta vanno solo i tutor con almeno un alunno in una fascia scelta (richiesta del
 // titolare): una riga vuota non serve a chi legge il foglio in sala e ruba spazio,
 // cioè rimpicciolisce il testo di tutte le altre. A schermo, nel Matching, restano
 // tutti: lì le righe vuote servono per assegnare.
 const tutorInStampa = computed(() => (dati.value?.tutors ?? []).filter(t =>
-  (dati.value?.slots ?? []).some(s => (tabellone.value.perCasella.get(chiaveCasella(t.id, s.id))?.length ?? 0) > 0)))
+  slotInStampa.value.some(s => (tabellone.value.perCasella.get(chiaveCasella(t.id, s.id))?.length ?? 0) > 0)))
 
 // "Martedì 16 settembre 2026"
 const giornoEsteso = computed(() => giornoValido
@@ -183,7 +210,7 @@ async function adattaAlFoglio() {
   pagine.value = Math.max(2, Math.ceil((foglio.value?.scrollHeight ?? 0) / ALTEZZA_UTILE_PX))
 }
 
-watch(dati, () => adattaAlFoglio(), { flush: 'post' })
+watch([dati, fasceScelte], () => adattaAlFoglio(), { flush: 'post' })
 
 // Data e ora di stampa: si scrivono nel browser (il server ha un altro fuso orario) e si
 // rinfrescano appena prima di stampare, anche se il foglio è rimasto aperto a lungo.

@@ -1,5 +1,6 @@
 import { LessonQuerySchema } from '#shared/schemas/lesson.schema'
 import { listLessons } from '../../services/lesson.service'
+import { sanitizeLessonForTutor } from '../../utils/package-privacy'
 
 // GET /api/lessons
 // Lista paginata di lezioni con filtri opzionali.
@@ -25,5 +26,6 @@ export default defineEventHandler(async (event) => {
     ? { ...parsed.data, tutorId: user.id }
     : parsed.data
 
-  return listLessons(query)
+  const res = await listLessons(query)
+  return user.role === 'TUTOR' ? { ...res, data: res.data.map(sanitizeLessonForTutor) } : res
 })

@@ -12,9 +12,10 @@ import {
   systemConfigs,
 } from '../database/schema'
 import { and, count, desc, eq, gte, inArray, isNotNull, lte, ne, sql } from 'drizzle-orm'
+import type { PgUpdateSetSource } from 'drizzle-orm/pg-core'
 import { computePackageStates } from './package.service'
 import { confiniGiornoOggiRome } from '../utils/tutor-time-window'
-import { TARIFFE_DEFAULT, TARIFFE_MEZZA } from '#shared/tariffe'
+import { TARIFFE_DEFAULT, TARIFFE_MEZZA, determinaTipoLezione } from '#shared/tariffe'
 import type {
   CreateLessonInput,
   UpdateLessonInput,
@@ -26,7 +27,7 @@ import type {
 // TARIFFE TUTOR — lette da system_configs (chiave: tariffe_tutor)
 //   SINGOLA = 1 studente senza forzaGruppo
 //   GRUPPO  = 2–4 studenti OPPURE 1 studente con forzaGruppo=true
-//   MAXI    = 5+ studenti
+//   MAXI    = 5+ studenti (solo se il maxi gruppo è attivo, altrimenti GRUPPO)
 // ─────────────────────────────────────────────
 
 type LessonType = 'SINGOLA' | 'GRUPPO' | 'MAXI'
@@ -76,10 +77,21 @@ function calcCompenso(tariffe: Record<LessonType, number>, tipo: LessonType, mez
   return tariffe[tipo] * calcDurationHours(oraInizio, oraFine)
 }
 
-function determineLessonType(numStudenti: number, forzaGruppo: boolean): LessonType {
-  if (numStudenti >= 5) return 'MAXI'
-  if (numStudenti >= 2 || forzaGruppo) return 'GRUPPO'
-  return 'SINGOLA'
+// Interruttore "Maxi gruppo attivo" (system_configs → maxi_gruppo_attivo): acceso salvo
+// un "false" esplicito, come prima che esistesse. Stessa cache di 60 s delle tariffe.
+// La regola del tipo sta in shared/tariffe.ts (determinaTipoLezione), usata anche dalle anteprime.
+let maxiCache: { valore: boolean; scade: number } | null = null
+
+async function getMaxiAttivo(): Promise<boolean> {
+  const now = Date.now()
+  if (maxiCache && maxiCache.scade > now) return maxiCache.valore
+  let valore = true
+  try {
+    const rows = await db.select({ value: systemConfigs.value }).from(systemConfigs).where(eq(systemConfigs.key, 'maxi_gruppo_attivo')).limit(1)
+    valore = (rows[0]?.value ?? '').trim().toLowerCase() !== 'false'
+  } catch { /* config illeggibile → acceso */ }
+  maxiCache = { valore, scade: now + CACHE_TTL_MS }
+  return valore
 }
 
 // Eccezione "stesso giorno" per i pacchetti MENSILI: se i giorni sono finiti ma la
@@ -108,6 +120,84 @@ async function oreAggiuntiveStessoGiornoOk(
       eq(lessons.data, lessonDateStr),
     ))
   return (res[0]?.n ?? 0) > 0
+}
+
+// ─────────────────────────────────────────────
+// PACCHETTI TOCCATI DA UNA LEZIONE (dentro la transazione)
+//
+// Prima, per ogni studente, lo stesso pacchetto veniva letto, scritto, riletto per
+// sapere il tipo, riletto ancora per ricalcolare gli stati e riscritto: 6-8 viaggi al
+// database a studente. Qui si tiene in memoria l'ULTIMA versione di ogni pacchetto:
+//
+//  - leggi(): i pacchetti da controllare arrivano con UNA query sola (inArray);
+//  - scrivi(): UPDATE … RETURNING. Dal primo UPDATE la riga resta bloccata dalla
+//    nostra transazione fino alla fine, quindi quello che torna indietro è identico a
+//    quello che darebbe una SELECT subito dopo: la rilettura non serve più. La memoria
+//    si aggiorna a ogni scrittura, così se due studenti usassero lo stesso pacchetto il
+//    secondo lo vede con le ore già scalate, esattamente come prima;
+//  - salvaStati(): gli stati si calcolano con la stessa computePackageStates
+//    sull'ultima versione di ogni pacchetto scritto e si salvano con UNA query alla
+//    fine. Durante la transazione nessuno rilegge la colonna `stati` (i controlli li
+//    ricalcolano ogni volta dai numeri), quindi scriverla alla fine invece che dopo
+//    ogni studente lascia lo stesso valore finale.
+//
+// Tutte le scritture sui pacchetti di createLesson/updateLesson passano da scrivi():
+// se se ne aggiunge una che non ci passa, la memoria resta indietro.
+// ─────────────────────────────────────────────
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+type RigaPacchetto = typeof packages.$inferSelect
+
+function pacchettiDellaLezione(tx: Tx) {
+  const ultime  = new Map<string, RigaPacchetto>()
+  const scritti = new Set<string>()
+
+  return {
+    // FOR NO KEY UPDATE: le righe lette restano BLOCCATE fino alla fine della
+    // transazione. Così il controllo "ha ancora ore? è scaduto? è sospeso?" vale fino
+    // allo scalamento: un pagamento o un'altra lezione sullo stesso pacchetto nello
+    // stesso istante aspetta che abbiamo finito, invece di passarci in mezzo.
+    // ORDER BY id: tutti i salvataggi bloccano i pacchetti nello stesso ordine, e due
+    // lezioni salvate insieme sugli stessi pacchetti non possono bloccarsi a vicenda.
+    async leggi(ids: string[]) {
+      if (ids.length === 0) return
+      const righe = await tx.select().from(packages)
+        .where(inArray(packages.id, ids))
+        .orderBy(packages.id)
+        .for('no key update')
+      for (const r of righe) ultime.set(r.id, r)
+    },
+
+    ultima(id: string) {
+      return ultime.get(id)
+    },
+
+    async scrivi(id: string, valori: PgUpdateSetSource<typeof packages>) {
+      const [riga] = await tx.update(packages).set(valori).where(eq(packages.id, id)).returning()
+      // Nessuna riga = pacchetto inesistente: come prima, niente stati da ricalcolare
+      if (riga) {
+        ultime.set(riga.id, riga)
+        scritti.add(riga.id)
+      }
+      return riga
+    },
+
+    async salvaStati() {
+      if (scritti.size === 0) return
+      const ids = [...scritti]
+      // sql.param con la colonna `stati` = stessa conversione dell'array che fa .set({ stati })
+      const casi = ids.map(id =>
+        sql`when ${id} then ${sql.param(computePackageStates(ultime.get(id)!), packages.stati)}::package_status[]`,
+      )
+      await tx
+        .update(packages)
+        .set({
+          stati:     sql`case ${packages.id} ${sql.join(casi, sql` `)} else ${packages.stati} end`,
+          updatedAt: new Date(),
+        })
+        .where(inArray(packages.id, ids))
+    },
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -170,7 +260,7 @@ export async function createLesson(data: CreateLessonInput) {
     }
 
     // 2. Determina tipo lezione e compenso tutor
-    const tipo          = determineLessonType(data.studenti.length, data.forzaGruppo)
+    const tipo          = determinaTipoLezione(data.studenti.length, data.forzaGruppo, await getMaxiAttivo())
     const tariffe       = await getTariffeTutor()
     const compensoTutor = calcCompenso(tariffe, tipo, data.mezzaLezione, slot.oraInizio, slot.oraFine)
 
@@ -192,23 +282,17 @@ export async function createLesson(data: CreateLessonInput) {
     // 4. Per ogni studente: inserisce lesson_student + scala ore atomicamente
     const lessonDateStr = data.data
 
+    // Tutti i pacchetti da controllare in UNA lettura (prima: una lettura per studente),
+    // bloccati da qui alla fine: la verifica di ogni studente vale fino al suo scalamento.
+    const pacchetti = pacchettiDellaLezione(tx)
+    await pacchetti.leggi(data.studenti.map(s => s.packageId))
+
     for (const studente of data.studenti) {
       // REGOLA: L'alunno, anche se fa mezz'ora, scala SEMPRE un'ora dal pacchetto
       const oreScalate = 1.0
 
       // 4.a Verifica che il pacchetto sia valido e abbia ore sufficienti
-      const [pkgCheck] = await tx
-        .select({
-          oreAcquistate:  packages.oreAcquistate,
-          oreResiduo:     packages.oreResiduo,
-          importoResiduo: packages.importoResiduo,
-          dataScadenza:   packages.dataScadenza,
-          giorniResiduo:  packages.giorniResiduo,
-          sospeso:        packages.sospeso,
-        })
-        .from(packages)
-        .where(eq(packages.id, studente.packageId))
-        .limit(1)
+      const pkgCheck = pacchetti.ultima(studente.packageId)
 
       if (!pkgCheck) {
         throw new Error(`Pacchetto non trovato per ${nomeStudente(studente.studentId)}`)
@@ -238,22 +322,14 @@ export async function createLesson(data: CreateLessonInput) {
         oreScalate:   String(oreScalate),
       })
 
-      // Scalamento ore atomico (previene race conditions)
-      await tx
-        .update(packages)
-        .set({
-          oreResiduo: sql`GREATEST(0, ${packages.oreResiduo} - ${String(oreScalate)})`,
-          updatedAt:  new Date(),
-        })
-        .where(eq(packages.id, studente.packageId))
+      // Scalamento ore atomico (previene race conditions).
+      // RETURNING restituisce già tipo e giorni aggiornati: niente rilettura.
+      const pkg = await pacchetti.scrivi(studente.packageId, {
+        oreResiduo: sql`GREATEST(0, ${packages.oreResiduo} - ${String(oreScalate)})`,
+        updatedAt:  new Date(),
+      })
 
       // Pacchetti MENSILI: deduci 1 giorno solo alla prima lezione di quella data
-      const [pkg] = await tx
-        .select({ tipo: packages.tipo, giorniResiduo: packages.giorniResiduo })
-        .from(packages)
-        .where(eq(packages.id, studente.packageId))
-        .limit(1)
-
       if (pkg?.tipo === 'MENSILE' && (pkg.giorniResiduo ?? 0) > 0) {
         // Conta quante lesson_student esistono oggi per questo studente + pacchetto
         // (include il record appena inserito — se count = 1, è la prima lezione)
@@ -271,38 +347,17 @@ export async function createLesson(data: CreateLessonInput) {
         const n = res[0]?.n ?? 0
 
         if (n <= 1) {
-          await tx
-            .update(packages)
-            .set({
-              giorniResiduo: sql`GREATEST(0, ${packages.giorniResiduo} - 1)`,
-              updatedAt:     new Date(),
-            })
-            .where(eq(packages.id, studente.packageId))
+          await pacchetti.scrivi(studente.packageId, {
+            giorniResiduo: sql`GREATEST(0, ${packages.giorniResiduo} - 1)`,
+            updatedAt:     new Date(),
+          })
         }
       }
-
-      // Ricalcola stati del pacchetto (dentro la transazione — vede i valori aggiornati)
-      const [updatedPkg] = await tx
-        .select()
-        .from(packages)
-        .where(eq(packages.id, studente.packageId))
-        .limit(1)
-
-      if (updatedPkg) {
-        const newStati = computePackageStates({
-          oreAcquistate:  updatedPkg.oreAcquistate,
-          oreResiduo:     updatedPkg.oreResiduo,
-          importoResiduo: updatedPkg.importoResiduo,
-          dataScadenza:   updatedPkg.dataScadenza,
-          giorniResiduo:  updatedPkg.giorniResiduo,
-          sospeso:        updatedPkg.sospeso,
-        })
-        await tx
-          .update(packages)
-          .set({ stati: newStati, updatedAt: new Date() })
-          .where(eq(packages.id, studente.packageId))
-      }
     }
+
+    // Ricalcola gli stati dei pacchetti (dentro la transazione, sui valori aggiornati):
+    // una query per tutti invece di rilettura + scrittura per ogni studente
+    await pacchetti.salvaStati()
 
     return lesson
   })
@@ -367,17 +422,19 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
         }
       }
 
+      // Ultima versione dei pacchetti toccati (vedi pacchettiDellaLezione): niente riletture
+      const pacchetti = pacchettiDellaLezione(tx)
+
       // Rimuove gli studenti tolti: rimborsa ore (e giorni per i pacchetti MENSILE)
       for (const old of existing) {
         if (newIds.has(old.studentId)) continue
 
         const oreRimborsate = Number(old.oreScalate)
-        await tx
-          .update(packages)
-          .set({ oreResiduo: sql`${packages.oreResiduo} + ${String(oreRimborsate)}`, updatedAt: new Date() })
-          .where(eq(packages.id, old.packageId))
+        // RETURNING restituisce già il tipo: niente rilettura
+        const pkg = await pacchetti.scrivi(old.packageId, {
+          oreResiduo: sql`${packages.oreResiduo} + ${String(oreRimborsate)}`, updatedAt: new Date(),
+        })
 
-        const [pkg] = await tx.select({ tipo: packages.tipo }).from(packages).where(eq(packages.id, old.packageId)).limit(1)
         if (pkg?.tipo === 'MENSILE') {
           const res = await tx
             .select({ n: count() })
@@ -389,44 +446,27 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
               eq(lessons.data, lessonDateStr),
             ))
           if ((res[0]?.n ?? 0) === 1) {
-            await tx.update(packages)
-              .set({ giorniResiduo: sql`${packages.giorniResiduo} + 1`, updatedAt: new Date() })
-              .where(eq(packages.id, old.packageId))
+            await pacchetti.scrivi(old.packageId, {
+              giorniResiduo: sql`${packages.giorniResiduo} + 1`, updatedAt: new Date(),
+            })
           }
         }
 
         await tx.delete(lessonStudents).where(eq(lessonStudents.id, old.id))
-
-        const [updatedPkg] = await tx.select().from(packages).where(eq(packages.id, old.packageId)).limit(1)
-        if (updatedPkg) {
-          const newStati = computePackageStates({
-            oreAcquistate:  updatedPkg.oreAcquistate,
-            oreResiduo:     updatedPkg.oreResiduo,
-            importoResiduo: updatedPkg.importoResiduo,
-            dataScadenza:   updatedPkg.dataScadenza,
-            giorniResiduo:  updatedPkg.giorniResiduo,
-            sospeso:        updatedPkg.sospeso,
-          })
-          await tx.update(packages).set({ stati: newStati, updatedAt: new Date() }).where(eq(packages.id, old.packageId))
-        }
+        // Stati: ricalcolati e salvati tutti insieme in fondo (pacchetti.salvaStati)
       }
+
+      // Pacchetti da controllare (studenti nuovi + studenti che cambiano pacchetto) in UNA
+      // lettura, fatta nello stesso punto in cui prima partiva la prima delle letture singole
+      // e bloccata fino alla fine come in createLesson (vedi pacchettiDellaLezione.leggi).
+      const cambiati = data.studenti.filter(s => existing.some(e => e.studentId === s.studentId && e.packageId !== s.packageId))
+      await pacchetti.leggi([...studentiNuovi, ...cambiati].map(s => s.packageId))
 
       // Aggiunge i nuovi studenti: valida pacchetto e scala le ore (stessa logica di createLesson)
       for (const nuovo of studentiNuovi) {
         const oreScalate = 1.0
 
-        const [pkgCheck] = await tx
-          .select({
-            oreAcquistate:  packages.oreAcquistate,
-            oreResiduo:     packages.oreResiduo,
-            importoResiduo: packages.importoResiduo,
-            dataScadenza:   packages.dataScadenza,
-            giorniResiduo:  packages.giorniResiduo,
-            sospeso:        packages.sospeso,
-          })
-          .from(packages)
-          .where(eq(packages.id, nuovo.packageId))
-          .limit(1)
+        const pkgCheck = pacchetti.ultima(nuovo.packageId)
 
         if (!pkgCheck) throw new Error(`Pacchetto non trovato per ${nomeStudenteUpd(nuovo.studentId)}`)
 
@@ -452,11 +492,11 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
           oreScalate: String(oreScalate),
         })
 
-        await tx.update(packages)
-          .set({ oreResiduo: sql`GREATEST(0, ${packages.oreResiduo} - ${String(oreScalate)})`, updatedAt: new Date() })
-          .where(eq(packages.id, nuovo.packageId))
+        // RETURNING restituisce già tipo e giorni aggiornati: niente rilettura
+        const pkg = await pacchetti.scrivi(nuovo.packageId, {
+          oreResiduo: sql`GREATEST(0, ${packages.oreResiduo} - ${String(oreScalate)})`, updatedAt: new Date(),
+        })
 
-        const [pkg] = await tx.select({ tipo: packages.tipo, giorniResiduo: packages.giorniResiduo }).from(packages).where(eq(packages.id, nuovo.packageId)).limit(1)
         if (pkg?.tipo === 'MENSILE' && (pkg.giorniResiduo ?? 0) > 0) {
           const res = await tx
             .select({ n: count() })
@@ -468,24 +508,12 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
               eq(lessons.data, lessonDateStr),
             ))
           if ((res[0]?.n ?? 0) <= 1) {
-            await tx.update(packages)
-              .set({ giorniResiduo: sql`GREATEST(0, ${packages.giorniResiduo} - 1)`, updatedAt: new Date() })
-              .where(eq(packages.id, nuovo.packageId))
+            await pacchetti.scrivi(nuovo.packageId, {
+              giorniResiduo: sql`GREATEST(0, ${packages.giorniResiduo} - 1)`, updatedAt: new Date(),
+            })
           }
         }
-
-        const [updatedPkg] = await tx.select().from(packages).where(eq(packages.id, nuovo.packageId)).limit(1)
-        if (updatedPkg) {
-          const newStati = computePackageStates({
-            oreAcquistate:  updatedPkg.oreAcquistate,
-            oreResiduo:     updatedPkg.oreResiduo,
-            importoResiduo: updatedPkg.importoResiduo,
-            dataScadenza:   updatedPkg.dataScadenza,
-            giorniResiduo:  updatedPkg.giorniResiduo,
-            sospeso:        updatedPkg.sospeso,
-          })
-          await tx.update(packages).set({ stati: newStati, updatedAt: new Date() }).where(eq(packages.id, nuovo.packageId))
-        }
+        // Stati: ricalcolati e salvati tutti insieme in fondo (pacchetti.salvaStati)
       }
 
       // F7 — studenti già presenti ma con pacchetto cambiato: rimborsa il vecchio, scala il nuovo
@@ -495,13 +523,12 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
 
         const oreScalate = Number(oldRecord.oreScalate)
 
-        // Rimborsa ore al vecchio pacchetto
-        await tx.update(packages)
-          .set({ oreResiduo: sql`${packages.oreResiduo} + ${String(oreScalate)}`, updatedAt: new Date() })
-          .where(eq(packages.id, oldRecord.packageId))
+        // Rimborsa ore al vecchio pacchetto (RETURNING restituisce già il tipo)
+        const oldPkg = await pacchetti.scrivi(oldRecord.packageId, {
+          oreResiduo: sql`${packages.oreResiduo} + ${String(oreScalate)}`, updatedAt: new Date(),
+        })
 
         // Gestione giorni MENSILE per il vecchio pacchetto
-        const [oldPkg] = await tx.select({ tipo: packages.tipo }).from(packages).where(eq(packages.id, oldRecord.packageId)).limit(1)
         if (oldPkg?.tipo === 'MENSILE') {
           const resOld = await tx.select({ n: count() }).from(lessonStudents)
             .innerJoin(lessons, eq(lessonStudents.lessonId, lessons.id))
@@ -511,22 +538,14 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
               eq(lessons.data, lessonDateStr),
             ))
           if ((resOld[0]?.n ?? 0) === 1) {
-            await tx.update(packages)
-              .set({ giorniResiduo: sql`${packages.giorniResiduo} + 1`, updatedAt: new Date() })
-              .where(eq(packages.id, oldRecord.packageId))
+            await pacchetti.scrivi(oldRecord.packageId, {
+              giorniResiduo: sql`${packages.giorniResiduo} + 1`, updatedAt: new Date(),
+            })
           }
         }
 
         // Verifica nuovo pacchetto
-        const [newPkgCheck] = await tx.select({
-          oreAcquistate:  packages.oreAcquistate,
-          oreResiduo:     packages.oreResiduo,
-          importoResiduo: packages.importoResiduo,
-          dataScadenza:   packages.dataScadenza,
-          giorniResiduo:  packages.giorniResiduo,
-          sospeso:        packages.sospeso,
-        })
-          .from(packages).where(eq(packages.id, newStu.packageId)).limit(1)
+        const newPkgCheck = pacchetti.ultima(newStu.packageId)
         if (!newPkgCheck) throw new Error(`Pacchetto non trovato per ${nomeStudenteUpd(newStu.studentId)}`)
         if (newPkgCheck.sospeso) {
           throw new Error(`${nomeStudenteUpd(newStu.studentId)}: il nuovo pacchetto è sospeso e non può essere usato.`)
@@ -541,14 +560,12 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
           }
         }
 
-        // Scala ore dal nuovo pacchetto
-        await tx.update(packages)
-          .set({ oreResiduo: sql`GREATEST(0, ${packages.oreResiduo} - ${String(oreScalate)})`, updatedAt: new Date() })
-          .where(eq(packages.id, newStu.packageId))
+        // Scala ore dal nuovo pacchetto (RETURNING restituisce già tipo e giorni)
+        const newPkg = await pacchetti.scrivi(newStu.packageId, {
+          oreResiduo: sql`GREATEST(0, ${packages.oreResiduo} - ${String(oreScalate)})`, updatedAt: new Date(),
+        })
 
         // Gestione giorni MENSILE per il nuovo pacchetto
-        const [newPkg] = await tx.select({ tipo: packages.tipo, giorniResiduo: packages.giorniResiduo })
-          .from(packages).where(eq(packages.id, newStu.packageId)).limit(1)
         if (newPkg?.tipo === 'MENSILE' && (newPkg.giorniResiduo ?? 0) > 0) {
           const resNew = await tx.select({ n: count() }).from(lessonStudents)
             .innerJoin(lessons, eq(lessonStudents.lessonId, lessons.id))
@@ -558,9 +575,9 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
               eq(lessons.data, lessonDateStr),
             ))
           if ((resNew[0]?.n ?? 0) === 0) {
-            await tx.update(packages)
-              .set({ giorniResiduo: sql`GREATEST(0, ${packages.giorniResiduo} - 1)`, updatedAt: new Date() })
-              .where(eq(packages.id, newStu.packageId))
+            await pacchetti.scrivi(newStu.packageId, {
+              giorniResiduo: sql`GREATEST(0, ${packages.giorniResiduo} - 1)`, updatedAt: new Date(),
+            })
           }
         }
 
@@ -569,22 +586,12 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
           .set({ packageId: newStu.packageId })
           .where(eq(lessonStudents.id, oldRecord.id))
 
-        // Ricalcola stati per entrambi i pacchetti
-        for (const pkgId of [oldRecord.packageId, newStu.packageId]) {
-          const [updPkg] = await tx.select().from(packages).where(eq(packages.id, pkgId)).limit(1)
-          if (updPkg) {
-            const newStati = computePackageStates({
-              oreAcquistate:  updPkg.oreAcquistate,
-              oreResiduo:     updPkg.oreResiduo,
-              importoResiduo: updPkg.importoResiduo,
-              dataScadenza:   updPkg.dataScadenza,
-              giorniResiduo:  updPkg.giorniResiduo,
-              sospeso:        updPkg.sospeso,
-            })
-            await tx.update(packages).set({ stati: newStati, updatedAt: new Date() }).where(eq(packages.id, pkgId))
-          }
-        }
+        // Stati di entrambi i pacchetti: ricalcolati e salvati in fondo (pacchetti.salvaStati)
       }
+
+      // Stati di tutti i pacchetti scritti (tolti, nuovi, cambiati): una query sola.
+      // Qui, prima dello slot e della lezione, esattamente dove finiva l'ultima scrittura di prima.
+      await pacchetti.salvaStati()
     }
 
     // Ricalcola tipo e compenso tutor in base al numero finale di studenti
@@ -592,7 +599,8 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
       ? data.studenti.length
       : (await tx.select({ n: count() }).from(lessonStudents).where(eq(lessonStudents.lessonId, id)))[0]?.n ?? 0
     const forzaGruppoFinal = data.forzaGruppo ?? lesson.forzaGruppo
-    const tipo = determineLessonType(studentCountFinal, forzaGruppoFinal)
+    // Una lezione già MAXI resta MAXI anche a maxi gruppo spento (storico intatto)
+    const tipo = determinaTipoLezione(studentCountFinal, forzaGruppoFinal, lesson.tipo === 'MAXI' || await getMaxiAttivo())
 
     const [slot] = await tx.select().from(timeSlots).where(eq(timeSlots.id, lesson.timeSlotId)).limit(1)
     if (!slot) throw new Error('Slot orario non trovato')
@@ -976,13 +984,15 @@ export async function ricalcolaTipiECompensiLezioni(apply = false, daData?: stri
   const countMap = new Map(counts.map(c => [c.lessonId, Number(c.n)]))
 
   const tariffe = await getTariffeTutor() // una sola lettura per tutto il ciclo
+  const maxiAttivo = await getMaxiAttivo()
 
   const changes: RicalcoloLezioneChange[] = []
   for (const l of allLessons) {
     const n = countMap.get(l.id) ?? 0
     if (n === 0) continue // lezione senza studenti: non la tocco
 
-    const tipoNuovo     = determineLessonType(n, l.forzaGruppo)
+    // Stessa regola della modifica: a maxi spento le MAXI già salvate restano MAXI
+    const tipoNuovo     = determinaTipoLezione(n, l.forzaGruppo, l.tipo === 'MAXI' || maxiAttivo)
     const compensoNuovo = calcCompenso(tariffe, tipoNuovo, l.mezzaLezione, l.oraInizio, l.oraFine).toFixed(2)
 
     if (tipoNuovo !== l.tipo || compensoNuovo !== l.compenso) {

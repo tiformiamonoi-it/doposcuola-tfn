@@ -188,6 +188,29 @@
           </div>
         </UCard>
       </div>
+
+      <!-- Supplementi materie speciali approvati su questo pacchetto (+€10 ciascuno) -->
+      <UCard v-if="supplementi.length > 0" :ui="{ body: 'p-0' }">
+        <template #header><h3 class="font-semibold text-slate-800">Supplementi materie speciali</h3></template>
+        <ul class="divide-y divide-slate-100">
+          <li v-for="s in supplementi" :key="s.bookingId" class="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+            <span class="text-slate-700">
+              Lezione del {{ formatData(s.requestedDate) }} · {{ s.materie.join(', ') || '—' }} ·
+              <span class="font-medium text-slate-900">+€{{ parseFloat(s.supplemento ?? '0').toFixed(2) }}</span>
+              <span v-if="s.supplementoApplicatoAt" class="text-slate-500"> · approvato il {{ formatData(s.supplementoApplicatoAt) }}</span>
+            </span>
+            <UButton
+              size="xs"
+              color="error"
+              variant="ghost"
+              :aria-label="`Annulla il supplemento della lezione del ${formatData(s.requestedDate)}`"
+              @click="chiediAnnullaSupplemento(s)"
+            >
+              Annulla
+            </UButton>
+          </li>
+        </ul>
+      </UCard>
     </template>
 
     <div v-else class="py-16 text-center">
@@ -237,6 +260,16 @@
       :confirm-color="sospesoTarget ? 'warning' : 'success'"
       :loading="toggleSospesoLoading"
       @confirm="eseguiToggleSospeso"
+    />
+
+    <ConfirmDialog
+      v-model:open="confirmOpen"
+      :title="confirmTitle"
+      :description="confirmDescription"
+      :confirm-label="confirmLabel"
+      :confirm-color="confirmColor"
+      :loading="confirmLoading"
+      @confirm="eseguiConferma"
     />
   </div>
 </template>
@@ -292,6 +325,32 @@ const lezioni = computed(() => lezioniRes.value?.data ?? [])
 
 const { data: pagamentiRes, refresh: refreshPagamenti } = useFetch('/api/payments', { lazy: true, query: { packageId: id, limit: 100 }, default: () => ({ data: [] }) })
 const pagamenti = computed(() => pagamentiRes.value?.data ?? [])
+
+// Supplementi materie speciali applicati al pacchetto (solo admin/super tutor, come la pagina)
+type SupplementoPacchetto = { bookingId: string, requestedDate: string, supplemento: string | null, supplementoApplicatoAt: string | null, materie: string[] }
+const { data: supplementiRes, refresh: refreshSupplementi } = useFetch<{ data: SupplementoPacchetto[] }>(`/api/packages/${id}/supplementi`, { lazy: true, default: () => ({ data: [] }) })
+const supplementi = computed(() => supplementiRes.value?.data ?? [])
+
+const { confirmOpen, confirmTitle, confirmDescription, confirmLabel, confirmColor, confirmLoading, chiediConferma, eseguiConferma } = useConfirm()
+function chiediAnnullaSupplemento(s: SupplementoPacchetto) {
+  chiediConferma({
+    title: `Togliere +€${parseFloat(s.supplemento ?? '0').toFixed(2)} dal pacchetto?`,
+    description: `Il supplemento della lezione del ${formatData(s.requestedDate)} viene tolto dal prezzo del pacchetto e la prenotazione torna "da approvare".`,
+    confirmLabel: 'Togli',
+    confirmColor: 'error',
+    attendi: true,
+  }, async () => {
+    try {
+      await $fetch(`/api/admin/bookings/${s.bookingId}/supplemento`, { method: 'DELETE' })
+      toast.add({ title: 'Supplemento annullato', color: 'success' })
+      refreshSupplementi()
+      refreshPacchetto()
+    } catch (err: any) {
+      toast.add({ title: 'Impossibile annullare il supplemento', description: err?.data?.statusMessage ?? 'Errore imprevisto', color: 'error' })
+      throw err
+    }
+  })
+}
 
 const giaSaldato    = computed(() => !!pacchetto.value?.stati?.includes('PAGATO'))
 const puoEliminare  = computed(() => pagamenti.value.length === 0 && lezioni.value.length === 0)

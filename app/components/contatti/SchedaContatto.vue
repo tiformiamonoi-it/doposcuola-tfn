@@ -355,6 +355,7 @@ import {
   ricontattoScaduto, linkTelefono, linkWhatsapp, linkEmail, linkSocial, coloreStato, coloreEsito,
 } from '~/utils/contatti'
 import type { ContattoDettaglio, FiglioContatto, Interazione } from '~/utils/contatti'
+import { separaClasseScuola } from '~/utils/schools'
 
 const props = defineProps<{ contactId: string | null }>()
 const emit = defineEmits<{ changed: [] }>()
@@ -494,11 +495,8 @@ const prefillStudente = computed(() => {
     ? pezziStudente.slice(1).join(' ')
     : (c.cognome ?? '')
 
-  // "2ª media / Dante" → classe "2ª media", scuola "Dante"
-  const grezzo = (f.classeScuola ?? '').trim()
-  const taglio = grezzo.search(/[/-]/)
-  const classe = taglio >= 0 ? grezzo.slice(0, taglio).trim() : grezzo
-  const scuola = taglio >= 0 ? grezzo.slice(taglio + 1).trim() : ''
+  // "2ª Media · Dante" (o il testo libero di una volta) → classe "2ª Media", scuola "Dante"
+  const { classe, scuola } = separaClasseScuola(f.classeScuola)
 
   const provenienza = ['Dal contatto CRM.', f.materie ? `Materie: ${f.materie}.` : null]
     .filter(Boolean).join(' ')

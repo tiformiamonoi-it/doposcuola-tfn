@@ -82,6 +82,12 @@ export function stessoAlunno(a: AlunnoPrenotato, b: AlunnoPrenotato): boolean {
     && normalizzaTelefono(a.studentPhone ?? '') === normalizzaTelefono(b.studentPhone ?? '')
 }
 
+/** Alunni diversi fra le prenotazioni: chi prenota due materie conta una volta sola */
+export function contaAlunniUnici(prenotazioni: AlunnoPrenotato[]): number {
+  // ponytail: confronto a coppie, va bene per le poche decine di targhette di un giorno
+  return prenotazioni.filter((p, i) => !prenotazioni.slice(0, i).some(q => stessoAlunno(p, q))).length
+}
+
 // ─── Il tabellone: chi sta in quale casella ───
 
 /** "Rossi L.": la targhetta deve stare in una casella stretta */

@@ -130,7 +130,7 @@
               <div v-if="f.studentId" class="text-sm">
                 <p class="text-slate-800">
                   <span class="font-medium">{{ f.nome || 'Nome non indicato' }}</span>
-                  <span v-if="f.classeScuola" class="text-slate-500"> · {{ f.classeScuola }}</span>
+                  <span v-if="f.classe || f.scuola" class="text-slate-500"> · {{ uniscClasseScuola(f.classe, f.scuola) }}</span>
                   <span v-if="f.materie" class="text-slate-500"> · {{ f.materie }}</span>
                 </p>
                 <p class="text-xs text-slate-500 mt-0.5">
@@ -138,12 +138,25 @@
                 </p>
               </div>
 
-              <div v-else class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <UFormField label="Nome studente" :name="`figlio-${f.chiave}-nome`">
                   <UInput v-model="f.nome" placeholder="Luca" class="w-full" />
                 </UFormField>
-                <UFormField label="Classe / Scuola" :name="`figlio-${f.chiave}-classe`">
-                  <UInput v-model="f.classeScuola" placeholder="2ª media" class="w-full" />
+                <!-- Classe e scuola: stesse tendine della scheda studente -->
+                <UFormField label="Classe" :name="`figlio-${f.chiave}-classe`">
+                  <USelectMenu v-model="f.classe" :items="CLASSI_LISTA" searchable placeholder="Seleziona classe..." class="w-full" />
+                </UFormField>
+                <UFormField label="Scuola" :name="`figlio-${f.chiave}-scuola`">
+                  <template v-if="!f.scuolaManuale">
+                    <USelectMenu v-model="f.scuola" :items="SCUOLE_TRAPANI" searchable placeholder="Cerca scuola..." class="w-full" />
+                    <button type="button" class="text-xs text-tfn-500 hover:underline mt-1 block" @click="f.scuolaManuale = true">
+                      Non trovi la scuola? Inserisci manualmente
+                    </button>
+                  </template>
+                  <div v-else class="flex gap-2">
+                    <UInput v-model="f.scuola" placeholder="Nome scuola" class="flex-1" />
+                    <UButton variant="ghost" size="xs" @click="f.scuolaManuale = false; f.scuola = ''">← Lista</UButton>
+                  </div>
                 </UFormField>
                 <UFormField label="Materie" :name="`figlio-${f.chiave}-materie`">
                   <UInput v-model="f.materie" placeholder="Matematica, Inglese" class="w-full" />
@@ -262,6 +275,7 @@ import {
 } from '~/utils/contatti'
 import type { Contatto, FiglioContatto } from '~/utils/contatti'
 import { MAX_FIGLI_CONTATTO } from '#shared/schemas/contact.schema'
+import { SCUOLE_TRAPANI, CLASSI_LISTA, separaClasseScuola, uniscClasseScuola } from '~/utils/schools'
 
 const props = defineProps<{
   /** Tab attiva: pre-seleziona il tipo quando si crea un contatto nuovo */
@@ -314,7 +328,11 @@ interface RigaFiglio {
   chiave: number
   id: string | null
   nome: string
-  classeScuola: string
+  // Nel database è un campo solo (classeScuola): qui diviso, si riunisce al salvataggio
+  classe: string
+  scuola: string
+  /** Scuola scritta a mano perché non è nell'elenco (anche i testi liberi dei contatti di prima) */
+  scuolaManuale: boolean
   materie: string
   studentId: string | null
   studenteNome: string | null
@@ -322,11 +340,14 @@ interface RigaFiglio {
 
 let prossimaChiave = 0
 function rigaFiglio(f?: FiglioContatto): RigaFiglio {
+  const { classe, scuola } = separaClasseScuola(f?.classeScuola)
   return {
     chiave:       prossimaChiave++,
     id:           f?.id ?? null,
     nome:         f?.nome ?? '',
-    classeScuola: f?.classeScuola ?? '',
+    classe,
+    scuola,
+    scuolaManuale: Boolean(scuola) && !SCUOLE_TRAPANI.includes(scuola),
     materie:      f?.materie ?? '',
     studentId:    f?.studentId ?? null,
     studenteNome: f?.studenteNome ?? null,
@@ -501,7 +522,7 @@ function corpoDaInviare() {
             figli: figli.value.map((f) => ({
               id:           f.id,
               nome:         vuotoNull(f.nome),
-              classeScuola: vuotoNull(f.classeScuola),
+              classeScuola: vuotoNull(uniscClasseScuola(f.classe, f.scuola)),
               materie:      vuotoNull(f.materie),
             })),
           })

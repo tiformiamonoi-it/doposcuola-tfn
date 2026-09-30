@@ -21,20 +21,23 @@
 // Android/Chrome: prompt nativo via beforeinstallprompt. iPhone/Safari: solo
 // istruzioni manuali (Apple non offre nessuna API di installazione).
 // Cookie e non localStorage: regola del progetto (hydration mismatch in SSR).
-const dismissed = useCookie<boolean>('tfn-install-dismissed', { maxAge: 60 * 60 * 24 * 365 })
+// Chiusura con la X o invito rifiutato → si ripropone dopo 7 giorni; solo
+// l'installazione accettata lo spegne per un anno. (-v2: azzera le chiusure
+// annuali date con la versione vecchia, che scattavano anche con la X.)
+const dismissed = useCookie<boolean>('tfn-install-dismissed-v2', { maxAge: 60 * 60 * 24 * 7 })
+const dismissedAnno = useCookie<boolean>('tfn-install-dismissed-v2', { maxAge: 60 * 60 * 24 * 365 })
 
-const promptNativo = ref<any>(null)
+// Evento catturato all'avvio da plugins/install-prompt.client.ts
+const promptNativo = useState<any>('installPrompt', () => null)
 const isIos = ref(false)
 const giaInstallata = ref(true) // true finché non si verifica nel browser: il server non mostra nulla
 
 onMounted(() => {
   giaInstallata.value = window.matchMedia('(display-mode: standalone)').matches
     || (navigator as any).standalone === true // vecchi iOS
+  // iPadOS 13+ si presenta come un Mac: lo riconosce solo il touch
   isIos.value = /iphone|ipad|ipod/i.test(navigator.userAgent)
-  window.addEventListener('beforeinstallprompt', (e: Event) => {
-    e.preventDefault() // niente mini-infobar di Chrome: mostriamo noi il bottone
-    promptNativo.value = e
-  })
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 })
 
 const mostra = computed(() =>
@@ -42,9 +45,13 @@ const mostra = computed(() =>
 )
 
 async function installa() {
-  await promptNativo.value?.prompt()
-  promptNativo.value = null
-  dismissed.value = true
+  const p = promptNativo.value
+  if (!p) return
+  await p.prompt()
+  const { outcome } = await p.userChoice
+  promptNativo.value = null // l'evento vale una volta sola
+  if (outcome === 'accepted') dismissedAnno.value = true
+  else dismissed.value = true
 }
 
 function chiudi() {

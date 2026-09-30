@@ -2,6 +2,7 @@ import { UpdateLessonSchema } from '#shared/schemas/lesson.schema'
 import { updateLesson, getLessonById, verificaPoolOggiPerTutor } from '../../services/lesson.service'
 import { tutorPuoModificareOggi } from '../../utils/tutor-time-window'
 import { toHttpError } from '../../utils/http-error'
+import { sanitizeLessonForTutor } from '../../utils/package-privacy'
 
 // PUT /api/lessons/:id
 // Aggiorna gli studenti/note/forzaGruppo/mezzaLezione di una lezione esistente.
@@ -32,6 +33,11 @@ export default defineEventHandler(async (event) => {
     if (!tutorPuoModificareOggi(existing.data)) {
       throw createError({ statusCode: 403, statusMessage: 'Puoi modificare una lezione solo lo stesso giorno, fino alle 20:00' })
     }
+    // Forza Gruppo è della segreteria: il tutor non lo cambia, ma può modificare
+    // una lezione che l'ufficio ha già forzato (il valore resta quello salvato).
+    if (parsed.data.forzaGruppo !== undefined && parsed.data.forzaGruppo !== existing.forzaGruppo) {
+      throw createError({ statusCode: 403, statusMessage: '«Forza Gruppo» può usarlo solo la segreteria' })
+    }
     if (parsed.data.studenti && parsed.data.studenti.length > 0) {
       const fuoriPool = await verificaPoolOggiPerTutor(parsed.data.studenti.map(s => s.studentId))
       if (fuoriPool.length > 0) {
@@ -45,7 +51,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     const lesson = await updateLesson(id, parsed.data)
-    return { data: lesson }
+    return { data: user.role === 'TUTOR' ? sanitizeLessonForTutor(lesson) : lesson }
   } catch (err) {
     throw toHttpError(err)
   }

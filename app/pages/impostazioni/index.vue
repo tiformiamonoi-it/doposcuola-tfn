@@ -333,10 +333,17 @@
               <UFormField label="Lezione Singola">
                 <UInputNumber v-model="tariffe.SINGOLA" :min="0" :step="0.5" class="w-full" />
               </UFormField>
-              <UFormField label="Lezione di Gruppo (2-4)">
+              <UFormField :label="maxiGruppoAttivo ? 'Lezione di Gruppo (2-4)' : 'Lezione di Gruppo (2+)'">
                 <UInputNumber v-model="tariffe.GRUPPO" :min="0" :step="0.5" class="w-full" />
               </UFormField>
-              <UFormField label="Lezione Maxi (5+)">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-slate-800">Maxi gruppo attivo</p>
+                  <p class="text-xs text-slate-500 mt-0.5">Se spento, le lezioni con 5 o più alunni sono Gruppo.</p>
+                </div>
+                <USwitch v-model="maxiGruppoAttivo" aria-label="Maxi gruppo attivo" />
+              </div>
+              <UFormField v-if="maxiGruppoAttivo" label="Lezione Maxi (5+)">
                 <UInputNumber v-model="tariffe.MAXI" :min="0" :step="0.5" class="w-full" />
               </UFormField>
 
@@ -1285,6 +1292,9 @@ const whatsappNumero = ref('')
 // configurazione non ancora salvata non deve spegnere di nascosto un avviso che le
 // famiglie si aspettano. Lo stesso criterio del server, in note-digest.service.ts.
 const riepilogoSeraleAttivo = ref(true)
+// Maxi gruppo (system_configs.maxi_gruppo_attivo): acceso finché non si salva "false",
+// stesso criterio del server (lesson.service.ts → getMaxiAttivo). La tariffa MAXI resta salvata.
+const maxiGruppoAttivo = ref(true)
 const sconti = ref<{ nome: string; descrizione: string; immagine: string }[]>([])
 const materieSpeciali = ref<string[]>([])
 const giornateSpeciali = ref<Record<string, string[]>>({})
@@ -1323,6 +1333,7 @@ watchEffect(() => {
   whatsappNumero.value = configs.value.whatsapp_numero || ''
   // Spento SOLO se qualcuno ha salvato "false": riga assente o valore strano = acceso.
   riepilogoSeraleAttivo.value = (configs.value.riepilogo_serale_attivo ?? '').trim().toLowerCase() !== 'false'
+  maxiGruppoAttivo.value = (configs.value.maxi_gruppo_attivo ?? '').trim().toLowerCase() !== 'false'
   annoScolastico.value = configs.value.anno_scolastico_corrente || annoScolasticoDa(oggiISO())
   inizioAnnoScolastico.value = configs.value.anno_scolastico_inizio || inizioAnnoProposto(annoScolastico.value)
 })
@@ -1632,6 +1643,7 @@ async function salvaConfigs(opzioni?: { silenzioso?: boolean; rilancia?: boolean
         whatsapp_numero: whatsappNumero.value,
         // Le configurazioni si salvano sempre come testo: qui "true"/"false".
         riepilogo_serale_attivo: riepilogoSeraleAttivo.value ? 'true' : 'false',
+        maxi_gruppo_attivo: maxiGruppoAttivo.value ? 'true' : 'false',
         sconti: JSON.stringify(sconti.value),
         materie_speciali: JSON.stringify(materieSpeciali.value),
         giornate_speciali: JSON.stringify(giornateSpeciali.value),

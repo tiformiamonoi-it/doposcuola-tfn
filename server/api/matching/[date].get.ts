@@ -2,6 +2,7 @@ import { eq, and, gte, lte, ne } from 'drizzle-orm'
 import { db } from '../../database/client'
 import * as tables from '../../database/schema'
 import { giornoFeriale, tutorDUfficio } from '../../services/disponibilita-tutor.service'
+import { getConfigMaterieSpeciali } from '../../services/booking.service'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -85,10 +86,22 @@ export default defineEventHandler(async (event) => {
     }
   })
 
+  // Il supplemento sta sulla PRENOTAZIONE, ma riguarda solo la materia speciale fuori
+  // data (stessa regola di decidiSupplemento): lo mostriamo solo su quel badge.
+  const { speciali, giornate } = await getConfigMaterieSpeciali()
+  const materieDelGiorno = giornate[targetDate] ?? []
+  const fuoriData = (materia: string) => speciali.includes(materia) && !materieDelGiorno.includes(materia)
+
   // Formattiamo le prenotazioni in "Badges" come nel .old
   const badges: any[] = []
   dayBookings.forEach(b => {
+    // Se nessuna materia corrisponde (impostazioni cambiate dopo la prenotazione) va sul
+    // primo badge: un supplemento da approvare non deve sparire.
+    const conSupplemento = b.subjects.some(s => fuoriData(s.name))
+      ? (s: { name: string }) => fuoriData(s.name)
+      : (s: { name: string }) => s === b.subjects[0]
     b.subjects.forEach(subjectRel => {
+      const haSupplemento = !!b.supplemento && conSupplemento(subjectRel)
       badges.push({
         subjectId: subjectRel.id,
         bookingId: b.id,
@@ -103,8 +116,8 @@ export default defineEventHandler(async (event) => {
         assignedSlot: subjectRel.assignedSlot,
         isAssigned: !!subjectRel.assignedTutorId && !!subjectRel.assignedSlot,
         // Lezione speciale fuori data: supplemento €10 da approvare (o già applicato)
-        supplemento: b.supplemento ? parseFloat(b.supplemento) : 0,
-        supplementoApplicato: !!b.supplementoApplicatoAt,
+        supplemento: haSupplemento ? parseFloat(b.supplemento!) : 0,
+        supplementoApplicato: haSupplemento && !!b.supplementoApplicatoAt,
       })
     })
   })
@@ -114,10 +127,15 @@ export default defineEventHandler(async (event) => {
     orderBy: (ts, { asc }) => [asc(ts.oraInizio)]
   })
 
-  const slots = timeSlotsList.map(ts => ({
-    id: `${ts.oraInizio}-${ts.oraFine}`,
-    label: `${ts.oraInizio} - ${ts.oraFine}`
-  }))
+  // Solo le fasce attive. Una fascia disattivata resta però se quel giorno c'è ancora un
+  // alunno assegnato lì: senza colonna finirebbe fra i "da assegnare" per sbaglio.
+  const fasceUsate = new Set(badges.map(b => b.assignedSlot).filter(Boolean))
+  const slots = timeSlotsList
+    .filter(ts => ts.active || fasceUsate.has(`${ts.oraInizio}-${ts.oraFine}`))
+    .map(ts => ({
+      id: `${ts.oraInizio}-${ts.oraFine}`,
+      label: `${ts.oraInizio} - ${ts.oraFine}`
+    }))
 
   return {
     date: dateParam,

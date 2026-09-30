@@ -9,6 +9,15 @@ export const TARIFFE_DEFAULT: Record<TipoLezione, number> = {
   MAXI:    8.50,
 }
 
+// Tipo lezione dal numero di alunni — UNICA regola per server (calcolo autoritativo) e anteprime.
+// 5+ alunni = MAXI anche con "Forza Gruppo" (serve solo a pagare GRUPPO una lezione da 1).
+// Con il maxi gruppo spento (Impostazioni → maxi_gruppo_attivo) le lezioni da 5+ sono GRUPPO.
+export function determinaTipoLezione(numStudenti: number, forzaGruppo: boolean, maxiAttivo = true): TipoLezione {
+  if (numStudenti >= 5 && maxiAttivo) return 'MAXI'
+  if (numStudenti >= 2 || forzaGruppo) return 'GRUPPO'
+  return 'SINGOLA'
+}
+
 // Tariffe per le mezze lezioni: arrotondate per difetto (NON semplice tariffa/2).
 // La mezza MAXI = €4,00, non €4,25 — regola di business confermata dall'utente.
 // Hardcoded in quanto regola di business, non configurabile dall'admin.

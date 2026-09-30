@@ -2,6 +2,7 @@ import { CreateLessonSchema } from '#shared/schemas/lesson.schema'
 import { createLesson, verificaPoolOggiPerTutor } from '../../services/lesson.service'
 import { tutorPuoModificareOggi } from '../../utils/tutor-time-window'
 import { toHttpError } from '../../utils/http-error'
+import { sanitizeLessonForTutor } from '../../utils/package-privacy'
 
 // POST /api/lessons
 // Crea una nuova lezione con scalamento atomico delle ore dai pacchetti.
@@ -28,6 +29,10 @@ export default defineEventHandler(async (event) => {
   if (user.role === 'TUTOR') {
     input = { ...input, tutorId: user.id }
 
+    if (input.forzaGruppo) {
+      throw createError({ statusCode: 403, statusMessage: '«Forza Gruppo» può usarlo solo la segreteria' })
+    }
+
     if (!tutorPuoModificareOggi(input.data)) {
       throw createError({ statusCode: 403, statusMessage: 'Puoi inserire una lezione solo per oggi, fino alle 20:00' })
     }
@@ -44,7 +49,7 @@ export default defineEventHandler(async (event) => {
   try {
     const lesson = await createLesson(input)
     setResponseStatus(event, 201)
-    return { data: lesson }
+    return { data: user.role === 'TUTOR' ? sanitizeLessonForTutor(lesson) : lesson }
   } catch (err) {
     throw toHttpError(err)
   }

@@ -670,6 +670,8 @@ function getStudentsInSlot(giorno: any, tutorId: string, slotId: string) {
   return Array.from(studentsMap.values())
 }
 
+const { tipoLezione } = useTariffeTutor()
+
 function tipoLezioneSlot(giorno: any, tutorId: string, slotId: string): string {
   const stus = getStudentsInSlot(giorno, tutorId, slotId)
   if (stus.length === 0) return ''
@@ -678,10 +680,8 @@ function tipoLezioneSlot(giorno: any, tutorId: string, slotId: string): string {
       if (lesson.tipo) return lesson.tipo
     }
   }
-  // Anteprima prima del salvataggio: MAXI solo da 5 studenti, come il server
-  if (stus.length === 1) return 'SINGOLA'
-  if (stus.length <= 4) return 'GRUPPO'
-  return 'MAXI'
+  // Anteprima prima del salvataggio: stessa regola del server (maxi gruppo acceso/spento)
+  return tipoLezione(stus.length, false)
 }
 
 // Vero solo se lo slot ha lezioni e TUTTE sono già state confermate.
