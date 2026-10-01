@@ -80,6 +80,8 @@
             </span>
             <span class="ml-auto font-bold text-emerald-700">
               € {{ l.compensoTutor ? parseFloat(l.compensoTutor).toFixed(2) : '—' }}
+              <!-- Compenso scritto a mano da Admin/Super Tutor invece che calcolato -->
+              <UBadge v-if="l.compensoForzato" color="warning" variant="subtle" size="sm" class="ml-1">forzato</UBadge>
             </span>
           </span>
           <span v-if="l.note" class="block text-xs text-slate-500 mt-2 line-clamp-2">{{ l.note }}</span>
@@ -163,6 +165,10 @@
           <span class="font-bold text-emerald-600">
             € {{ row.original.compensoTutor ? parseFloat(row.original.compensoTutor).toFixed(2) : '—' }}
           </span>
+          <UBadge
+            v-if="row.original.compensoForzato" color="warning" variant="subtle" size="sm" class="ml-1.5"
+            :title="`Compenso forzato a ${parseFloat(row.original.compensoForzato).toFixed(2)} €/ora`"
+          >forzato</UBadge>
         </template>
 
         <!-- Colonna Note -->
@@ -215,7 +221,12 @@
           </div>
           <div class="flex gap-2">
             <dt class="w-32 text-slate-400">Compenso</dt>
-            <dd class="font-medium">€ {{ lezioneSelezionata.compensoTutor ? parseFloat(lezioneSelezionata.compensoTutor).toFixed(2) : '—' }}</dd>
+            <dd class="font-medium">
+              € {{ lezioneSelezionata.compensoTutor ? parseFloat(lezioneSelezionata.compensoTutor).toFixed(2) : '—' }}
+              <UBadge v-if="lezioneSelezionata.compensoForzato" color="warning" variant="subtle" size="sm" class="ml-1">
+                forzato a {{ parseFloat(lezioneSelezionata.compensoForzato).toFixed(2) }} €/ora
+              </UBadge>
+            </dd>
           </div>
           <div v-if="lezioneSelezionata.mezzaLezione" class="flex gap-2">
             <dt class="w-32 text-slate-400">Durata</dt>

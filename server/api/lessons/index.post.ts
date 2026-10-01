@@ -33,6 +33,11 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 403, statusMessage: '«Forza Gruppo» può usarlo solo la segreteria' })
     }
 
+    // Il compenso forzato è di ADMIN e SUPER_TUTOR: il tutor non lo scrive
+    if (input.compensoForzato != null) {
+      throw createError({ statusCode: 403, statusMessage: 'Il compenso forzato può impostarlo solo la segreteria' })
+    }
+
     if (!tutorPuoModificareOggi(input.data)) {
       throw createError({ statusCode: 403, statusMessage: 'Puoi inserire una lezione solo per oggi, fino alle 20:00' })
     }
@@ -47,7 +52,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const lesson = await createLesson(input)
+    const lesson = await createLesson(input, user.id)
     setResponseStatus(event, 201)
     return { data: user.role === 'TUTOR' ? sanitizeLessonForTutor(lesson) : lesson }
   } catch (err) {

@@ -38,6 +38,10 @@ export default defineEventHandler(async (event) => {
     if (parsed.data.forzaGruppo !== undefined && parsed.data.forzaGruppo !== existing.forzaGruppo) {
       throw createError({ statusCode: 403, statusMessage: '«Forza Gruppo» può usarlo solo la segreteria' })
     }
+    // Il compenso forzato è di ADMIN e SUPER_TUTOR: il tutor non lo cambia
+    if (parsed.data.compensoForzato !== undefined) {
+      throw createError({ statusCode: 403, statusMessage: 'Il compenso forzato può impostarlo solo la segreteria' })
+    }
     if (parsed.data.studenti && parsed.data.studenti.length > 0) {
       const fuoriPool = await verificaPoolOggiPerTutor(parsed.data.studenti.map(s => s.studentId))
       if (fuoriPool.length > 0) {
@@ -50,7 +54,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const lesson = await updateLesson(id, parsed.data)
+    const lesson = await updateLesson(id, parsed.data, user.id)
     return { data: user.role === 'TUTOR' ? sanitizeLessonForTutor(lesson) : lesson }
   } catch (err) {
     throw toHttpError(err)

@@ -14,6 +14,7 @@
       { label: 'Pacchetti Standard', slot: 'pacchetti' },
       { label: 'Slot Orari', slot: 'slot' },
       { label: 'Materie & Tariffe', slot: 'materie_tariffe' },
+      { label: 'Tariffe speciali', slot: 'tariffe_speciali' },
       { label: 'Categorie Contabili', slot: 'categorie' },
       { label: 'Spese Fisse', slot: 'spese' },
       { label: 'Chiusure', slot: 'chiusure' },
@@ -192,6 +193,12 @@
         </div>
       </div>
         </UCard>
+      </template>
+
+      <!-- Le regole "in questa situazione il tutor prende tot €/ora": tutte, senza filtro.
+           Le stesse regole, filtrate, stanno nella scheda del tutor e in quella dell'alunno. -->
+      <template #tariffe_speciali>
+        <TariffeSpeciali class="mt-4" />
       </template>
 
       <template #materie_tariffe>

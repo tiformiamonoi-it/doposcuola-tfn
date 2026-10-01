@@ -15,13 +15,15 @@ import { and, count, desc, eq, gte, inArray, isNotNull, lte, ne, sql } from 'dri
 import type { PgUpdateSetSource } from 'drizzle-orm/pg-core'
 import { computePackageStates } from './package.service'
 import { confiniGiornoOggiRome } from '../utils/tutor-time-window'
-import { TARIFFE_DEFAULT, TARIFFE_MEZZA, determinaTipoLezione } from '#shared/tariffe'
+import { TARIFFE_DEFAULT, determinaTipoLezione } from '#shared/tariffe'
+import { caricaRegole, whereRegolePerLezione, calcolaCompensoLezione, type EsitoCompenso } from './tariffe-speciali.service'
 import type {
   CreateLessonInput,
   UpdateLessonInput,
   LessonQuery,
   CalendarQuery,
 } from '#shared/schemas/lesson.schema'
+import type { AnteprimaCompensoInput } from '#shared/schemas/tariffe-speciali.schema'
 
 // ─────────────────────────────────────────────
 // TARIFFE TUTOR — lette da system_configs (chiave: tariffe_tutor)
@@ -66,15 +68,26 @@ async function getTariffeTutor(): Promise<Record<LessonType, number>> {
   return tariffeCache
 }
 
-function calcDurationHours(oraInizio: string, oraFine: string): number {
-  const [h1, m1] = oraInizio.split(':').map(Number) as [number, number]
-  const [h2, m2] = oraFine.split(':').map(Number) as [number, number]
-  return ((h2 * 60 + m2) - (h1 * 60 + m1)) / 60
-}
+// Il compenso si calcola in tariffe-speciali.service.ts (calcolaCompensoLezione): una
+// formula sola per creazione, modifica, ricalcolo e anteprima.
 
-function calcCompenso(tariffe: Record<LessonType, number>, tipo: LessonType, mezzaLezione: boolean, oraInizio: string, oraFine: string): number {
-  if (mezzaLezione) return TARIFFE_MEZZA[tipo]
-  return tariffe[tipo] * calcDurationHours(oraInizio, oraFine)
+// Quando una lezione GIÀ SALVATA va ricalcolata: solo se cambia qualcosa che conta per
+// il compenso. Le tariffe (listino e regole speciali) valgono per le lezioni nuove: una
+// modifica che non cambia tipo/mezza/alunni/forzatura non ristampa lo scontrino
+// (altrimenti i mesi già liquidati mostrerebbero arretrati fantasma).
+// La usano updateLesson e l'anteprima della finestra di modifica: stessa risposta.
+function compensoDaRicalcolare(
+  salvata: { tipo: string; mezzaLezione: boolean; compensoTutor: string | null; compensoForzato: string | null; studentIds: string[] },
+  nuova:   { tipo: string; mezzaLezione: boolean; compensoForzato: number | null; studentIds: string[] },
+): boolean {
+  const prima = new Set(salvata.studentIds)
+  const alunniCambiati = prima.size !== new Set(nuova.studentIds).size || nuova.studentIds.some(id => !prima.has(id))
+  const forzatoPrima = salvata.compensoForzato == null ? null : Number(salvata.compensoForzato)
+  return nuova.tipo !== salvata.tipo ||
+    nuova.mezzaLezione !== salvata.mezzaLezione ||
+    alunniCambiati ||
+    nuova.compensoForzato !== forzatoPrima ||
+    salvata.compensoTutor === null
 }
 
 // Interruttore "Maxi gruppo attivo" (system_configs → maxi_gruppo_attivo): acceso salvo
@@ -208,7 +221,8 @@ function pacchettiDellaLezione(tx: Tx) {
 // (SET ore_residuo = ore_residuo - valore) — mai read-modify-write in memoria
 // ─────────────────────────────────────────────
 
-export async function createLesson(data: CreateLessonInput) {
+// `utenteId` = chi salva: finisce in compensoForzatoDa se la lezione ha un compenso forzato.
+export async function createLesson(data: CreateLessonInput, utenteId: string) {
   return await db.transaction(async (tx) => {
     // 1. Carica lo slot orario per calcolare la durata della lezione
     const [slot] = await tx
@@ -259,10 +273,15 @@ export async function createLesson(data: CreateLessonInput) {
       )
     }
 
-    // 2. Determina tipo lezione e compenso tutor
-    const tipo          = determinaTipoLezione(data.studenti.length, data.forzaGruppo, await getMaxiAttivo())
-    const tariffe       = await getTariffeTutor()
-    const compensoTutor = calcCompenso(tariffe, tipo, data.mezzaLezione, slot.oraInizio, slot.oraFine)
+    // 2. Determina tipo lezione e compenso tutor (listino + tariffe speciali + forzatura).
+    // Le regole si leggono UNA volta, già filtrate per questo tutor, alunni e giorno.
+    const tipo            = determinaTipoLezione(data.studenti.length, data.forzaGruppo, await getMaxiAttivo())
+    const compensoForzato = data.compensoForzato ?? null
+    const regole          = await caricaRegole(tx, whereRegolePerLezione(data.tutorId, studentIds, data.data))
+    const { compenso: compensoTutor } = calcolaCompensoLezione({
+      tutorId: data.tutorId, timeSlotId: data.timeSlotId, data: data.data, studentIds,
+      tipo, mezzaLezione: data.mezzaLezione, oraInizio: slot.oraInizio, oraFine: slot.oraFine, compensoForzato,
+    }, await getTariffeTutor(), regole)
 
     // 3. Inserisce la lezione
     const [lesson] = await tx
@@ -275,6 +294,8 @@ export async function createLesson(data: CreateLessonInput) {
         mezzaLezione:  data.mezzaLezione,
         forzaGruppo:   data.forzaGruppo,
         compensoTutor: compensoTutor.toFixed(2),
+        compensoForzato:   compensoForzato?.toFixed(2) ?? null,
+        compensoForzatoDa: compensoForzato != null ? utenteId : null,
         note:          data.note ?? null,
       })
       .returning()
@@ -370,15 +391,19 @@ export async function createLesson(data: CreateLessonInput) {
 // nuovi, ricalcola tipo e compenso tutor in base al numero finale di studenti.
 // ─────────────────────────────────────────────
 
-export async function updateLesson(id: string, data: UpdateLessonInput) {
+// `utenteId` = chi salva: finisce in compensoForzatoDa se cambia il compenso forzato.
+export async function updateLesson(id: string, data: UpdateLessonInput, utenteId: string) {
   return await db.transaction(async (tx) => {
     const [lesson] = await tx.select().from(lessons).where(eq(lessons.id, id)).limit(1)
     if (!lesson) throw new Error('Lezione non trovata')
 
     const lessonDateStr = lesson.data
 
+    // Gli alunni di PRIMA della modifica: servono sia qui sotto (chi togliere, chi
+    // aggiungere) sia per decidere se il compenso va ricalcolato.
+    const existing = await tx.select().from(lessonStudents).where(eq(lessonStudents.lessonId, id))
+
     if (data.studenti) {
-      const existing = await tx.select().from(lessonStudents).where(eq(lessonStudents.lessonId, id))
       const newIds        = new Set(data.studenti.map(s => s.studentId))
       const studentiNuovi = data.studenti.filter(s => !existing.some(e => e.studentId === s.studentId))
 
@@ -594,28 +619,32 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
       await pacchetti.salvaStati()
     }
 
-    // Ricalcola tipo e compenso tutor in base al numero finale di studenti
-    const studentCountFinal = data.studenti
-      ? data.studenti.length
-      : (await tx.select({ n: count() }).from(lessonStudents).where(eq(lessonStudents.lessonId, id)))[0]?.n ?? 0
+    // Ricalcola tipo e compenso tutor in base agli alunni finali
+    const studentIdsFinali = data.studenti ? data.studenti.map(s => s.studentId) : existing.map(e => e.studentId)
     const forzaGruppoFinal = data.forzaGruppo ?? lesson.forzaGruppo
     // Una lezione già MAXI resta MAXI anche a maxi gruppo spento (storico intatto)
-    const tipo = determinaTipoLezione(studentCountFinal, forzaGruppoFinal, lesson.tipo === 'MAXI' || await getMaxiAttivo())
+    const tipo = determinaTipoLezione(studentIdsFinali.length, forzaGruppoFinal, lesson.tipo === 'MAXI' || await getMaxiAttivo())
 
-    const [slot] = await tx.select().from(timeSlots).where(eq(timeSlots.id, lesson.timeSlotId)).limit(1)
-    if (!slot) throw new Error('Slot orario non trovato')
     const mezzaLezioneFinal = data.mezzaLezione ?? lesson.mezzaLezione
+    // undefined = il compenso forzato non si tocca; null = si toglie la forzatura
+    const forzatoPrima = lesson.compensoForzato == null ? null : Number(lesson.compensoForzato)
+    const forzatoFinal = data.compensoForzato !== undefined ? data.compensoForzato : forzatoPrima
+    const forzatoCambiato = forzatoFinal !== forzatoPrima
 
-    // Le tariffe nuove valgono per le lezioni nuove: una modifica che non cambia tipo/durata
-    // non ristampa lo scontrino (altrimenti i mesi già liquidati mostrerebbero arretrati fantasma).
     // Nota: updateLesson non può cambiare slot né data (vedi UpdateLessonSchema), quindi la durata è invariata.
-    const compensoDaRicalcolare =
-      tipo !== lesson.tipo ||
-      mezzaLezioneFinal !== lesson.mezzaLezione ||
-      lesson.compensoTutor === null
-    const compensoTutor = compensoDaRicalcolare
-      ? calcCompenso(await getTariffeTutor(), tipo, mezzaLezioneFinal, slot.oraInizio, slot.oraFine).toFixed(2)
-      : lesson.compensoTutor
+    let compensoTutor = lesson.compensoTutor
+    if (compensoDaRicalcolare(
+      { ...lesson, studentIds: existing.map(e => e.studentId) },
+      { tipo, mezzaLezione: mezzaLezioneFinal, compensoForzato: forzatoFinal, studentIds: studentIdsFinali },
+    )) {
+      const [slot] = await tx.select().from(timeSlots).where(eq(timeSlots.id, lesson.timeSlotId)).limit(1)
+      if (!slot) throw new Error('Slot orario non trovato')
+      const regole = await caricaRegole(tx, whereRegolePerLezione(lesson.tutorId, studentIdsFinali, lesson.data))
+      compensoTutor = calcolaCompensoLezione({
+        tutorId: lesson.tutorId, timeSlotId: lesson.timeSlotId, data: lesson.data, studentIds: studentIdsFinali,
+        tipo, mezzaLezione: mezzaLezioneFinal, oraInizio: slot.oraInizio, oraFine: slot.oraFine, compensoForzato: forzatoFinal,
+      }, await getTariffeTutor(), regole).compenso.toFixed(2)
+    }
 
     const [updated] = await tx
       .update(lessons)
@@ -623,6 +652,11 @@ export async function updateLesson(id: string, data: UpdateLessonInput) {
         tipo,
         mezzaLezione:  mezzaLezioneFinal,
         compensoTutor,
+        // Chi ha forzato: si aggiorna solo quando la forzatura cambia davvero
+        ...(forzatoCambiato ? {
+          compensoForzato:   forzatoFinal?.toFixed(2) ?? null,
+          compensoForzatoDa: forzatoFinal != null ? utenteId : null,
+        } : {}),
         forzaGruppo:   forzaGruppoFinal,
         note:          data.note !== undefined ? data.note : lesson.note,
         updatedAt:     new Date(),
@@ -946,7 +980,9 @@ export async function getLessonsByPackage(packageId: string) {
 // MANUTENZIONE — Ricalcolo tipo + compenso di TUTTE le lezioni
 // Corregge i dati incoerenti (es. lezioni importate con tipo "SINGOLA" ma 2 studenti):
 // ricalcola tipo (SINGOLA/GRUPPO/MAXI) dal numero reale di studenti + forzaGruppo, e il
-// compenso tutor di conseguenza. Con apply=false è una simulazione (non scrive nulla).
+// compenso tutor di conseguenza (listino + tariffe speciali, stessa formula del salvataggio).
+// Le lezioni con COMPENSO FORZATO non si toccano mai: la forzatura è una scelta a mano.
+// Con apply=false è una simulazione (non scrive nulla).
 // ─────────────────────────────────────────────
 
 export type RicalcoloLezioneChange = {
@@ -964,36 +1000,49 @@ export async function ricalcolaTipiECompensiLezioni(apply = false, daData?: stri
   // Lezioni + slot (per la durata) in un colpo solo
   const allLessons = await db
     .select({
-      id:           lessons.id,
-      tipo:         lessons.tipo,
-      forzaGruppo:  lessons.forzaGruppo,
-      mezzaLezione: lessons.mezzaLezione,
-      compenso:     lessons.compensoTutor,
-      oraInizio:    timeSlots.oraInizio,
-      oraFine:      timeSlots.oraFine,
+      id:              lessons.id,
+      tutorId:         lessons.tutorId,
+      timeSlotId:      lessons.timeSlotId,
+      data:            lessons.data,
+      tipo:            lessons.tipo,
+      forzaGruppo:     lessons.forzaGruppo,
+      mezzaLezione:    lessons.mezzaLezione,
+      compenso:        lessons.compensoTutor,
+      compensoForzato: lessons.compensoForzato,
+      oraInizio:       timeSlots.oraInizio,
+      oraFine:         timeSlots.oraFine,
     })
     .from(lessons)
     .innerJoin(timeSlots, eq(lessons.timeSlotId, timeSlots.id))
     .where(daData ? gte(lessons.data, daData) : undefined)
 
-  // Numero di studenti per lezione
-  const counts = await db
-    .select({ lessonId: lessonStudents.lessonId, n: count() })
+  // Gli alunni di ogni lezione (servono alle tariffe speciali, non basta più il numero)
+  const righeAlunni = await db
+    .select({ lessonId: lessonStudents.lessonId, studentId: lessonStudents.studentId })
     .from(lessonStudents)
-    .groupBy(lessonStudents.lessonId)
-  const countMap = new Map(counts.map(c => [c.lessonId, Number(c.n)]))
+  const alunniPerLezione = new Map<string, string[]>()
+  for (const r of righeAlunni) {
+    const elenco = alunniPerLezione.get(r.lessonId)
+    if (elenco) elenco.push(r.studentId)
+    else alunniPerLezione.set(r.lessonId, [r.studentId])
+  }
 
-  const tariffe = await getTariffeTutor() // una sola lettura per tutto il ciclo
-  const maxiAttivo = await getMaxiAttivo()
+  // Una sola lettura per tutto il ciclo: listino, maxi e TUTTE le regole speciali
+  const [tariffe, maxiAttivo, regole] = await Promise.all([getTariffeTutor(), getMaxiAttivo(), caricaRegole()])
 
   const changes: RicalcoloLezioneChange[] = []
   for (const l of allLessons) {
-    const n = countMap.get(l.id) ?? 0
+    if (l.compensoForzato != null) continue // compenso forzato a mano: non lo tocco
+    const studentIds = alunniPerLezione.get(l.id) ?? []
+    const n = studentIds.length
     if (n === 0) continue // lezione senza studenti: non la tocco
 
     // Stessa regola della modifica: a maxi spento le MAXI già salvate restano MAXI
     const tipoNuovo     = determinaTipoLezione(n, l.forzaGruppo, l.tipo === 'MAXI' || maxiAttivo)
-    const compensoNuovo = calcCompenso(tariffe, tipoNuovo, l.mezzaLezione, l.oraInizio, l.oraFine).toFixed(2)
+    const compensoNuovo = calcolaCompensoLezione({
+      tutorId: l.tutorId, timeSlotId: l.timeSlotId, data: l.data, studentIds,
+      tipo: tipoNuovo, mezzaLezione: l.mezzaLezione, oraInizio: l.oraInizio, oraFine: l.oraFine, compensoForzato: null,
+    }, tariffe, regole).compenso.toFixed(2)
 
     if (tipoNuovo !== l.tipo || compensoNuovo !== l.compenso) {
       changes.push({
@@ -1025,4 +1074,73 @@ export async function ricalcolaTipiECompensiLezioni(apply = false, daData?: stri
     daData:        daData ?? null,
     changes,
   }
+}
+
+// ─────────────────────────────────────────────
+// ANTEPRIMA COMPENSO — POST /api/tariffe-speciali/anteprima
+// Le finestre del calendario chiedono qui il compenso invece di calcolarlo da sole:
+// così vedono la cifra vera (con le tariffe speciali) e da dove viene.
+// Una chiamata per tutte le lezioni della finestra; regole, slot e lezioni salvate
+// si leggono una volta sola.
+// ─────────────────────────────────────────────
+export type AnteprimaCompenso = EsitoCompenso & {
+  tipo: LessonType
+  // true = lezione in modifica che NON verrebbe ricalcolata: resta il compenso salvato
+  invariato: boolean
+}
+
+export async function anteprimaCompensi(input: AnteprimaCompensoInput): Promise<AnteprimaCompenso[]> {
+  const tuttiAlunni = [...new Set(input.lezioni.flatMap(l => l.studentIds))]
+  const slotIds     = [...new Set(input.lezioni.map(l => l.timeSlotId))]
+  const lessonIds   = input.lezioni.map(l => l.lessonId).filter((x): x is string => !!x)
+
+  const [slots, salvate, alunniSalvati, regole, tariffe, maxiAttivo] = await Promise.all([
+    db.select({ id: timeSlots.id, oraInizio: timeSlots.oraInizio, oraFine: timeSlots.oraFine })
+      .from(timeSlots).where(inArray(timeSlots.id, slotIds)),
+    lessonIds.length
+      ? db.select().from(lessons).where(inArray(lessons.id, lessonIds))
+      : Promise.resolve([]),
+    lessonIds.length
+      ? db.select({ lessonId: lessonStudents.lessonId, studentId: lessonStudents.studentId })
+          .from(lessonStudents).where(inArray(lessonStudents.lessonId, lessonIds))
+      : Promise.resolve([]),
+    caricaRegole(db, whereRegolePerLezione(input.tutorId, tuttiAlunni, input.data)),
+    getTariffeTutor(),
+    getMaxiAttivo(),
+  ])
+
+  return input.lezioni.map((l) => {
+    const slot = slots.find(s => s.id === l.timeSlotId)
+    if (!slot) throw new Error('Slot orario non trovato')
+    const salvata = l.lessonId ? salvate.find(x => x.id === l.lessonId) : undefined
+    if (l.lessonId && !salvata) throw new Error('Lezione non trovata')
+
+    // Stessa regola del tipo di createLesson/updateLesson (una MAXI salvata resta MAXI)
+    const tipo = determinaTipoLezione(l.studentIds.length, l.forzaGruppo, salvata?.tipo === 'MAXI' || maxiAttivo)
+    // In modifica il compenso forzato mancante vuol dire "lascia quello salvato", come nel PUT
+    const compensoForzato = l.compensoForzato !== undefined
+      ? l.compensoForzato
+      : (salvata?.compensoForzato == null ? null : Number(salvata.compensoForzato))
+
+    if (salvata && !compensoDaRicalcolare(
+      { ...salvata, studentIds: alunniSalvati.filter(a => a.lessonId === salvata.id).map(a => a.studentId) },
+      { tipo, mezzaLezione: l.mezzaLezione, compensoForzato, studentIds: l.studentIds },
+    )) {
+      return {
+        compenso:      Number(salvata.compensoTutor),
+        tariffaOraria: 0,
+        fonte:         compensoForzato != null ? 'FORZATO' as const : 'LISTINO' as const,
+        regolaId:      null,
+        descrizione:   'compenso già salvato: non cambia con questa modifica',
+        tipo,
+        invariato:     true,
+      }
+    }
+
+    const esito = calcolaCompensoLezione({
+      tutorId: input.tutorId, timeSlotId: l.timeSlotId, data: input.data, studentIds: l.studentIds,
+      tipo, mezzaLezione: l.mezzaLezione, oraInizio: slot.oraInizio, oraFine: slot.oraFine, compensoForzato,
+    }, tariffe, regole)
+    return { ...esito, tipo, invariato: false }
+  })
 }

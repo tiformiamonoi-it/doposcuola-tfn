@@ -13,8 +13,10 @@
         
         <div v-else class="space-y-6">
           <!-- Info Lezione Esistente -->
-          <!-- Tipo e compenso: al tutor no (non vede soldi, e il tipo lo decide il server) -->
-          <div v-if="existingLesson && !isTutor" class="bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-wrap gap-4">
+          <!-- Tipo e compenso: al tutor no (non vede soldi, e il tipo lo decide il server).
+               Il compenso lo calcola il server con la stessa regola della modifica: se non
+               cambia niente che conti, resta quello già salvato (e lo dice). -->
+          <div v-if="!isTutor && (existingLesson || students.length > 0)" class="bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-wrap gap-x-4 gap-y-2" aria-live="polite">
             <div class="flex items-center gap-2">
               <span class="text-slate-500 text-sm">Tipo:</span>
               <UBadge size="sm" :color="calculatedType === 'SINGOLA' ? 'info' : (calculatedType === 'GRUPPO' ? 'success' : 'warning')">
@@ -23,8 +25,10 @@
             </div>
             <div class="flex items-center gap-2">
               <span class="text-slate-500 text-sm">Compenso tutor:</span>
-              <span class="font-bold text-slate-800">€{{ formatCurrency(calculatedCompenso) }}</span>
+              <span class="font-bold text-slate-800">{{ anteprima ? `€${formatCurrency(anteprima.compenso)}` : (caricamentoAnteprima ? 'calcolo…' : '—') }}</span>
+              <UBadge v-if="existingLesson?.compensoForzato" color="warning" variant="subtle" size="sm">forzato</UBadge>
             </div>
+            <p v-if="anteprima" class="w-full text-xs text-slate-500">{{ anteprima.descrizione }}</p>
           </div>
 
           <!-- Sezione Studenti -->
@@ -81,6 +85,10 @@
           <div class="space-y-3 border-t border-slate-200 pt-4">
             <UCheckbox v-model="mezzaLezioneGlobale" label="Mezza Lezione (applicata a tutti gli studenti)" />
             <UCheckbox v-if="!isTutor" v-model="forzaGruppo" :disabled="students.length < 1" label="Forza tipo GRUPPO (anche per 1 studente)" />
+            <!-- Solo Admin e Super Tutor: il server lo rifiuta comunque ai tutor -->
+            <UFormField v-if="!isTutor" label="Compenso forzato (€/ora)" help="Lascia vuoto per il calcolo automatico (listino o tariffa speciale)">
+              <UInputNumber v-model="compensoForzato" :min="0.5" :step="0.5" placeholder="Automatico" class="w-full" aria-label="Compenso forzato in euro all'ora" />
+            </UFormField>
           </div>
 
           <!-- Note -->
@@ -154,6 +162,8 @@ const forzaGruppo = ref(false)
 const mezzaLezioneGlobale = ref(false)
 const note = ref('')
 const pickerAperto = ref(false)
+// €/ora scritti a mano da Admin/Super Tutor; null = calcolo automatico
+const compensoForzato = ref<number | null>(null)
 
 // ─── ConfirmDialog: stato e logica in app/composables/useConfirm.ts ───
 const {
@@ -166,14 +176,27 @@ const canSave = computed(() => {
   return students.value.every(s => s.studentItem?.value && s.packageItem?.value)
 })
 
-// Anteprima con le tariffe configurate; il valore autoritativo lo calcola il server
-const { compenso, tipoLezione, isTutor } = useTariffeTutor()
+const { tipoLezione, isTutor } = useTariffeTutor()
 
-// Calcoli (stessa regola del server, anche per Forza Gruppo con 5+ alunni = MAXI)
+// Tipo subito (stessa regola del server, anche per Forza Gruppo con 5+ alunni = MAXI)
 const calculatedType = computed(() =>
   tipoLezione(students.value.filter(s => s.studentItem).length, forzaGruppo.value, existingLesson.value?.tipo === 'MAXI'))
-const calculatedCompenso = computed(() =>
-  compenso(calculatedType.value, mezzaLezioneGlobale.value, props.slotStart, props.slotEnd))
+
+// Compenso: anteprima chiesta al server. Per una lezione già salvata si manda il suo id
+// (lessonId), così vale la stessa regola della modifica. Si manda la forzatura come verrà salvata (null = tolta).
+const { esiti: esitiAnteprima, caricamento: caricamentoAnteprima } = useAnteprimaCompenso(() => {
+  const studentIds: string[] = students.value.map(s => s.studentItem?.value).filter(Boolean)
+  if (isTutor.value || studentIds.length === 0) return null
+  return { tutorId: props.tutorId, data: props.date, lezioni: [{
+    ...(existingLesson.value ? { lessonId: existingLesson.value.id } : {}),
+    timeSlotId: props.timeSlotId,
+    studentIds,
+    forzaGruppo: forzaGruppo.value,
+    mezzaLezione: mezzaLezioneGlobale.value,
+    compensoForzato: compensoForzato.value ?? null,
+  }] }
+})
+const anteprima = computed(() => esitiAnteprima.value[0])
 
 function formatCurrency(val: number) {
   return val.toFixed(2)
@@ -252,6 +275,7 @@ function initModal() {
   existingLesson.value = null
   forzaGruppo.value = false
   mezzaLezioneGlobale.value = false
+  compensoForzato.value = null
   note.value = ''
 
   if (props.existingLessonsInSlot && props.existingLessonsInSlot.length > 0) {
@@ -260,6 +284,7 @@ function initModal() {
     existingLesson.value = props.existingLessonsInSlot[0]
     forzaGruppo.value = existingLesson.value.forzaGruppo || false
     note.value = existingLesson.value.note || ''
+    compensoForzato.value = existingLesson.value.compensoForzato != null ? Number(existingLesson.value.compensoForzato) : null
     
     // Raccogliamo tutti gli studenti da tutte le lezioni nello slot
     props.existingLessonsInSlot.forEach(lesson => {
@@ -303,18 +328,24 @@ async function saveLesson() {
       packageId: s.packageItem.value,
     }))
 
+    // Il compenso forzato lo mandano solo Admin e Super Tutor (il server lo rifiuta ai
+    // tutor). Nella modifica si manda sempre: uguale a prima = niente ricalcolo,
+    // vuoto = forzatura tolta.
+    const forzato = isTutor.value ? {} : { compensoForzato: compensoForzato.value ?? null }
     const postPayload = {
       tutorId:     props.tutorId,
       timeSlotId:  props.timeSlotId,
       data:        props.date,
       forzaGruppo: forzaGruppo.value,
       mezzaLezione: mezzaLezioneGlobale.value,
+      ...forzato,
       note:        note.value,
       studenti:    validStudents,
     }
     const putPayload = {
       forzaGruppo:  forzaGruppo.value,
       mezzaLezione: mezzaLezioneGlobale.value,
+      ...forzato,
       note:         note.value,
       studenti:     validStudents,
     }

@@ -215,6 +215,10 @@
                        gia' ma non e' mai stata scritta, e restava bianca per tutti. -->
                   <template #numLezioni-cell="{ row }">
                     <span class="text-slate-700">{{ row.original.numLezioni }}</span>
+                    <!-- Lezioni del mese con il compenso scritto a mano invece che calcolato -->
+                    <UBadge v-if="row.original.numForzate > 0" color="warning" variant="subtle" size="xs" class="ml-1.5">
+                      {{ row.original.numForzate }} {{ row.original.numForzate === 1 ? 'forzata' : 'forzate' }}
+                    </UBadge>
                   </template>
                   <template #compensoCalcolato-cell="{ row }">
                     <div class="text-sm">
@@ -433,6 +437,13 @@
                 </div>
               </UCard>
             </template>
+          </div>
+        </template>
+
+        <!-- ─── Tab TARIFFE SPECIALI (solo le regole di questo tutor) ─── -->
+        <template #tariffe_speciali>
+          <div class="pt-4">
+            <TariffeSpeciali :tutor-id="id" />
           </div>
         </template>
 
@@ -722,6 +733,8 @@ interface CompensoMese {
   mese: string
   meseLabel: string
   numLezioni: number
+  /** Lezioni del mese con compenso forzato a mano */
+  numForzate: number
   compensoGrezzo: number
   compensoCalcolato: number
   /** true se QUEL mese è stato calcolato col fisso mensile, false se a ore */
@@ -904,6 +917,7 @@ const tabs = [
   { label: 'Compensi',   slot: 'compensi' },
   { label: 'Rimborsi',   slot: 'rimborsi' },
   { label: 'Statistiche', slot: 'statistiche' },
+  { label: 'Tariffe speciali', slot: 'tariffe_speciali' },
 ]
 
 // Su telefono la striscia delle linguette scorre di lato: quando si cambia

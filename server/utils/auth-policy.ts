@@ -63,6 +63,9 @@ export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: 
   // (controllo granulare dentro service/handler) — la policy qui apre solo l'accesso di massima.
   { prefix: '/api/lessons',                 roles: STAFF },
   { prefix: '/api/payments',                roles: ADMIN_SUPER },
+  // Tariffe speciali dei tutor (e anteprima del compenso): sono soldi, niente TUTOR,
+  // né in lettura né in scrittura.
+  { prefix: '/api/tariffe-speciali',        roles: ADMIN_SUPER },
   { prefix: '/api/settings/timeslots',      roles: STAFF, mutationRoles: ADMIN_SUPER },
   { prefix: '/api/settings',                roles: ADMIN_SUPER },
   { prefix: '/api/matching',                roles: ADMIN_SUPER },

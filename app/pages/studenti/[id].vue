@@ -866,6 +866,13 @@
               </div>
             </template>
 
+            <!-- ─── TAB TARIFFE SPECIALI (solo le regole di questo alunno) ─── -->
+            <template #tariffe_speciali>
+              <div class="mt-4">
+                <TariffeSpeciali :student-id="id" />
+              </div>
+            </template>
+
           </UTabs>
         </div>
       </div>
@@ -1259,6 +1266,8 @@ const tabItems = computed(() => [
   { label: 'Prenotazioni', slot: 'prenotazioni' },
   // Diario note (interne + famiglia, con approvazione)
   { label: 'Note', slot: 'note' },
+  // Quanto prende il tutor con questo alunno (pagina già riservata ad ADMIN/SUPER_TUTOR)
+  { label: 'Tariffe speciali', slot: 'tariffe_speciali' },
   // Dati e credenziali della famiglia: riservati alla segreteria
   // (il server non manda comunque i recapiti dei genitori ai TUTOR)
   ...(isAdmin.value ? [{ label: 'Famiglia', slot: 'famiglia' }] : []),

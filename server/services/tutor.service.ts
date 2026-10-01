@@ -490,6 +490,8 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
     db.execute(sql`
       SELECT TO_CHAR(DATE_TRUNC('month', data), 'YYYY-MM') AS mese,
              COUNT(*)::text AS num_lezioni,
+             -- Quante lezioni del mese hanno il compenso forzato a mano (segno "forzato")
+             COUNT(*) FILTER (WHERE compenso_forzato IS NOT NULL)::text AS num_forzate,
              COALESCE(SUM(compenso_tutor::numeric), 0)::text AS compenso_grezzo
       FROM lessons
       WHERE tutor_id = ${tutorId} AND data >= ${ymd(pastStart)}
@@ -542,16 +544,17 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
   // dalla partenza del fisso a oggi, anche quelli in cui non ha fatto niente.
   // Seconda decisione di Alessandro (14/09/2026): un fisso mensile si deve lo stesso,
   // e un mese fermo per malattia prima non compariva proprio nell'elenco.
-  const mesiConLezioni = new Map<string, { numLezioni: number; compensoGrezzo: number }>()
+  const mesiConLezioni = new Map<string, { numLezioni: number; numForzate: number; compensoGrezzo: number }>()
   for (const row of lessonRows as any[]) {
     mesiConLezioni.set(String(row.mese), {
       numLezioni:     parseInt(row.num_lezioni),
+      numForzate:     parseInt(row.num_forzate),
       compensoGrezzo: parseFloat(row.compenso_grezzo),
     })
   }
   for (const meseFisso of mesiDovutiAFisso(profilo, ym(pastStart), nowKey, nowKey)) {
     if (!mesiConLezioni.has(meseFisso)) {
-      mesiConLezioni.set(meseFisso, { numLezioni: 0, compensoGrezzo: 0 })
+      mesiConLezioni.set(meseFisso, { numLezioni: 0, numForzate: 0, compensoGrezzo: 0 })
     }
   }
 
@@ -588,6 +591,7 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
       mese:             meseKey,
       meseLabel:        etichettaMese(meseKey),
       numLezioni:       riga.numLezioni,
+      numForzate:       riga.numForzate,
       compensoGrezzo:   Number(compensoGrezzo.toFixed(2)),
       compensoCalcolato,
       // Dice all'interfaccia se QUEL mese è stato pagato a fisso o a ore: serve

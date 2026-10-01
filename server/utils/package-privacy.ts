@@ -13,10 +13,11 @@ export function sanitizePackageForTutor<T extends Record<string, any>>(pkg: T): 
 }
 
 // Lezione vista da un TUTOR: il tutor inserisce lezioni ma non vede soldi → via il
-// compenso e i dati economici del pacchetto annidato (le ore restano).
+// compenso (anche quello forzato e chi l'ha forzato) e i dati economici del pacchetto
+// annidato (le ore restano).
 export function sanitizeLessonForTutor<T extends Record<string, any> | undefined>(lesson: T): T {
   if (!lesson) return lesson
-  const { compensoTutor: _compenso, ...copy } = lesson as Record<string, any>
+  const { compensoTutor: _compenso, compensoForzato: _forzato, compensoForzatoDa: _forzatoDa, ...copy } = lesson as Record<string, any>
   if (Array.isArray(copy.lessonStudents)) {
     copy.lessonStudents = copy.lessonStudents.map((ls: any) =>
       ls.package ? { ...ls, package: sanitizePackageForTutor(ls.package) } : ls)

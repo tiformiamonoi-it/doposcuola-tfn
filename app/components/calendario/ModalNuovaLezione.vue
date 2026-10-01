@@ -127,6 +127,18 @@
                 <div class="mt-4 pt-3 border-t border-slate-100 space-y-2">
                   <UCheckbox v-model="slot.mezzaLezione" size="sm" label="Mezza Lezione (per tutti)" />
                   <UCheckbox v-if="!isTutor" v-model="slot.forzaGruppo" :disabled="slot.studenti.length < 1" size="sm" label="Forza GRUPPO (paga come gruppo)" />
+                  <!-- Solo Admin e Super Tutor: il server lo rifiuta comunque ai tutor -->
+                  <UFormField v-if="!isTutor" label="Compenso forzato (€/ora)" help="Vuoto = automatico" size="sm">
+                    <UInputNumber
+                      v-model="slot.compensoForzato" :min="0.5" :step="0.5" placeholder="Automatico" size="sm" class="w-full"
+                      :aria-label="`Compenso forzato in euro all'ora, fascia ${slot.label}`"
+                    />
+                  </UFormField>
+                  <!-- Compenso di questa fascia calcolato dal server, con la fonte -->
+                  <p v-if="!isTutor && anteprimaPerSlot.get(slot.timeSlotId)" class="text-xs text-slate-500" aria-live="polite">
+                    <span class="font-semibold text-slate-700">€{{ formatCurrency(anteprimaPerSlot.get(slot.timeSlotId)!.compenso) }}</span>
+                    · {{ anteprimaPerSlot.get(slot.timeSlotId)!.descrizione }}
+                  </p>
                 </div>
               </UCard>
             </div>
@@ -235,6 +247,8 @@ interface SlotCompilabile {
   studenti: StudenteInSlot[]
   mezzaLezione: boolean
   forzaGruppo: boolean
+  // €/ora scritti a mano da Admin/Super Tutor; null = calcolo automatico
+  compensoForzato: number | null
 }
 
 const selectedDate = ref(format(new Date(), 'yyyy-MM-dd'))
@@ -256,7 +270,7 @@ const allSlotsOptions = computed(() => (slotsRes.value || []).map((s: any) => ({
 const { data: studentsRes } = useFetch('/api/students?active=true&limit=500&light=true', { lazy: true })
 const studentsOptions = computed(() => (studentsRes.value?.data || []).map((s: any) => ({ label: `${s.firstName} ${s.lastName}`, value: s.id })))
 
-const { compenso, tipoLezione, isTutor } = useTariffeTutor()
+const { isTutor } = useTariffeTutor()
 
 // ==========================================
 // INIT SLOTS
@@ -285,7 +299,8 @@ function createEmptySlot(slotOpt: VoceSlotOrario): SlotCompilabile {
     oraFine: slotOpt.oraFine,
     studenti: [],
     mezzaLezione: false,
-    forzaGruppo: false
+    forzaGruppo: false,
+    compensoForzato: null
   }
 }
 
@@ -329,6 +344,7 @@ function duplicateToNext(idx: number) {
   }))
   next.mezzaLezione = current.mezzaLezione
   next.forzaGruppo = current.forzaGruppo
+  next.compensoForzato = current.compensoForzato
   toast.add({ title: 'Studenti duplicati', description: `Copiati nello slot ${next.label}`, color: 'info' })
 }
 
@@ -420,21 +436,28 @@ const totalStudentsCount = computed(() => {
 
 const totalHoursDeducted = computed(() => totalStudentsCount.value)
 
-const totalCompenso = computed(() => {
-  let total = 0
-  populatedSlots.value.forEach(slot => {
-    const validStudents = slot.studenti.filter((s: any) => s.studentItem && s.packageItem).length
-    if (validStudents === 0) return
-    
-    // Stessa regola del server (anche Forza Gruppo con 5+ alunni = MAXI)
-    const tipo = tipoLezione(validStudents, slot.forzaGruppo)
-
-    // Mezza lezione: tariffe fisse da shared/tariffe.ts (mezza MAXI = €4,00, NON tariffa/2)
-    // — stessa regola applicata dal server in calcCompenso (vedi useTariffeTutor).
-    total += compenso(tipo, slot.mezzaLezione, slot.oraInizio, slot.oraFine)
-  })
-  return total
+// Compenso: anteprima chiesta al server per tutte le fasce compilate in UNA chiamata
+// (listino + tariffe speciali + forzatura), la stessa formula del salvataggio.
+const { esiti: esitiAnteprima } = useAnteprimaCompenso(() => {
+  const tutorId = tutorItem.value?.value
+  if (isTutor.value || !tutorId || !selectedDate.value) return null
+  return {
+    tutorId,
+    data: selectedDate.value,
+    lezioni: populatedSlots.value.map(slot => ({
+      timeSlotId: slot.timeSlotId,
+      studentIds: slot.studenti.filter(s => s.studentItem && s.packageItem).map(s => s.studentItem.value),
+      forzaGruppo: slot.forzaGruppo,
+      mezzaLezione: slot.mezzaLezione,
+      compensoForzato: slot.compensoForzato ?? null,
+    })),
+  }
 })
+// Gli esiti arrivano nello stesso ordine delle fasce compilate
+const anteprimaPerSlot = computed(() =>
+  new Map(esitiAnteprima.value.map((e, i) => [populatedSlots.value[i]?.timeSlotId ?? '', e])))
+
+const totalCompenso = computed(() => esitiAnteprima.value.reduce((tot, e) => tot + e.compenso, 0))
 
 const warnings = computed(() => {
   const warns: string[] = []
@@ -470,14 +493,17 @@ async function saveAllLessons() {
       const validStudents = slot.studenti.filter((s: any) => s.studentItem && s.packageItem).map((s: any) => ({
         studentId: s.studentItem.value,
         packageId: s.packageItem.value,
-        mezzaLezione: slot.mezzaLezione
       }))
 
+      // mezzaLezione va sulla LEZIONE: prima stava dentro ogni studente, dove il server
+      // la scartava, e la spunta "Mezza Lezione" di questa finestra non arrivava mai.
       const payload = {
         tutorId: tutorScelto.value,
         timeSlotId: slot.timeSlotId,
         data: selectedDate.value,
         forzaGruppo: slot.forzaGruppo,
+        mezzaLezione: slot.mezzaLezione,
+        ...(!isTutor.value && slot.compensoForzato != null ? { compensoForzato: slot.compensoForzato } : {}),
         note: note.value,
         studenti: validStudents
       }

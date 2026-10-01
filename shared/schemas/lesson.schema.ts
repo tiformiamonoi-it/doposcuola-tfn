@@ -30,6 +30,13 @@ export const LessonStudentSchema = z.object({
     .cuid2("L'ID del pacchetto non è valido"),
 })
 
+// Compenso forzato (€/ora) — vince su tariffe speciali e listino. null = nessuna forzatura.
+const CompensoForzatoSchema = z
+  .number({ message: 'Il compenso forzato deve essere una cifra' })
+  .positive('Il compenso forzato deve essere maggiore di zero')
+  .max(500, 'Il compenso forzato sembra troppo alto: controlla')
+  .nullable()
+
 // ─────────────────────────────────────────────
 // SCHEMA CREAZIONE LEZIONE (POST /api/lessons)
 // ─────────────────────────────────────────────
@@ -57,6 +64,9 @@ export const CreateLessonSchema = z
 
     mezzaLezione: z.boolean().default(false),
     forzaGruppo: z.boolean().default(false),
+
+    // Compenso forzato (€/ora): solo ADMIN/SUPER_TUTOR, il server lo rifiuta ai TUTOR.
+    compensoForzato: CompensoForzatoSchema.optional(),
 
     note: z.string().max(1000, 'Le note non possono superare 1000 caratteri').optional().nullable(),
   })
@@ -93,6 +103,8 @@ export const UpdateLessonSchema = z.object({
   studenti:     z.array(LessonStudentSchema).min(1, 'Devi avere almeno uno studente').optional(),
   forzaGruppo:  z.boolean().optional(),
   mezzaLezione: z.boolean().optional(),
+  // undefined = non lo tocco, null = tolgo la forzatura, numero = nuova forzatura
+  compensoForzato: CompensoForzatoSchema.optional(),
   note:         z.string().max(1000).optional().nullable(),
 })
 

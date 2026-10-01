@@ -31,6 +31,15 @@ export const lessons = pgTable('lessons', {
 
   compensoTutor: numeric('compenso_tutor', { precision: 10, scale: 2 }),
 
+  // COMPENSO FORZATO (€/ora) — l'eccezione che capita una volta sola. Se c'è, vince
+  // su tariffe speciali e listino (la mezza lezione ne prende la metà, vedi
+  // tariffe-speciali.service.ts). Lo scrivono solo ADMIN e SUPER_TUTOR.
+  // È una tariffa ORARIA e non il compenso finale: così cambiando mezza lezione il
+  // conto resta giusto senza doverlo ribattere.
+  compensoForzato:   numeric('compenso_forzato', { precision: 10, scale: 2 }),
+  // CHI l'ha forzato. 'set null': se l'account sparisce, la cifra resta.
+  compensoForzatoDa: text('compenso_forzato_da').references(() => users.id, { onDelete: 'set null' }),
+
   // Conferma visione lezione (admin/super tutor)
   confermata:    boolean('confermata').notNull().default(false),
   confermataDa:  text('confermata_da').references(() => users.id),
