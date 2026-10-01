@@ -192,6 +192,170 @@
             icon="i-heroicons-clock"
             :description="`${effettivo.pacchettiAncoraAperti} pacchett${effettivo.pacchettiAncoraAperti === 1 ? 'o' : 'i'} di quel mese ${effettivo.pacchettiAncoraAperti === 1 ? 'è ancora' : 'sono ancora'} in corso: per quelli vale il valore standard, il dato si aggiornerà quando finiranno.`"
           />
+
+          <!-- Calcolo completo, passo per passo -->
+          <details v-if="effettivo.dettaglio" class="mt-3 group rounded-lg border border-slate-200 bg-white">
+            <summary class="cursor-pointer select-none px-4 py-3 text-sm font-medium text-violet-700 flex items-center gap-2">
+              <UIcon name="i-heroicons-chevron-right" class="size-4 transition-transform group-open:rotate-90" />
+              Mostra tutti i calcoli
+            </summary>
+            <div class="px-4 pb-4 space-y-6 text-sm">
+
+              <!-- Passo 1: riepilogo -->
+              <div>
+                <h3 class="font-semibold text-slate-800 mb-2">1. Il conto finale</h3>
+                <table class="w-full max-w-xl tabular-nums">
+                  <tbody>
+                    <tr class="border-b border-slate-100">
+                      <td class="py-1.5 text-slate-600">Valore ore a prezzo standard (somma colonna "Ricavo standard")</td>
+                      <td class="py-1.5 text-right">€ {{ fmt(effettivo.dettaglio.ricavoStandard) }}</td>
+                    </tr>
+                    <tr class="border-b border-slate-100">
+                      <td class="py-1.5 text-slate-600">− Compensi tutor del mese</td>
+                      <td class="py-1.5 text-right text-orange-600">− € {{ fmt(effettivo.dettaglio.compensi) }}</td>
+                    </tr>
+                    <tr class="border-b-2 border-slate-300 font-semibold">
+                      <td class="py-1.5">= Guadagno standard</td>
+                      <td class="py-1.5 text-right">€ {{ fmt(effettivo.atteso) }}</td>
+                    </tr>
+                    <tr class="border-b border-slate-100">
+                      <td class="pt-3 pb-1.5 text-slate-600">Valore ore ricalcolato (somma colonna "Ricavo effettivo")</td>
+                      <td class="pt-3 pb-1.5 text-right">€ {{ fmt(effettivo.dettaglio.ricavoEffettivo) }}</td>
+                    </tr>
+                    <tr class="border-b border-slate-100">
+                      <td class="py-1.5 text-slate-600">− Compensi tutor del mese</td>
+                      <td class="py-1.5 text-right text-orange-600">− € {{ fmt(effettivo.dettaglio.compensi) }}</td>
+                    </tr>
+                    <tr class="border-b-2 border-slate-300 font-semibold text-violet-700">
+                      <td class="py-1.5">= Guadagno effettivo</td>
+                      <td class="py-1.5 text-right">€ {{ fmt(effettivo.effettivo) }}</td>
+                    </tr>
+                    <tr class="font-semibold" :class="effettivo.differenza >= 0 ? 'text-emerald-700' : 'text-orange-700'">
+                      <td class="pt-3">Differenza = € {{ fmt(effettivo.effettivo) }} − € {{ fmt(effettivo.atteso) }}</td>
+                      <td class="pt-3 text-right">{{ effettivo.differenza >= 0 ? '+' : '' }}€ {{ fmt(effettivo.differenza) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Passo 2: pacchetti -->
+              <div>
+                <h3 class="font-semibold text-slate-800 mb-1">2. Il valore delle ore, pacchetto per pacchetto</h3>
+                <p class="text-xs text-slate-500 mb-2">
+                  Tariffa standard = prezzo ÷ ore acquistate. Tariffa effettiva = prezzo ÷ ore davvero usate (solo per i pacchetti finiti).
+                  Ricavo = ore del mese × tariffa. Totale ore del mese: {{ fmt(effettivo.dettaglio.oreTotali) }}.
+                </p>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-xs tabular-nums whitespace-nowrap">
+                    <thead class="text-slate-500 text-left border-b border-slate-200">
+                      <tr>
+                        <th class="py-2 pr-3 font-medium">Studente / pacchetto</th>
+                        <th class="py-2 pr-3 font-medium">Stato</th>
+                        <th class="py-2 pr-3 font-medium text-right">Prezzo</th>
+                        <th class="py-2 pr-3 font-medium text-right">Ore acquistate</th>
+                        <th class="py-2 pr-3 font-medium text-right">Ore usate</th>
+                        <th class="py-2 pr-3 font-medium text-right">Ore residue</th>
+                        <th class="py-2 pr-3 font-medium text-right">Lezioni / ore nel mese</th>
+                        <th class="py-2 pr-3 font-medium text-right">Tariffa standard</th>
+                        <th class="py-2 pr-3 font-medium text-right">Tariffa effettiva</th>
+                        <th class="py-2 pr-3 font-medium text-right">Ricavo standard</th>
+                        <th class="py-2 pr-3 font-medium text-right">Ricavo effettivo</th>
+                        <th class="py-2 font-medium text-right">Differenza</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(p, i) in effettivo.dettaglio.pacchetti" :key="i" class="border-b border-slate-100 align-top">
+                        <td class="py-1.5 pr-3">
+                          <div class="font-medium text-slate-800">{{ p.studente }}</div>
+                          <div class="text-slate-400">{{ p.pacchetto }}</div>
+                        </td>
+                        <td class="py-1.5 pr-3">
+                          <UBadge size="sm" variant="subtle" :color="p.stato === 'FINITO' ? 'success' : p.stato === 'IN_CORSO' ? 'warning' : 'neutral'">
+                            {{ p.stato === 'FINITO' ? 'Finito' : p.stato === 'IN_CORSO' ? 'In corso' : 'A consumo' }}
+                          </UBadge>
+                          <div class="text-slate-400 mt-0.5">{{ p.motivo }}</div>
+                        </td>
+                        <td class="py-1.5 pr-3 text-right">€ {{ fmt(p.prezzo) }}</td>
+                        <td class="py-1.5 pr-3 text-right">{{ fmt(p.oreAcquistate) }}</td>
+                        <td class="py-1.5 pr-3 text-right">{{ fmt(p.oreConsumate) }}</td>
+                        <td class="py-1.5 pr-3 text-right">{{ fmt(p.oreResidue) }}</td>
+                        <td class="py-1.5 pr-3 text-right">{{ p.lezioniMese }} / {{ fmt(p.oreMese) }} h</td>
+                        <td class="py-1.5 pr-3 text-right">
+                          € {{ fmt(p.tariffaStandard) }}
+                          <div class="text-slate-400">{{ fmt(p.prezzo) }} ÷ {{ fmt(p.oreAcquistate) }}</div>
+                        </td>
+                        <td class="py-1.5 pr-3 text-right">
+                          € {{ fmt(p.tariffaEffettiva) }}
+                          <div v-if="p.stato === 'FINITO' && p.oreConsumate > 0" class="text-slate-400">{{ fmt(p.prezzo) }} ÷ {{ fmt(p.oreConsumate) }}</div>
+                          <div v-else class="text-slate-400">= standard</div>
+                        </td>
+                        <td class="py-1.5 pr-3 text-right">
+                          € {{ fmt(p.ricavoStandard) }}
+                          <div class="text-slate-400">{{ fmt(p.oreMese) }} × {{ fmt(p.tariffaStandard) }}</div>
+                        </td>
+                        <td class="py-1.5 pr-3 text-right">
+                          € {{ fmt(p.ricavoEffettivo) }}
+                          <div class="text-slate-400">{{ fmt(p.oreMese) }} × {{ fmt(p.tariffaEffettiva) }}</div>
+                        </td>
+                        <td class="py-1.5 text-right" :class="p.differenza > 0 ? 'text-emerald-600' : p.differenza < 0 ? 'text-orange-600' : 'text-slate-400'">
+                          {{ p.differenza > 0 ? '+' : '' }}€ {{ fmt(p.differenza) }}
+                        </td>
+                      </tr>
+                    </tbody>
+                    <tfoot class="font-semibold border-t-2 border-slate-300">
+                      <tr>
+                        <td class="py-2 pr-3" colspan="6">Totale ({{ effettivo.dettaglio.pacchetti.length }} pacchetti)</td>
+                        <td class="py-2 pr-3 text-right">{{ fmt(effettivo.dettaglio.oreTotali) }} h</td>
+                        <td colspan="2" />
+                        <td class="py-2 pr-3 text-right">€ {{ fmt(effettivo.dettaglio.ricavoStandard) }}</td>
+                        <td class="py-2 pr-3 text-right">€ {{ fmt(effettivo.dettaglio.ricavoEffettivo) }}</td>
+                        <td class="py-2 text-right">€ {{ fmt(effettivo.dettaglio.ricavoEffettivo - effettivo.dettaglio.ricavoStandard) }}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                <p v-if="!effettivo.dettaglio.pacchetti.length" class="text-slate-400 mt-2">Nessuna ora scalata da pacchetti in questo mese.</p>
+              </div>
+
+              <!-- Passo 3: compensi tutor -->
+              <div>
+                <h3 class="font-semibold text-slate-800 mb-1">3. I compensi dei tutor</h3>
+                <p class="text-xs text-slate-500 mb-2">Somma del compenso di ogni lezione del mese. Le lezioni senza alunni costano il compenso ma non portano ricavo.</p>
+                <div class="overflow-x-auto">
+                  <table class="w-full max-w-2xl text-xs tabular-nums whitespace-nowrap">
+                    <thead class="text-slate-500 text-left border-b border-slate-200">
+                      <tr>
+                        <th class="py-2 pr-3 font-medium">Tutor</th>
+                        <th class="py-2 pr-3 font-medium text-right">Lezioni</th>
+                        <th class="py-2 pr-3 font-medium text-right">di cui senza alunni</th>
+                        <th class="py-2 pr-3 font-medium text-right">di cui senza compenso</th>
+                        <th class="py-2 font-medium text-right">Compenso</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(t, i) in effettivo.dettaglio.tutor" :key="i" class="border-b border-slate-100">
+                        <td class="py-1.5 pr-3 font-medium text-slate-800">{{ t.tutor }}</td>
+                        <td class="py-1.5 pr-3 text-right">{{ t.lezioni }}</td>
+                        <td class="py-1.5 pr-3 text-right" :class="t.lezioniSenzaAlunni ? 'text-orange-600 font-medium' : 'text-slate-400'">{{ t.lezioniSenzaAlunni }}</td>
+                        <td class="py-1.5 pr-3 text-right" :class="t.lezioniSenzaCompenso ? 'text-orange-600 font-medium' : 'text-slate-400'">{{ t.lezioniSenzaCompenso }}</td>
+                        <td class="py-1.5 text-right">€ {{ fmt(t.compensi) }}</td>
+                      </tr>
+                    </tbody>
+                    <tfoot class="font-semibold border-t-2 border-slate-300">
+                      <tr>
+                        <td class="py-2 pr-3">Totale</td>
+                        <td class="py-2 pr-3 text-right">{{ effettivo.dettaglio.tutor.reduce((s: number, t: any) => s + t.lezioni, 0) }}</td>
+                        <td class="py-2 pr-3 text-right">{{ effettivo.dettaglio.tutor.reduce((s: number, t: any) => s + t.lezioniSenzaAlunni, 0) }}</td>
+                        <td class="py-2 pr-3 text-right">{{ effettivo.dettaglio.tutor.reduce((s: number, t: any) => s + t.lezioniSenzaCompenso, 0) }}</td>
+                        <td class="py-2 text-right">€ {{ fmt(effettivo.dettaglio.compensi) }}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+          </details>
         </template>
         <UAlert
           v-else-if="erroreEffettivo"

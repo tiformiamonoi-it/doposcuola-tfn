@@ -7,7 +7,7 @@
 // Le ricariche aumentano sia prezzo che ore, quindi la tariffa "blended" è stabile.
 import { and, eq, gte, lte, sql } from 'drizzle-orm'
 import { db } from '../database/client'
-import { lessons, lessonStudents, packages } from '../database/schema'
+import { lessons, lessonStudents, packages, students, users } from '../database/schema'
 import { getNetMargin } from './accounting.service'
 import { oggiRomeStr } from '../utils/tutor-time-window'
 import { ricavoOrarioPacchetto } from '#shared/tariffe'
@@ -84,9 +84,12 @@ export async function getGuadagnoEffettivoMese(anno: number, mese: number) {
     throw new Error('Il mese non è ancora concluso: il guadagno effettivo si calcola solo a mese finito')
   }
 
-  const [rows, compensiRow] = await Promise.all([
+  const [rows, tutorRows] = await Promise.all([
     db.select({
       packageId:     packages.id,
+      nomePacchetto: packages.nome,
+      studente:      sql<string>`${students.firstName} || ' ' || ${students.lastName}`,
+      lessonId:      lessons.id,
       tipo:          packages.tipo,
       prezzoTotale:  packages.prezzoTotale,
       oreAcquistate: packages.oreAcquistate,
@@ -99,58 +102,118 @@ export async function getGuadagnoEffettivoMese(anno: number, mese: number) {
       .from(lessonStudents)
       .innerJoin(lessons, eq(lessons.id, lessonStudents.lessonId))
       .innerJoin(packages, eq(packages.id, lessonStudents.packageId))
+      .innerJoin(students, eq(students.id, lessonStudents.studentId))
       .where(and(gte(lessons.data, start), lte(lessons.data, end))),
+    // Compensi per tutor; le lezioni senza alunni pesano solo come costo
     db.select({
-      compensi: sql<string>`COALESCE(SUM(${lessons.compensoTutor}::numeric), 0)::text`,
+      tutor:            sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
+      lezioni:          sql<string>`COUNT(*)::text`,
+      lezioniSenzaAlunni: sql<string>`COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM ${lessonStudents} WHERE ${lessonStudents.lessonId} = ${lessons.id}))::text`,
+      lezioniSenzaCompenso: sql<string>`COUNT(*) FILTER (WHERE ${lessons.compensoTutor} IS NULL)::text`,
+      compensi:         sql<string>`COALESCE(SUM(${lessons.compensoTutor}::numeric), 0)::text`,
     })
       .from(lessons)
-      .where(and(gte(lessons.data, start), lte(lessons.data, end))),
+      .innerJoin(users, eq(users.id, lessons.tutorId))
+      .where(and(gte(lessons.data, start), lte(lessons.data, end)))
+      .groupBy(users.id, users.firstName, users.lastName),
   ])
 
   const adesso = Date.now()
-  let ricavoAtteso = 0
-  let ricavoEffettivo = 0
-  const pacchettiAperti = new Set<string>()
+  const r2 = (n: number) => Number(n.toFixed(2))
+
+  // Una riga per pacchetto: tutti i numeri che entrano nel calcolo
+  const perPacchetto = new Map<string, {
+    studente: string; pacchetto: string; tipo: string
+    stato: 'CONSUMO' | 'IN_CORSO' | 'FINITO'; motivo: string
+    prezzo: number; oreAcquistate: number; oreResidue: number; oreConsumate: number
+    lezioni: Set<string>; oreMese: number
+    tariffaStandard: number; tariffaEffettiva: number
+  }>()
 
   for (const row of rows) {
-    const prezzo = parseFloat(row.prezzoTotale)
-    const acquistate = parseFloat(row.oreAcquistate)
-    const residue = parseFloat(row.oreResiduo)
-    const ore = parseFloat(row.oreScalate)
+    let p = perPacchetto.get(row.packageId)
+    if (!p) {
+      const prezzo = parseFloat(row.prezzoTotale)
+      const acquistate = parseFloat(row.oreAcquistate)
+      const residue = parseFloat(row.oreResiduo)
+      const consumate = acquistate - residue
+      const tariffaStandard = ricavoOrarioPacchetto(prezzo, acquistate, row.tariffaOraria ? parseFloat(row.tariffaOraria) : null)
 
-    const rateAtteso = ricavoOrarioPacchetto(prezzo, acquistate, row.tariffaOraria ? parseFloat(row.tariffaOraria) : null)
-    ricavoAtteso += rateAtteso * ore
+      let stato: 'CONSUMO' | 'IN_CORSO' | 'FINITO'
+      let motivo: string
+      if (row.tipo === 'A_CONSUMO') {
+        // Pagato all'ora: il valore dell'ora non cambia mai
+        stato = 'CONSUMO'; motivo = 'a consumo: vale sempre la sua tariffa'
+      } else if (residue <= 0) {
+        stato = 'FINITO'; motivo = 'ore esaurite'
+      } else if (row.stati.includes('CHIUSO')) {
+        stato = 'FINITO'; motivo = 'chiuso'
+      } else if (row.dataScadenza !== null && row.dataScadenza.getTime() < adesso) {
+        stato = 'FINITO'; motivo = `scaduto il ${row.dataScadenza.toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' })}`
+      } else {
+        // Valore provvisorio finché il pacchetto è in corso
+        stato = 'IN_CORSO'; motivo = 'ancora in corso: vale la tariffa standard'
+      }
 
-    if (row.tipo === 'A_CONSUMO') {
-      // Pagato all'ora: il valore dell'ora non cambia mai
-      ricavoEffettivo += rateAtteso * ore
-      continue
+      const tariffaEffettiva = stato === 'FINITO' && consumate > 0 ? prezzo / consumate : tariffaStandard
+      p = {
+        studente: row.studente, pacchetto: row.nomePacchetto, tipo: row.tipo, stato, motivo,
+        prezzo, oreAcquistate: acquistate, oreResidue: residue, oreConsumate: consumate,
+        lezioni: new Set(), oreMese: 0, tariffaStandard, tariffaEffettiva,
+      }
+      perPacchetto.set(row.packageId, p)
     }
-
-    const finito = residue <= 0
-      || row.stati.includes('CHIUSO')
-      || (row.dataScadenza !== null && row.dataScadenza.getTime() < adesso)
-
-    if (!finito) {
-      pacchettiAperti.add(row.packageId)
-      ricavoEffettivo += rateAtteso * ore // valore provvisorio finché il pacchetto è in corso
-      continue
-    }
-
-    const consumate = acquistate - residue
-    const rateEffettivo = consumate > 0 ? prezzo / consumate : rateAtteso
-    ricavoEffettivo += rateEffettivo * ore
+    p.lezioni.add(row.lessonId)
+    p.oreMese += parseFloat(row.oreScalate)
   }
 
-  const compensi = parseFloat(compensiRow[0]?.compensi ?? '0')
-  const atteso = Number((ricavoAtteso - compensi).toFixed(2))
-  const effettivo = Number((ricavoEffettivo - compensi).toFixed(2))
+  const pacchetti = [...perPacchetto.values()]
+    .map(p => {
+      const ricavoStandard = p.tariffaStandard * p.oreMese
+      const ricavoEffettivo = p.tariffaEffettiva * p.oreMese
+      return {
+        studente: p.studente, pacchetto: p.pacchetto, tipo: p.tipo, stato: p.stato, motivo: p.motivo,
+        prezzo: r2(p.prezzo), oreAcquistate: p.oreAcquistate, oreResidue: p.oreResidue, oreConsumate: r2(p.oreConsumate),
+        lezioniMese: p.lezioni.size, oreMese: r2(p.oreMese),
+        tariffaStandard: r2(p.tariffaStandard), tariffaEffettiva: r2(p.tariffaEffettiva),
+        ricavoStandard: r2(ricavoStandard), ricavoEffettivo: r2(ricavoEffettivo),
+        differenza: r2(ricavoEffettivo - ricavoStandard),
+        // valori non arrotondati per i totali
+        _std: ricavoStandard, _eff: ricavoEffettivo,
+      }
+    })
+    .sort((a, b) => a.studente.localeCompare(b.studente, 'it'))
+
+  const ricavoAtteso = pacchetti.reduce((s, p) => s + p._std, 0)
+  const ricavoEffettivo = pacchetti.reduce((s, p) => s + p._eff, 0)
+
+  const tutor = tutorRows
+    .map(t => ({
+      tutor: t.tutor,
+      lezioni: Number(t.lezioni),
+      lezioniSenzaAlunni: Number(t.lezioniSenzaAlunni),
+      lezioniSenzaCompenso: Number(t.lezioniSenzaCompenso),
+      compensi: r2(parseFloat(t.compensi)),
+    }))
+    .sort((a, b) => b.compensi - a.compensi)
+  const compensi = tutorRows.reduce((s, t) => s + parseFloat(t.compensi), 0)
+
+  const atteso = r2(ricavoAtteso - compensi)
+  const effettivo = r2(ricavoEffettivo - compensi)
 
   return {
     atteso,
     effettivo,
-    differenza: Number((effettivo - atteso).toFixed(2)),
-    pacchettiAncoraAperti: pacchettiAperti.size,
+    differenza: r2(effettivo - atteso),
+    pacchettiAncoraAperti: pacchetti.filter(p => p.stato === 'IN_CORSO').length,
+    dettaglio: {
+      ricavoStandard: r2(ricavoAtteso),
+      ricavoEffettivo: r2(ricavoEffettivo),
+      compensi: r2(compensi),
+      oreTotali: r2(pacchetti.reduce((s, p) => s + p.oreMese, 0)),
+      pacchetti: pacchetti.map(({ _std, _eff, ...p }) => p),
+      tutor,
+    },
   }
 }
 
