@@ -5,8 +5,8 @@
            segreteria e a volte una persona con nome e cognome, quindi il vecchio
            titolo prometteva un mittente che spesso non era quello. -->
       <h2 class="font-heading text-xl font-bold text-slate-900">Comunicazioni</h2>
-      <UBadge v-if="notes.length > 0" color="neutral" variant="subtle">
-        {{ notes.length }} {{ notes.length === 1 ? 'comunicazione' : 'comunicazioni' }}
+      <UBadge v-if="totale > 0" color="neutral" variant="subtle">
+        {{ totale }} {{ totale === 1 ? 'comunicazione' : 'comunicazioni' }}
       </UBadge>
     </div>
 
@@ -16,7 +16,7 @@
       </div>
     </template>
 
-    <template v-else-if="notes.length === 0">
+    <template v-else-if="totale === 0">
       <UCard>
         <div class="text-center py-8 space-y-2">
           <UIcon name="i-heroicons-document-text" class="w-8 h-8 text-slate-300 mx-auto" />
@@ -29,6 +29,33 @@
     </template>
 
     <template v-else>
+      <!-- Gli avvisi della segreteria a tutte le famiglie stanno in cima: sono
+           pochi, valgono per tutti e di solito hanno una data (una chiusura, un
+           orario nuovo) che non deve perdersi in mezzo alle note sui figli. -->
+      <section v-if="avvisi.length > 0" class="space-y-3" aria-labelledby="titolo-avvisi">
+        <h3 id="titolo-avvisi" class="text-sm font-semibold text-slate-500">Avvisi a tutte le famiglie</h3>
+        <UCard v-for="avviso in avvisi" :key="avviso.id">
+          <template #header>
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-full bg-tfn-100 flex items-center justify-center">
+                  <span class="text-xs font-semibold text-tfn-700">S</span>
+                </div>
+                <span class="text-sm font-medium text-slate-800">Segreteria</span>
+                <!-- "Nuova" finché non l'hai vista: questa pagina la segna come
+                     letta appena aperta, ma il bollino resta fino alla prossima visita -->
+                <UBadge v-if="!avviso.lettaAt" color="primary" variant="solid" size="xs">Nuova</UBadge>
+              </div>
+              <span class="text-xs text-slate-400">{{ formatDate(avviso.createdAt) }}</span>
+            </div>
+          </template>
+          <p class="text-sm font-semibold text-slate-800">{{ avviso.titolo }}</p>
+          <p class="mt-1 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{{ avviso.testo }}</p>
+        </UCard>
+      </section>
+
+      <h3 v-if="avvisi.length > 0 && notes.length > 0" class="text-sm font-semibold text-slate-500 pt-2">Sui tuoi figli</h3>
+
       <UCard
         v-for="nota in notes"
         :key="nota.id"
@@ -82,6 +109,13 @@ if (sessionUser.value?.role === 'STUDENTE') {
 
 const { data, pending } = useLazyFetch('/api/portal/notes')
 const notes = computed(() => (data.value as any[]) ?? [])
+
+// Avvisi della segreteria a tutte le famiglie. Qui il caricamento si ASPETTA
+// (await, non lazy) apposta: la pagina appena montata li segna come letti, e se
+// quella chiamata arrivasse prima di questa il bollino "Nuova" non si vedrebbe mai.
+const { data: avvisiData } = await useFetch('/api/portal/comunicazioni')
+const avvisi = computed(() => avvisiData.value ?? [])
+const totale = computed(() => notes.value.length + avvisi.value.length)
 
 // Visita registrata: azzera il badge "note non lette" in nav (solo genitori)
 onMounted(async () => {

@@ -39,3 +39,20 @@ export function calcolaDataScadenza(tipo: TipoPacchetto, dataInizio: string): st
 export function annoScadenzaOre(dataInizio: string): string {
   return calcolaDataScadenza('ORE', dataInizio).slice(0, 4)
 }
+
+/**
+ * Alunno con più pacchetti attivi: quale si usa (decisione D3, ottobre 2026).
+ * Ordine per `sort`: prima quello che SCADE PRIMA; i pacchetti senza scadenza vanno
+ * dopo quelli che ce l'hanno; a parità, il più vecchio. Le date possono arrivare come
+ * Date (server) o come stringa (JSON nel browser).
+ * Usato dalle finestre lezione del tutor e dai gruppi del tabellone Matching.
+ */
+export function primaQuelloCheScade(
+  a: { dataScadenza?: string | Date | null, createdAt: string | Date },
+  b: { dataScadenza?: string | Date | null, createdAt: string | Date },
+): number {
+  const scadA = a.dataScadenza ? new Date(a.dataScadenza).getTime() : Infinity
+  const scadB = b.dataScadenza ? new Date(b.dataScadenza).getTime() : Infinity
+  if (scadA !== scadB) return scadA < scadB ? -1 : 1
+  return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+}

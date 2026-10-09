@@ -90,6 +90,7 @@ export async function apriSessioneAccesso(
     termsAccepted,
     dichiarazioniMinori,
     tutorialVisto:      user.tutorialVisto,
+    novitaVista:        user.novitaVista,
   }, ricordami)
 
   // Dove accompagnare la persona appena entrata. L'ordine conta: prima le cose

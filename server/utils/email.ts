@@ -275,3 +275,61 @@ export function emailNoteNelPortale(p: {
     `),
   }
 }
+
+// Il testo scritto dalla segreteria diventa testo e basta: un "<" o un "&" digitati
+// per caso (o un pezzo di HTML incollato) non devono trasformarsi in codice dentro
+// l'email di 150 famiglie.
+function escapeHtml(testo: string): string {
+  return testo
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+// COMUNICAZIONE A TUTTE LE FAMIGLIE (blocco 3 del piano di ottobre).
+//
+// A differenza del riepilogo serale QUI IL TESTO VIAGGIA: è un avviso generale
+// (chiusure, orari, corsi), non un dato su un ragazzo, e la famiglia deve poterlo
+// leggere anche senza entrare nel portale.
+// Firma sempre "La Segreteria": il nome di chi l'ha scritta resta nel gestionale.
+// Le promozionali portano in fondo come si revoca il consenso: lo chiede la legge.
+export function emailComunicazione(p: {
+  titolo: string
+  testo: string
+  tipo: 'INFORMATIVA' | 'PROMOZIONALE'
+  /** Indirizzo del portale senza "/" finale; assente se appUrl non è configurato */
+  base?: string
+  /** true = "Invia una prova a me": l'oggetto lo dice, così non si confonde con quella vera */
+  prova?: boolean
+}): { subject: string; html: string } {
+  // L'oggetto non è HTML ma una riga sola: niente a capo che lo spezzino
+  const titoloRiga = p.titolo.replace(/\s+/g, ' ').trim()
+  const corpo = escapeHtml(p.testo).replace(/\r?\n/g, '<br>')
+
+  const azione = p.base
+    ? `<p style="margin: 20px 0;">
+        <a href="${p.base}/portale/note" style="display:inline-block;background:#0063A6;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;">
+          Apri il portale
+        </a>
+      </p>`
+    : '<p style="font-size: 14px;">La trovi anche nel portale delle famiglie, nella sezione <strong>Comunicazioni</strong>.</p>'
+
+  const revoca = p.tipo === 'PROMOZIONALE'
+    ? `<p style="font-size: 12px; color: #64748b; margin-top: 16px;">
+        Ricevi questa comunicazione perché hai dato il consenso alle comunicazioni promozionali.
+        Puoi revocarlo quando vuoi dal tuo <strong>Profilo</strong> nel portale${p.base ? ` (<a href="${p.base}/portale/profilo" style="color:#0063A6;">apri il profilo</a>)` : ''}.
+      </p>`
+    : ''
+
+  return {
+    subject: `${p.prova ? '[Prova] ' : ''}${titoloRiga}`,
+    html: layout(escapeHtml(titoloRiga), `
+      <p style="font-size: 14px; line-height: 1.5;">${corpo}</p>
+      <p style="font-size: 14px; margin-top: 16px;">La Segreteria</p>
+      ${azione}
+      ${revoca}
+    `),
+  }
+}

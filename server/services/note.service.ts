@@ -1,4 +1,4 @@
-import { eq, desc, and, isNull, count } from 'drizzle-orm'
+import { eq, desc, and, or, isNull, isNotNull, count } from 'drizzle-orm'
 import type { User } from '#auth-utils'
 import { db } from '../database/client'
 import { studentNotes, students, users } from '../database/schema'
@@ -84,10 +84,18 @@ async function avvisaCampanellino(
   }
 }
 
-// Restituisce le note per uno studente
-export async function listStudentNotes(studentId: string) {
+// Restituisce le note per uno studente, dalla più recente.
+// Un TUTOR riceve le note interne (di chiunque) e quelle per la famiglia solo se
+// già approvate: finché la segreteria non la approva, una nota per la famiglia è
+// ancora una bozza tra chi l'ha scritta e la segreteria. Il filtro sta nella
+// query, non nella pagina: così non c'è strada (nemmeno chiamando l'indirizzo a
+// mano) da cui una nota non approvata possa arrivare a un tutor.
+export async function listStudentNotes(studentId: string, ruolo: User['role']) {
+  const soloQuelleDelTutor = ruolo === 'TUTOR'
+    ? or(eq(studentNotes.visibilita, 'INTERNA'), isNotNull(studentNotes.approvataAt))
+    : undefined
   return await db.query.studentNotes.findMany({
-    where: eq(studentNotes.studentId, studentId),
+    where: and(eq(studentNotes.studentId, studentId), soloQuelleDelTutor),
     orderBy: [desc(studentNotes.createdAt)],
     with: {
       author: {
@@ -98,7 +106,9 @@ export async function listStudentNotes(studentId: string) {
           role: true,
         }
       },
-      lesson: true
+      // Della lezione serve solo la data: la riga intera porterebbe con sé il
+      // compenso del tutor che l'ha fatta, che un collega non deve vedere
+      lesson: { columns: { id: true, data: true } }
     }
   })
 }

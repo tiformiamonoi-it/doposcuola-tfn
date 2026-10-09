@@ -812,7 +812,8 @@ export async function listLessons(query: LessonQuery) {
         lessonStudents: {
           with: {
             student: {
-              columns: { id: true, firstName: true, lastName: true }
+              // classe: il tutor la vede al posto del pacchetto nella finestra della lezione
+              columns: { id: true, firstName: true, lastName: true, classe: true }
             },
             package: {
               columns: { id: true, nome: true, prezzoTotale: true, oreAcquistate: true }
@@ -914,9 +915,12 @@ export async function getPoolStudentiOggi() {
       studentName:    bookings.studentName,
       studentSurname: bookings.studentSurname,
       subject:        bookingSubjects.name,
+      // Il tutor vede la classe al posto del pacchetto (ottobre 2026)
+      classe:         students.classe,
     })
     .from(bookingSubjects)
     .innerJoin(bookings, eq(bookingSubjects.bookingId, bookings.id))
+    .leftJoin(students, eq(bookings.studentId, students.id))
     .where(and(
       isNotNull(bookings.studentId),
       ne(bookings.status, 'CANCELLED'),
@@ -926,12 +930,12 @@ export async function getPoolStudentiOggi() {
 
   // Uno studente prenotato per più materie (o con più prenotazioni) deve comparire
   // UNA volta sola nel picker del tutor: dedup per studentId, materie unite.
-  const perStudente = new Map<string, { studentId: string; nome: string; materia: string }>()
+  const perStudente = new Map<string, { studentId: string; nome: string; materia: string; classe: string | null }>()
   for (const r of rows) {
     const id = r.studentId as string
     const esistente = perStudente.get(id)
     if (!esistente) {
-      perStudente.set(id, { studentId: id, nome: `${r.studentName} ${r.studentSurname}`, materia: r.subject })
+      perStudente.set(id, { studentId: id, nome: `${r.studentName} ${r.studentSurname}`, materia: r.subject, classe: r.classe })
     } else if (r.subject && !esistente.materia.split(', ').includes(r.subject)) {
       esistente.materia += `, ${r.subject}`
     }

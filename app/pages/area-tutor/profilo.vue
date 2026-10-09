@@ -53,6 +53,18 @@
     >
       Rivedi il tutorial di benvenuto
     </UButton>
+
+    <!-- "Esci" anche qui, ben in vista: sul telefono è il primo posto dove un tutor lo cerca -->
+    <UButton
+      block
+      color="error"
+      variant="soft"
+      icon="i-heroicons-arrow-right-on-rectangle"
+      :loading="uscendo"
+      @click="logout"
+    >
+      Esci
+    </UButton>
   </div>
 </template>
 
@@ -63,6 +75,7 @@ useHead({ title: 'Il mio profilo — tiformiamonoi' })
 const toast = useToast()
 const { user } = useUserSession()
 const tutorialRiapri = useState('tutorial-riapri', () => false)
+const { uscendo, logout } = useLogout()
 
 const pwForm = reactive({ currentPassword: '', newPassword: '', confirmPassword: '' })
 const pwError = ref('')
@@ -88,8 +101,8 @@ async function cambiaPassword() {
     pwForm.currentPassword = ''
     pwForm.newPassword = ''
     pwForm.confirmPassword = ''
-  } catch (e: any) {
-    pwError.value = e?.data?.statusMessage ?? 'Errore durante il cambio password'
+  } catch (e) {
+    pwError.value = (e as { data?: { statusMessage?: string } })?.data?.statusMessage ?? 'Errore durante il cambio password'
   } finally {
     savingPw.value = false
   }

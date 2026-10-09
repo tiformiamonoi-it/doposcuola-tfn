@@ -64,6 +64,8 @@ export function coloreStatoPagamento(stato: string): ColoreBadge {
     case 'PARZIALE':    return 'warning'
     case 'IN_ATTESA':   return 'neutral'
     case 'PRO_BONO':    return 'neutral'
+    // Fisso del mese in corso: non è ancora da pagare (si paga dal 1° del mese dopo)
+    case 'IN_MATURAZIONE': return 'neutral'
     case 'RIFIUTATO':   return 'error'
     default:            return 'error'
   }

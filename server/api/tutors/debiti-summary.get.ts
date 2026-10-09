@@ -13,8 +13,9 @@ export default defineEventHandler(async () => {
   const meseDa   = `${rangeStart.getFullYear()}-${String(rangeStart.getMonth() + 1).padStart(2, '0')}`
 
   // La griglia mese-per-mese è LA STESSA dell'elenco tutor (sqlMesiCompenso, in
-  // tutor.service.ts): il fisso mensile vale dal suo mese di partenza in poi e conta
-  // anche nei mesi senza lezioni. Se questo riepilogo avesse una sua copia del
+  // tutor.service.ts): il fisso mensile vale dal suo mese di partenza al suo ultimo
+  // mese, conta anche nei mesi senza lezioni e diventa dovuto dal 1° del mese dopo —
+  // quindi nel mese in corso un tutor a fisso non porta niente in "totale_mese". Se questo riepilogo avesse una sua copia del
   // calcolo, la dashboard e la pagina Tutor direbbero due totali diversi.
   const [row] = (await db.execute(sql`
     WITH ${sqlMesiCompenso(meseDa, meseOggi, meseOggi)},

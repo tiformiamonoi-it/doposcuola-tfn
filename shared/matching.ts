@@ -8,6 +8,8 @@
 //      schermo e il server non possono mai raccontare due cose diverse.
 
 import { normalizzaTelefono } from './phone'
+import { etichettaLivello, type LivelloScolastico } from './livello-scolastico'
+import type { TipoPacchetto } from './scadenza-pacchetto'
 
 // ─── La forma dei dati che manda il server ───
 // Nata da server/api/matching/[date].get.ts: se cambia là, va cambiata anche qui.
@@ -39,6 +41,10 @@ export interface BadgePrenotazione {
   /** Supplemento della materia speciale fuori data: 0 se non previsto */
   supplemento: number
   supplementoApplicato: boolean
+  /** Scuola dell'alunno, letta dalla classe della scheda: null = senza scheda, classe vuota o illeggibile */
+  livello: LivelloScolastico | null
+  /** Tipo del pacchetto in corso (ATTIVO; se nessuno, DA_RINNOVARE): null = nessun pacchetto */
+  tipoPacchetto: TipoPacchetto | null
 }
 
 export interface SlotOrario {
@@ -90,12 +96,6 @@ export function contaAlunniUnici(prenotazioni: AlunnoPrenotato[]): number {
 
 // ─── Il tabellone: chi sta in quale casella ───
 
-/** "Rossi L.": la targhetta deve stare in una casella stretta */
-export function nomeBreve(b: Pick<BadgePrenotazione, 'studentName' | 'studentSurname'>): string {
-  const iniziale = b.studentName.trim().charAt(0)
-  return `${b.studentSurname.trim()} ${iniziale ? iniziale.toUpperCase() + '.' : ''}`.trim()
-}
-
 export function chiaveCasella(tutorId: string, fascia: string): string {
   return `${tutorId}|${fascia}`
 }
@@ -127,6 +127,66 @@ export function dividiTabellone(dati: Pick<MatchingDelGiorno, 'tutors' | 'badges
     }
   }
   return { perCasella, daAssegnare }
+}
+
+// ─── La colonna "Da assegnare" a gruppi (D2, ottobre 2026) ───
+
+/** Un sottogruppo dentro la scuola: "Mensili" o "A ore". titolo null = nessun sottotitolo ("Da sistemare") */
+export interface SottogruppoDaAssegnare {
+  chiave: string
+  titolo: string | null
+  targhette: BadgePrenotazione[]
+}
+
+/** Un gruppo di primo livello: la scuola (o "Da sistemare"), col totale delle sue targhette */
+export interface GruppoDaAssegnare {
+  chiave: string
+  titolo: string
+  totale: number
+  sottogruppi: SottogruppoDaAssegnare[]
+}
+
+// Prima la scuola, poi il pacchetto. Università e Concorsi/Adulti hanno il loro gruppo
+// dopo le Elementari: non sono dati da correggere, quindi non vanno in "Da sistemare".
+const ORDINE_LIVELLI: LivelloScolastico[] = ['SUPERIORI', 'MEDIE', 'ELEMENTARI', 'UNIVERSITA', 'ALTRO']
+
+/**
+ * Superiori → (Mensili, A ore), Medie → (Mensili, A ore), Elementari → …, e in fondo
+ * "Da sistemare" (senza sottogruppi): prenotazione senza scheda, classe vuota o non
+ * riconosciuta, oppure nessun pacchetto in corso. Chi è lì va completato in anagrafica.
+ * L'ordine per cognome arriva già da dividiTabellone e resta. Gruppi e sottogruppi
+ * vuoti non ci sono.
+ */
+export function gruppiDaAssegnare(targhette: BadgePrenotazione[]): GruppoDaAssegnare[] {
+  const gruppi: GruppoDaAssegnare[] = []
+  for (const livello of ORDINE_LIVELLI) {
+    const sottogruppi: SottogruppoDaAssegnare[] = []
+    for (const mensile of [true, false]) {
+      const dentro = targhette.filter(b =>
+        b.livello === livello && b.tipoPacchetto && (b.tipoPacchetto === 'MENSILE') === mensile)
+      if (dentro.length) {
+        sottogruppi.push({ chiave: `${livello}-${mensile ? 'MENSILI' : 'ORE'}`, titolo: mensile ? 'Mensili' : 'A ore', targhette: dentro })
+      }
+    }
+    if (sottogruppi.length) {
+      gruppi.push({
+        chiave: livello,
+        titolo: etichettaLivello(livello),
+        totale: sottogruppi.reduce((n, sg) => n + sg.targhette.length, 0),
+        sottogruppi,
+      })
+    }
+  }
+  const daSistemare = targhette.filter(b => !b.livello || !b.tipoPacchetto)
+  if (daSistemare.length) {
+    gruppi.push({
+      chiave: 'DA_SISTEMARE',
+      titolo: 'Da sistemare',
+      totale: daSistemare.length,
+      sottogruppi: [{ chiave: 'DA_SISTEMARE-TUTTI', titolo: null, targhette: daSistemare }],
+    })
+  }
+  return gruppi
 }
 
 /** "1 alunno", "3 alunni" */

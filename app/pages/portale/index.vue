@@ -32,6 +32,25 @@
       @update:open="chiudiInvitoConsensi"
     />
 
+    <!-- ═══ ULTIMO AVVISO NON LETTO DELLA SEGRETERIA ═══
+         Solo il più recente, e solo finché non è stato letto: per tutti gli
+         altri c'è la pagina Comunicazioni. -->
+    <NuxtLink
+      v-if="ultimoAvvisoNuovo"
+      to="/portale/note"
+      class="block rounded-2xl ring-1 ring-tfn-200 bg-tfn-50 p-4 hover:shadow-md transition-shadow focus-visible:outline-2 focus-visible:outline-tfn-500"
+    >
+      <div class="flex items-start gap-3">
+        <UIcon name="i-heroicons-megaphone" class="w-5 h-5 text-tfn-600 shrink-0 mt-0.5" />
+        <div class="min-w-0 flex-1 space-y-0.5">
+          <p class="text-xs font-semibold text-tfn-700">Nuova comunicazione dalla Segreteria</p>
+          <p class="font-semibold text-slate-800 truncate">{{ ultimoAvvisoNuovo.titolo }}</p>
+          <p class="text-sm text-slate-600 line-clamp-2">{{ ultimoAvvisoNuovo.testo }}</p>
+          <p class="text-xs font-medium text-tfn-700 pt-1">Leggi in Comunicazioni →</p>
+        </div>
+      </div>
+    </NuxtLink>
+
     <!-- ═══ «TORNA DA NOI QUEST'ANNO?» ═══
          Solo per i genitori, e solo quando la segreteria l'ha acceso nella
          pagina Rientri: il riquadro si nasconde da solo se non c'è niente da chiedere. -->
@@ -385,6 +404,11 @@ function chiudiInvitoConsensi() {
     // vedi sopra: se non si può ricordare, l'invito ricomparirà al prossimo accesso
   }
 }
+
+// Avvisi della segreteria a tutte le famiglie: in home solo il più recente non letto.
+// Agli account studente non arrivano (il server risponderebbe comunque vuoto).
+const { data: avvisiData } = useLazyFetch('/api/portal/comunicazioni', { server: false, immediate: !isStudente.value })
+const ultimoAvvisoNuovo = computed(() => (avvisiData.value ?? []).find((a) => !a.lettaAt) ?? null)
 
 const { data: portalConfigs } = useLazyFetch('/api/portal/configs')
 

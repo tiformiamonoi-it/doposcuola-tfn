@@ -71,9 +71,9 @@ export const UpdateTutorSchema = z.object({
   noteInterne:       z.string().optional().nullable(),
   modalitaPagamento: z.enum(['ORE', 'FORFAIT']).optional(),
   importoForfait:    z.coerce.string().optional().nullable(),
-  // Il mese da cui vale il fisso. Si tocca solo passando a Forfait: tornando "a ore"
-  // il service lo azzera da solo, così un eventuale rientro nel fisso riparte da capo
-  // e non resuscita i mesi vecchi.
+  // Il mese da cui vale il fisso. Conta solo per un tutor a Forfait: tornando "a ore"
+  // il service lo CONSERVA (insieme all'ultimo mese a fisso, forfait_al), così i mesi
+  // passati a fisso restano a fisso. Un nuovo mese di partenza riapre il fisso da lì.
   forfaitDal:        MeseForfaitOpz,
   // Interruttore "Sempre disponibile (lunedì–venerdì)": vedi tutorProfiles.sempreDisponibile
   sempreDisponibile: z.boolean().optional(),

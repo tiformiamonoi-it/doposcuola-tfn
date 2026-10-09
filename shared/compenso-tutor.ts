@@ -78,15 +78,31 @@ export interface ProfiloCompensoTutor {
   importoForfait:    string | number | null | undefined
   /** Primo giorno del mese da cui vale il fisso ('AAAA-MM-01'), o null */
   forfaitDal:        string | null | undefined
+  /** Primo giorno dell'ULTIMO mese a fisso ('AAAA-MM-01'), o null = nessuna fine */
+  forfaitAl:         string | null | undefined
+}
+
+/**
+ * Il mese prima: '2026-10' → '2026-09', '2027-01' → '2026-12'.
+ * Fatto sui numeri anno/mese e non tagliando la stringa: "2027-01 meno uno" a
+ * stringhe darebbe '2027-00', un mese che non esiste.
+ */
+export function mesePrecedente(mese: MeseCivile): MeseCivile {
+  let anno = Number(mese.slice(0, 4))
+  let m    = Number(mese.slice(5, 7)) - 1
+  if (m < 1) { m = 12; anno-- }
+  return `${anno}-${String(m).padStart(2, '0')}`
 }
 
 /**
  * L'importo del fisso, se c'è ed è un numero sensato. Altrimenti null.
  * Un tutor segnato FORFAIT ma senza importo (o con 0) non è davvero a fisso: si
  * continua a pagarlo a ore, com'è sempre stato.
+ * Non guarda la modalità di OGGI: un tutor passato "a ore" ha avuto il fisso nei
+ * mesi del suo periodo [forfaitDal, forfaitAl], e quei mesi restano a fisso. Chi
+ * decide se il periodo c'è è meseInizioFisso().
  */
 export function importoFisso(t: ProfiloCompensoTutor): number | null {
-  if (t.modalitaPagamento !== 'FORFAIT') return null
   if (t.importoForfait === null || t.importoForfait === undefined || t.importoForfait === '') return null
   const n = typeof t.importoForfait === 'number' ? t.importoForfait : parseFloat(String(t.importoForfait))
   return Number.isFinite(n) && n > 0 ? n : null
@@ -105,12 +121,30 @@ export function importoFisso(t: ProfiloCompensoTutor): number | null {
 export function meseInizioFisso(t: ProfiloCompensoTutor, oggiMese: MeseCivile = meseDiOggi()): MeseCivile | null {
   if (importoFisso(t) === null) return null
   const dal = typeof t.forfaitDal === 'string' ? meseDiGiorno(t.forfaitDal.trim()) : ''
-  return meseValido(dal) ? dal : oggiMese
+  if (t.modalitaPagamento === 'FORFAIT') return meseValido(dal) ? dal : oggiMese
+  // Tutor oggi "a ore": il fisso c'è stato solo se il suo periodo è CHIUSO, cioè ha
+  // sia l'inizio sia la fine. È il caso di chi è passato a ore dopo il 09/10/2026.
+  // Senza la fine (i dati di prima) resta un tutor a ore e basta, come sempre.
+  return meseValido(dal) && meseFineFisso(t) !== null ? dal : null
 }
 
 /**
- * LA DOMANDA: per il mese `mese` ('AAAA-MM'), a questo tutor si deve il fisso?
- * Restituisce l'importo del fisso se sì, null se quel mese va pagato a ore.
+ * L'ULTIMO mese a fisso ('AAAA-MM'), oppure null se il fisso non ha una fine.
+ * La fine la scrive il gestionale quando il tutor viene archiviato o passa a ore.
+ */
+export function meseFineFisso(t: ProfiloCompensoTutor): MeseCivile | null {
+  const al = typeof t.forfaitAl === 'string' ? meseDiGiorno(t.forfaitAl.trim()) : ''
+  return meseValido(al) ? al : null
+}
+
+/**
+ * LA DOMANDA: il mese `mese` ('AAAA-MM') è un mese A FISSO per questo tutor?
+ * Restituisce l'importo del fisso se sì (il mese cade fra l'inizio e la fine del
+ * fisso, estremi compresi), null se no.
+ *
+ * Dice quanto VALE il mese, non se è già da pagare: per quello c'è dovutoDelMese().
+ * Le statistiche (margine per mese) usano questa, perché il costo del mese c'è
+ * anche mentre il mese è in corso.
  *
  * Il confronto fra mesi è un confronto fra stringhe 'AAAA-MM': funziona perché il
  * formato è a lunghezza fissa e ordinato ('2026-09' < '2026-10'), e non tira in
@@ -123,7 +157,46 @@ export function fissoDelMese(
 ): number | null {
   const inizio = meseInizioFisso(t, oggiMese)
   if (inizio === null) return null
-  return meseDiGiorno(mese) >= inizio ? importoFisso(t) : null
+  const fine = meseFineFisso(t)
+  const m    = meseDiGiorno(mese)
+  return m >= inizio && (fine === null || m <= fine) ? importoFisso(t) : null
+}
+
+/**
+ * QUANTO SI DEVE al tutor per il mese `mese`, e se è già da saldare.
+ * `compensoOre` è la somma delle lezioni del mese, già arrotondata all'euro.
+ *
+ * Regola del 09/10/2026 (voce 7): IL FISSO DEL MESE M SI PAGA DAL 1° DEL MESE M+1.
+ * Il fisso di settembre è il compenso del lavoro di settembre: a settembre non è
+ * ancora "da saldare" (è "in maturazione"), lo diventa il 1° ottobre.
+ *
+ * Restituisce:
+ *  • `importo`: quanto è DOVUTO adesso (0 per il mese a fisso ancora in corso);
+ *  • `fisso`: l'importo del fisso se il mese è a fisso, altrimenti null;
+ *  • `inMaturazione`: true se è un mese a fisso non ancora finito.
+ *
+ * ⚠️ Un tutor segnato FORFAIT, dal mese di partenza del fisso in poi, NON si paga
+ * mai a ore: né nel mese in corso (lo pagheremmo due volte, a ore adesso e a fisso
+ * il mese dopo), né dopo la fine del fisso se è stato archiviato (decisione di
+ * Alessandro: il mese in cui lo archivi non si paga). Le ore valgono solo per i
+ * mesi prima della partenza del fisso e, per chi è passato "a ore", per quelli
+ * dopo la fine.
+ */
+export function dovutoDelMese(
+  t: ProfiloCompensoTutor,
+  mese: MeseCivile,
+  compensoOre: number,
+  oggiMese: MeseCivile = meseDiOggi(),
+): { importo: number; fisso: number | null; inMaturazione: boolean } {
+  const m     = meseDiGiorno(mese)
+  const fisso = fissoDelMese(t, m, oggiMese)
+  if (fisso !== null) {
+    const inMaturazione = m >= oggiMese
+    return { importo: inMaturazione ? 0 : fisso, fisso, inMaturazione }
+  }
+  const inizio  = meseInizioFisso(t, oggiMese)
+  const senzaOre = t.modalitaPagamento === 'FORFAIT' && inizio !== null && m >= inizio
+  return { importo: senzaOre ? 0 : compensoOre, fisso: null, inMaturazione: false }
 }
 
 /**
@@ -146,7 +219,10 @@ export function mesiDovutiAFisso(
   if (inizio === null) return []
 
   const partenza = inizio > daMese ? inizio : daMese
-  if (partenza > aMese) return []
+  // Dopo l'ultimo mese a fisso (tutor archiviato o passato a ore) il fisso non c'è più.
+  const fine   = meseFineFisso(t)
+  const ultimo = fine !== null && fine < aMese ? fine : aMese
+  if (partenza > ultimo) return []
 
   const mesi: MeseCivile[] = []
   let anno = Number(partenza.slice(0, 4))
@@ -155,7 +231,7 @@ export function mesiDovutiAFisso(
   // classica operazione che scivola (31 gennaio + 1 mese) e qui non serve.
   for (let giro = 0; giro < 600; giro++) {
     const chiave = `${anno}-${String(mese).padStart(2, '0')}`
-    if (chiave > aMese) break
+    if (chiave > ultimo) break
     mesi.push(chiave)
     mese++
     if (mese > 12) { mese = 1; anno++ }

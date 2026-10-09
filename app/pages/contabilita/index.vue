@@ -476,7 +476,7 @@
               <div>
                 <p class="text-xs font-medium uppercase tracking-wide flex items-center gap-1" :class="tutorDebitiTotale > 0 ? 'text-amber-600' : 'text-slate-400'">
                   Compensi Tutor Dovuti
-                  <StatHelp text="Compensi maturati dai tutor per le lezioni svolte e non ancora liquidati." />
+                  <StatHelp text="Compensi maturati dai tutor e non ancora liquidati: le lezioni svolte per chi è pagato a ore, il fisso mensile per chi è a fisso. Il fisso di un mese diventa dovuto dal 1° del mese dopo (il fisso di settembre si paga a ottobre)." />
                 </p>
                 <p class="text-2xl font-bold mt-1" :class="tutorDebitiTotale > 0 ? 'text-amber-700' : 'text-slate-600'">
                   € {{ fmt(tutorDebitiTotale) }}

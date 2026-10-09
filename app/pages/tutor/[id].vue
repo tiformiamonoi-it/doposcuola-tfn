@@ -42,8 +42,8 @@
             </UBadge>
           </div>
           <div class="flex items-center gap-2">
-            <UBadge :color="tutor.active ? 'success' : 'neutral'" variant="subtle">
-              {{ tutor.active ? 'Attivo' : 'Inattivo' }}
+            <UBadge :color="tutor.active ? 'success' : 'neutral'" :variant="tutor.active ? 'subtle' : 'soft'">
+              {{ tutor.active ? 'Attivo' : 'Archiviato' }}
             </UBadge>
             <UButton size="sm" variant="outline" icon="i-heroicons-pencil" @click="() => { modalModificaAperto = true }">
               Modifica
@@ -122,6 +122,12 @@
                       {{ etichettaMese(meseInizioFissoTutor) }}
                       <span v-if="!tutor.forfaitDal" class="text-slate-400 normal-case">(non indicato: vale da questo mese in poi)</span>
                     </dd>
+                  </div>
+                  <!-- Fine del fisso: la scrive il gestionale quando il tutor viene
+                       archiviato o passa a ore. Dopo questo mese il fisso non matura più. -->
+                  <div v-if="meseFineFissoTutor" class="flex gap-2">
+                    <dt class="text-slate-400 w-32 shrink-0">Ultimo mese a fisso</dt>
+                    <dd class="capitalize">{{ etichettaMese(meseFineFissoTutor) }}</dd>
                   </div>
                 </dl>
                 <div v-if="tutor.noteInterne" class="mt-4">
@@ -227,6 +233,8 @@
                            I mesi PRECEDENTI alla partenza del fisso restano pagati a
                            ore e lo dicono, altrimenti sembrerebbero un errore. -->
                       <div v-if="row.original.forfaitApplicato" class="text-tfn-500 font-medium text-xs mt-0.5">Quota Forfait</div>
+                      <!-- Tutor a fisso archiviato: dopo l'ultimo mese a fisso non si deve niente -->
+                      <div v-else-if="tutor.modalitaPagamento === 'FORFAIT' && meseFineFissoTutor && row.original.mese > meseFineFissoTutor" class="text-slate-400 text-xs mt-0.5">fisso terminato</div>
                       <div v-else-if="tutor.modalitaPagamento === 'FORFAIT'" class="text-slate-400 text-xs mt-0.5">a ore (prima del fisso)</div>
                       <div class="text-slate-400 text-xs">ore: € {{ row.original.compensoGrezzo.toFixed(2) }}</div>
                     </div>
@@ -241,7 +249,7 @@
                   </template>
                   <template #stato-cell="{ row }">
                     <UBadge :color="coloreStatoPagamento(row.original.stato)" variant="subtle" size="xs">
-                      {{ row.original.stato }}
+                      {{ row.original.stato === 'IN_MATURAZIONE' ? 'In maturazione' : row.original.stato }}
                     </UBadge>
                   </template>
                   <template #azioni-cell="{ row }">
@@ -519,6 +527,22 @@
               <UInput v-model="datiModifica.forfaitDal" type="month" class="w-full" />
             </UFormField>
           </div>
+          <p v-if="meseFineFissoTutor" class="text-sm text-slate-600">
+            Ultimo mese a fisso: <span class="font-medium capitalize">{{ etichettaMese(meseFineFissoTutor) }}</span>
+            <span class="block text-xs text-slate-500">
+              Per far ripartire il fisso scegli "Forfait mensile" e un nuovo mese di partenza.
+            </span>
+          </p>
+          <!-- Il periodo a fisso è uno solo: una partenza nuova rimette a ore i mesi a
+               fisso di prima. Se uno di quelli non è ancora liquidato, va pagato prima. -->
+          <UAlert
+            v-if="mesiFissoNonLiquidatiPersi.length > 0"
+            color="warning"
+            variant="soft"
+            icon="i-heroicons-exclamation-triangle"
+            title="Ci sono mesi a fisso non ancora liquidati: liquidali prima"
+            :description="`Con questa partenza ${mesiFissoNonLiquidatiPersi.map(m => m.meseLabel).join(', ')} tornerebbe${mesiFissoNonLiquidatiPersi.length === 1 ? '' : 'ro'} a ore e il fisso non ancora pagato sparirebbe dal dovuto.`"
+          />
           <!-- Chi c'è quasi tutti i giorni non deve spuntarli uno per uno: segna solo quando manca -->
           <div>
             <USwitch
@@ -667,7 +691,7 @@
 import type { EsitoInvitoEmail } from '#shared/email'
 // La regola del fisso mensile sta scritta una volta sola, e il modulo usa la stessa
 // del server: così il mese proposto qui e quello controllato là non possono divergere.
-import { etichettaMese, meseDiGiorno, meseDiOggi, meseInizioFisso } from '#shared/compenso-tutor'
+import { etichettaMese, meseDiGiorno, meseDiOggi, meseFineFisso, meseInizioFisso, mesePrecedente } from '#shared/compenso-tutor'
 import { oggiISO } from '~/utils/format'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
 import { METODI_PAGAMENTO_ITEMS, coloreStatoPagamento, coloreStatoRimborso } from '~/utils/contabilita'
@@ -724,6 +748,8 @@ interface SchedaTutor {
   importoForfait: string | null
   /** Primo giorno del mese da cui vale il fisso ('AAAA-MM-01'), o null se non indicato */
   forfaitDal: string | null
+  /** Primo giorno dell'ULTIMO mese a fisso ('AAAA-MM-01'), o null se il fisso non ha fine */
+  forfaitAl: string | null
   /** Interruttore "Sempre disponibile (lunedì–venerdì)"; null se il profilo manca */
   sempreDisponibile: boolean | null
 }
@@ -741,7 +767,8 @@ interface CompensoMese {
   forfaitApplicato: boolean
   pagato: number
   residuo: number
-  stato: 'PAGATO' | 'PARZIALE' | 'DA_PAGARE' | 'PRO_BONO'
+  /** IN_MATURAZIONE: fisso del mese in corso, si paga dal 1° del mese dopo */
+  stato: 'PAGATO' | 'PARZIALE' | 'DA_PAGARE' | 'PRO_BONO' | 'IN_MATURAZIONE'
   isMeseCorrente: boolean
 }
 
@@ -973,7 +1000,12 @@ const meseInizioFissoTutor = computed<string>(
     modalitaPagamento: tutor.value?.modalitaPagamento,
     importoForfait:    tutor.value?.importoForfait,
     forfaitDal:        tutor.value?.forfaitDal,
+    forfaitAl:         tutor.value?.forfaitAl,
   }) ?? meseDiOggi(),
+)
+// L'ultimo mese a fisso ('AAAA-MM'), o null se il fisso non ha una fine.
+const meseFineFissoTutor = computed<string | null>(
+  () => (tutor.value ? meseFineFisso(tutor.value) : null),
 )
 
 // ─── Modal Modifica ───────────────────────────
@@ -995,7 +1027,8 @@ const datiModifica = reactive({
   importoForfait: tutor.value?.importoForfait ?? '',
   // Il campo <input type="month"> vuole 'AAAA-MM', la colonna a database è un giorno
   // ('AAAA-MM-01'): qui si tiene la forma del modulo, il server rimette il giorno.
-  forfaitDal: meseDiGiorno(tutor.value?.forfaitDal ?? ''),
+  // (vuoto per un tutor a ore: vedi il commento gemello nel watch qui sotto)
+  forfaitDal: tutor.value?.modalitaPagamento === 'FORFAIT' ? meseDiGiorno(tutor.value.forfaitDal ?? '') : '',
   sempreDisponibile: tutor.value?.sempreDisponibile ?? false,
   noteInterne: tutor.value?.noteInterne ?? '',
   password: '', // reset password opzionale: vuoto = non cambiare
@@ -1025,7 +1058,10 @@ watch(tutor, (t) => {
     // Tutor già a fisso ma senza mese di partenza (dati vecchi): si propone il mese
     // corrente, che è anche quello che il server userebbe. Salvando, la cosa si fissa
     // nero su bianco e non resta più affidata alla regola di riserva.
-    forfaitDal: meseDiGiorno(t.forfaitDal ?? '') || (t.modalitaPagamento === 'FORFAIT' ? meseDiOggi() : ''),
+    // Tutor a ore: il campo parte VUOTO anche se c'è la data di un vecchio periodo a
+    // fisso (già chiuso). Così, rimettendolo a Forfait, si propone questo mese e non
+    // quella data: riusarla rimetterebbe a fisso anche i mesi pagati a ore nel mezzo.
+    forfaitDal: t.modalitaPagamento === 'FORFAIT' ? (meseDiGiorno(t.forfaitDal ?? '') || meseDiOggi()) : '',
     sempreDisponibile: t.sempreDisponibile ?? false,
     noteInterne: t.noteInterne ?? '',
     password: '',
@@ -1040,6 +1076,20 @@ watch(tutor, (t) => {
 // evita di far ricomparire arretrati sui mesi già pagati a ore. Resta modificabile.
 watch(() => datiModifica.modalitaPagamento, (modalita) => {
   if (modalita === 'FORFAIT' && !datiModifica.forfaitDal) datiModifica.forfaitDal = meseDiOggi()
+})
+
+// I mesi a fisso GIÀ DA PAGARE e non ancora liquidati che il salvataggio rimetterebbe
+// a ore. Succede quando il fisso riparte (da "a ore" a Forfait, o con un mese di
+// partenza diverso): il server tiene un periodo a fisso solo, quello nuovo, e i mesi
+// a fisso prima della nuova partenza tornano a ore. Stessa condizione del server
+// (updateTutor), letta dalla tabella compensi che la scheda ha già caricato.
+const mesiFissoNonLiquidatiPersi = computed<CompensoMese[]>(() => {
+  const t = tutor.value
+  const nuovoDal = datiModifica.forfaitDal
+  if (!t || datiModifica.modalitaPagamento !== 'FORFAIT' || !nuovoDal) return []
+  const riparte = t.modalitaPagamento !== 'FORFAIT' || nuovoDal !== meseDiGiorno(t.forfaitDal ?? '')
+  if (!riparte) return []
+  return (compensation.value ?? []).filter(m => m.forfaitApplicato && m.residuo > 0.01 && m.mese < nuovoDal)
 })
 
 async function salvaTutor() {
@@ -1074,8 +1124,9 @@ async function salvaTutor() {
         citta: datiModifica.citta || null,
         cap: datiModifica.cap || null,
         importoForfait: datiModifica.importoForfait || null,
-        // Solo per il fisso: tornando "a ore" si manda null e il server azzera la data
-        // (se un giorno il tutor tornasse a fisso, il mese va deciso di nuovo).
+        // Solo per il fisso: tornando "a ore" si manda null, ma il server CONSERVA la
+        // data e segna l'ultimo mese a fisso (il mese prima di quello in corso), così
+        // i mesi passati a fisso restano a fisso.
         forfaitDal: datiModifica.modalitaPagamento === 'FORFAIT' ? (datiModifica.forfaitDal || null) : null,
         noteInterne: datiModifica.noteInterne || null,
       },
@@ -1157,10 +1208,15 @@ const datiLiquidaDettaglio = reactive({
 })
 
 function apriLiquidaDettaglio() {
-  const meseCorr = (compensation.value ?? []).find(m => m.isMeseCorrente)
   const oggi = new Date()
-  datiLiquidaDettaglio.mese = `${oggi.getFullYear()}-${String(oggi.getMonth() + 1).padStart(2, '0')}`
-  if (meseCorr) datiLiquidaDettaglio.importo = String(meseCorr.residuo)
+  // Tutor a fisso: il fisso del mese si paga dal 1° del mese dopo, quindi "Liquida"
+  // propone il MESE PRIMA (con il suo residuo). Tutor a ore: il mese in corso, come sempre.
+  const mese = tutor.value?.modalitaPagamento === 'FORFAIT'
+    ? mesePrecedente(meseDiOggi())
+    : `${oggi.getFullYear()}-${String(oggi.getMonth() + 1).padStart(2, '0')}`
+  datiLiquidaDettaglio.mese = mese
+  const riga = (compensation.value ?? []).find(m => m.mese === mese)
+  if (riga) datiLiquidaDettaglio.importo = String(riga.residuo)
   modalLiquidaDettaglioAperto.value = true
 }
 
@@ -1293,20 +1349,32 @@ const menuAzioni = computed(() => [
     onSelect: () => apriLiquidaDettaglio(),
   }],
   [{
-    label: tutor.value?.active ? 'Disattiva tutor' : 'Riattiva tutor',
-    icon: tutor.value?.active ? 'i-heroicons-pause-circle' : 'i-heroicons-play-circle',
+    label: tutor.value?.active ? 'Archivia tutor' : 'Ripristina tutor',
+    icon: tutor.value?.active ? 'i-heroicons-archive-box-arrow-down' : 'i-heroicons-arrow-uturn-left',
     onSelect: () => toggleAttivo(),
   }],
 ])
 
-async function toggleAttivo() {
+// Archiviare chiede conferma (il tutor non entra più); ripristinare no, si annulla da sé.
+function toggleAttivo() {
+  if (!tutor.value?.active) return cambiaAttivo()
+  chiediConferma({
+    title: `Archiviare ${tutor.value.lastName} ${tutor.value.firstName}?`,
+    description: 'Non potrà più entrare nel gestionale e sparirà dagli elenchi e dalle tendine di calendario, lezioni e Matching. '
+      + 'Lo storico resta tutto: lezioni, compensi e liquidazioni. Si ripristina quando vuoi da questo stesso menu.',
+    confirmLabel: 'Archivia',
+    confirmColor: 'warning',
+  }, () => cambiaAttivo())
+}
+
+async function cambiaAttivo() {
   try {
     if (tutor.value?.active) {
       await $fetch(indirizzoTutor, { method: 'DELETE' })
-      toast.add({ title: 'Tutor disattivato', color: 'info' })
+      toast.add({ title: 'Tutor archiviato', color: 'info' })
     } else {
       await $fetch(indirizzoTutor, { method: 'PUT', body: { active: true } })
-      toast.add({ title: 'Tutor riattivato', color: 'success' })
+      toast.add({ title: 'Tutor ripristinato', color: 'success' })
     }
     refreshTutor()
   } catch (err: any) {

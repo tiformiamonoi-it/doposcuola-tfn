@@ -11,8 +11,8 @@ import { inCentesimi, inEuro } from '../utils/arrotondamenti'
 import { nomeProprio } from '../utils/nomi'
 import { CAT } from '#shared/accounting-categories'
 import {
-  etichettaMese, fissoDelMese, meseDiOggi, mesiDovutiAFisso, primoGiornoDelMese,
-  type ProfiloCompensoTutor,
+  dovutoDelMese, etichettaMese, fissoDelMese, meseDiOggi, mesePrecedente, mesiDovutiAFisso,
+  primoGiornoDelMese, type ProfiloCompensoTutor,
 } from '#shared/compenso-tutor'
 import type {
   CreateTutorInput, UpdateTutorInput, TutorQuery,
@@ -51,7 +51,8 @@ function ym(d: Date) {
 //
 // I tre parametri sono mesi 'AAAA-MM': dal mese `daMese` al mese `aMese` compresi, e
 // `meseCorrente` è il mese di oggi — serve come partenza di riserva per i tutor a
-// fisso che non hanno una data (i profili vecchi): mai all'indietro.
+// fisso che non hanno una data (i profili vecchi): mai all'indietro. E fa da tetto:
+// il fisso del mese in corso non è ancora dovuto (si paga dal 1° del mese dopo).
 // ─────────────────────────────────────────────
 export function sqlMesiCompenso(daMese: string, aMese: string, meseCorrente: string) {
   const primoGiornoDa  = primoGiornoDelMese(daMese)
@@ -60,44 +61,68 @@ export function sqlMesiCompenso(daMese: string, aMese: string, meseCorrente: str
 
   return sql`
     profili_fisso AS (
+      -- Chi ha (o ha avuto) un periodo a fisso. Stessa regola di meseInizioFisso():
+      --  • tutor FORFAIT: dal mese di partenza (COALESCE sul mese corrente: profilo
+      --    senza data, dati anteriori al 14/09/2026 = il fisso vale da adesso in poi);
+      --  • tutor oggi "a ore": solo se il periodo è chiuso (inizio E fine), cioè è
+      --    passato a ore dopo il 09/10/2026 e i suoi mesi a fisso restano a fisso.
       SELECT tp.user_id AS tutor_id,
              tp.importo_forfait::numeric AS importo_fisso,
-             -- Da quale mese parte il fisso, tenuto dentro la finestra richiesta.
-             -- COALESCE sul mese corrente: profilo a fisso senza data di partenza
-             -- (dati anteriori al 14/09/2026) = il fisso vale da adesso in poi.
-             GREATEST(
-               DATE_TRUNC('month', COALESCE(tp.forfait_dal, ${primoGiornoOra}::date))::date,
-               ${primoGiornoDa}::date
-             ) AS primo_mese_fisso
+             tp.modalita_pagamento = 'FORFAIT' AS a_fisso_oggi,
+             DATE_TRUNC('month', COALESCE(tp.forfait_dal, ${primoGiornoOra}::date))::date AS inizio_fisso,
+             -- L'ultimo mese a fisso (archiviato o passato a ore). NULL = nessuna fine.
+             DATE_TRUNC('month', tp.forfait_al)::date AS fine_fisso
       FROM tutor_profiles tp
-      WHERE tp.modalita_pagamento = 'FORFAIT'
-        AND tp.importo_forfait IS NOT NULL
+      WHERE tp.importo_forfait IS NOT NULL
         AND tp.importo_forfait::numeric > 0
+        AND (tp.modalita_pagamento = 'FORFAIT'
+             OR (tp.forfait_dal IS NOT NULL AND tp.forfait_al IS NOT NULL))
     ),
     mesi_fisso AS (
-      -- Un mese per ogni mese del periodo a fisso, lezioni o non lezioni.
-      -- Se il fisso parte dopo la fine della finestra, generate_series non produce
-      -- nessuna riga e per quel tutor è come se il fisso non ci fosse.
+      -- Un mese per ogni mese del periodo a fisso, lezioni o non lezioni, tenuto
+      -- dentro la finestra richiesta. Il periodo si ferma al primo che arriva fra:
+      --  • la fine della finestra;
+      --  • l'ultimo mese a fisso del tutor (fine_fisso);
+      --  • IL MESE PRIMA DI QUELLO IN CORSO: il fisso del mese M si paga dal 1° del
+      --    mese M+1 (regola del 09/10/2026), quindi il mese in corso non è ancora
+      --    dovuto. Sottrazione fra date, non fra stringhe: gennaio → dicembre
+      --    dell'anno prima viene giusto da sé.
+      -- Se l'inizio cade dopo la fine, generate_series non produce nessuna riga.
       SELECT p.tutor_id,
              gs.mese::date AS mese,
              p.importo_fisso AS compenso
       FROM profili_fisso p
       CROSS JOIN LATERAL generate_series(
-        p.primo_mese_fisso::timestamp,
-        ${primoGiornoA}::timestamp,
+        GREATEST(p.inizio_fisso, ${primoGiornoDa}::date)::timestamp,
+        LEAST(
+          ${primoGiornoA}::date::timestamp,
+          COALESCE(p.fine_fisso, ${primoGiornoA}::date)::timestamp,
+          ${primoGiornoOra}::date - INTERVAL '1 month'
+        ),
         INTERVAL '1 month'
       ) AS gs(mese)
     ),
     mesi_ore AS (
       -- Il conto a ore di sempre: somma dei compensi delle lezioni del mese,
       -- arrotondata PER DIFETTO all'euro (regola voluta, non si tocca).
-      SELECT tutor_id,
-             DATE_TRUNC('month', data)::date AS mese,
-             FLOOR(COALESCE(SUM(compenso_tutor::numeric), 0)) AS compenso
-      FROM lessons
-      WHERE data >= ${primoGiornoDa}::date
-        AND data <  (${primoGiornoA}::date + INTERVAL '1 month')
-      GROUP BY tutor_id, DATE_TRUNC('month', data)::date
+      -- Restano FUORI le lezioni dei mesi in cui il tutor non si paga a ore
+      -- (stessa regola di dovutoDelMese()): i mesi del periodo a fisso e, per chi
+      -- è ancora segnato FORFAIT, tutti i mesi dalla partenza del fisso in poi —
+      -- anche quello in corso (niente "a ore adesso e fisso il mese dopo") e quelli
+      -- dopo l'archiviazione (il mese in cui lo archivi non si paga).
+      SELECT l.tutor_id,
+             DATE_TRUNC('month', l.data)::date AS mese,
+             FLOOR(COALESCE(SUM(l.compenso_tutor::numeric), 0)) AS compenso
+      FROM lessons l
+      WHERE l.data >= ${primoGiornoDa}::date
+        AND l.data <  (${primoGiornoA}::date + INTERVAL '1 month')
+        AND NOT EXISTS (
+          SELECT 1 FROM profili_fisso p
+          WHERE p.tutor_id = l.tutor_id
+            AND DATE_TRUNC('month', l.data)::date >= p.inizio_fisso
+            AND (p.a_fisso_oggi OR DATE_TRUNC('month', l.data)::date <= p.fine_fisso)
+        )
+      GROUP BY l.tutor_id, DATE_TRUNC('month', l.data)::date
     ),
     mesi_compenso AS (
       -- FULL OUTER JOIN e non un LEFT: servono sia i mesi con lezioni ma senza fisso
@@ -156,6 +181,8 @@ export async function listTutors(query: TutorQuery) {
       importoForfait:    tutorProfiles.importoForfait,
       // Da quando vale il fisso: senza, l'elenco tornerebbe a inventare arretrati
       forfaitDal:        tutorProfiles.forfaitDal,
+      // ...e fin quando: un archiviato o un passato "a ore" non matura più il fisso
+      forfaitAl:         tutorProfiles.forfaitAl,
       createdAt:         users.createdAt,
     })
     .from(users)
@@ -233,17 +260,19 @@ export async function listTutors(query: TutorQuery) {
     const ar = arrearsMap.get(tutor.id)
 
     // Il mese in corso segue la STESSA regola degli arretrati qui sopra e della
-    // scheda del tutor: se il fisso è già partito si deve il fisso (anche con zero
-    // lezioni), altrimenti le ore. È la riga che faceva dire all'elenco e alla
-    // scheda due numeri diversi per lo stesso tutor.
-    const fissoMese = fissoDelMese(tutor, meseOggi, meseOggi)
-    // Arrotondamento all'euro per difetto: VOLUTO, si lascia (il fisso è già un
-    // importo a due decimali e non si arrotonda).
-    const compensoCalcolato     = fissoMese ?? Math.floor(parseFloat(ls?.compenso ?? '0'))
-    const compensoCalcolatoCent = inCentesimi(compensoCalcolato)
+    // scheda del tutor (dovutoDelMese, in shared/compenso-tutor.ts). Per un tutor a
+    // fisso il mese in corso è "in maturazione": il fisso si paga dal 1° del mese
+    // dopo, quindi qui non è ancora dovuto niente — e le lezioni del mese NON si
+    // pagano a ore al suo posto. Per i tutor a ore non cambia niente.
+    // Arrotondamento all'euro per difetto delle ore: VOLUTO, si lascia (il fisso è
+    // già un importo a due decimali e non si arrotonda).
+    const dovuto                = dovutoDelMese(tutor, meseOggi, Math.floor(parseFloat(ls?.compenso ?? '0')), meseOggi)
+    // Quanto VALE il mese (il fisso anche se non ancora dovuto): serve alla media
+    // mensile qui sotto, che resta quella di prima.
+    const compensoCalcolato     = dovuto.fisso ?? dovuto.importo
     const pagatoCent            = inCentesimi(ps?.pagato ?? '0')
     // Pro Bono: il mese è considerato saldato (residuo 0) anche se non transita in contabilità.
-    const compensoResiduoCent   = ps?.proBono ? 0 : Math.max(0, compensoCalcolatoCent - pagatoCent)
+    const compensoResiduoCent   = ps?.proBono ? 0 : Math.max(0, inCentesimi(dovuto.importo) - pagatoCent)
     const mesiArretrati         = parseInt(ar?.mesi_arretrati ?? '0')
     // Gli arretrati li ha già sommati Postgres in modo esatto (FLOOR compreso).
     const totaleArretratiCent   = inCentesimi(ar?.totale_arretrati ?? '0')
@@ -314,6 +343,8 @@ export async function getTutorById(id: string) {
       // Serve alla scheda per scrivere "fisso mensile da settembre 2026" e per
       // capire quali righe della tabella compensi sono ancora a ore.
       forfaitDal:        tutorProfiles.forfaitDal,
+      // L'ultimo mese a fisso (archiviato o passato a ore): la scheda lo scrive
+      forfaitAl:         tutorProfiles.forfaitAl,
       // Interruttore della scheda: il badge "Sempre disponibile lun–ven" e il modale Modifica
       sempreDisponibile: tutorProfiles.sempreDisponibile,
     })
@@ -428,23 +459,51 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
       await annullaLinkAperti(id, tx)
     }
 
-    // IL FISSO MENSILE HA SEMPRE UN MESE DI PARTENZA.
-    // Passando a Forfait senza indicarlo (o da una schermata che non ha il campo) si
-    // parte da QUESTO mese: mai all'indietro, altrimenti tornerebbero gli arretrati
-    // inventati che questa modifica esiste per chiudere. Se il profilo una data ce
-    // l'ha già, si rispetta quella.
-    if (profileChanges.modalitaPagamento === 'FORFAIT' && profileChanges.forfaitDal == null) {
-      const [profiloPrima] = await tx
-        .select({ forfaitDal: tutorProfiles.forfaitDal })
-        .from(tutorProfiles)
-        .where(eq(tutorProfiles.userId, id))
-        .limit(1)
-      if (!profiloPrima?.forfaitDal) profileChanges.forfaitDal = primoGiornoDelMese(meseDiOggi())
+    const [profiloPrima] = await tx
+      .select({
+        modalitaPagamento: tutorProfiles.modalitaPagamento,
+        forfaitDal:        tutorProfiles.forfaitDal,
+        forfaitAl:         tutorProfiles.forfaitAl,
+      })
+      .from(tutorProfiles)
+      .where(eq(tutorProfiles.userId, id))
+      .limit(1)
+    const modalitaDopo = profileChanges.modalitaPagamento ?? profiloPrima?.modalitaPagamento
+
+    if (modalitaDopo === 'FORFAIT') {
+      const daOre = profiloPrima?.modalitaPagamento !== 'FORFAIT'
+      // IL FISSO MENSILE HA SEMPRE UN MESE DI PARTENZA.
+      // Passando a Forfait senza indicarlo (o da una schermata che non ha il campo) si
+      // parte da QUESTO mese: mai all'indietro, altrimenti tornerebbero gli arretrati
+      // inventati. Se il profilo una data ce l'ha già, si rispetta quella — tranne
+      // per chi arriva da "a ore": la sua data è l'inizio del periodo VECCHIO, già
+      // chiuso, e riusarla rimetterebbe a fisso anche i mesi pagati a ore nel mezzo.
+      if (profileChanges.forfaitDal == null) {
+        delete profileChanges.forfaitDal
+        if (profileChanges.modalitaPagamento === 'FORFAIT' && (daOre || !profiloPrima?.forfaitDal)) {
+          profileChanges.forfaitDal = primoGiornoDelMese(meseDiOggi())
+        }
+      }
+      // UN PERIODO A FISSO NUOVO: passare a fisso da "a ore", o scegliere un mese di
+      // partenza diverso, riapre il fisso da lì e toglie la fine. Il periodo è uno
+      // solo: i mesi a fisso vecchi PRIMA della nuova partenza tornano a ore — per
+      // questo la scheda avvisa se fra quelli c'è un fisso non ancora liquidato.
+      // Ripristinare un archiviato invece NON riapre niente: la fine resta.
+      const nuovoDal = profileChanges.forfaitDal
+      if (daOre || (typeof nuovoDal === 'string' && nuovoDal !== profiloPrima?.forfaitDal)) {
+        profileChanges.forfaitAl = null
+      }
+    } else {
+      // A ORE la data di partenza e l'importo del fisso non si toccano più: se c'è
+      // stato un periodo a fisso sono la sua storia, e cambiarli ricalcolerebbe mesi
+      // già maturati. Prima qui la data si AZZERAVA, e così i mesi passati a fisso
+      // tornavano a ore: un fisso non ancora pagato poteva sparire.
+      delete profileChanges.forfaitDal
+      delete profileChanges.importoForfait
+      if (profileChanges.modalitaPagamento === 'ORE') Object.assign(profileChanges, chiusuraFisso(profiloPrima))
     }
-    // Tornando "a ore" la data di partenza si azzera: il tutor non è più a fisso e,
-    // se un giorno ci tornasse, il mese di partenza va deciso di nuovo — la vecchia
-    // data resusciterebbe mesi già pagati a ore.
-    if (profileChanges.modalitaPagamento === 'ORE') profileChanges.forfaitDal = null
+    // Archiviato dal modulo (active: false) e non dal tasto "Archivia": stessa chiusura.
+    if (userChanges.active === false) Object.assign(profileChanges, chiusuraFisso(profiloPrima))
 
     await tx.update(tutorProfiles)
       .set(profileChanges as any)
@@ -470,12 +529,57 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
 // DEACTIVATE — DELETE /api/tutors/:id (soft)
 // ─────────────────────────────────────────────
 export async function deactivateTutor(id: string) {
-  const [updated] = await db.update(users)
-    .set({ active: false, updatedAt: new Date() })
-    .where(and(eq(users.id, id), inArray(users.role, ['TUTOR', 'SUPER_TUTOR', 'ADMIN'])))
-    .returning()
+  return db.transaction(async (tx) => {
+    const [updated] = await tx.update(users)
+      .set({ active: false, updatedAt: new Date() })
+      .where(and(eq(users.id, id), inArray(users.role, ['TUTOR', 'SUPER_TUTOR', 'ADMIN'])))
+      .returning()
+    if (!updated) return null
 
-  return updated ?? null
+    // Un tutor a fisso archiviato smette di maturare il fisso: prima continuava a
+    // risultare creditore di un fisso al mese, per sempre.
+    const [profilo] = await tx
+      .select({
+        modalitaPagamento: tutorProfiles.modalitaPagamento,
+        forfaitDal:        tutorProfiles.forfaitDal,
+        forfaitAl:         tutorProfiles.forfaitAl,
+      })
+      .from(tutorProfiles)
+      .where(eq(tutorProfiles.userId, id))
+      .limit(1)
+    const chiusura = chiusuraFisso(profilo)
+    if (chiusura.forfaitAl) {
+      await tx.update(tutorProfiles)
+        .set({ ...chiusura, updatedAt: new Date() })
+        .where(eq(tutorProfiles.userId, id))
+    }
+    return updated
+  })
+}
+
+// ─────────────────────────────────────────────
+// LA FINE DEL FISSO — quando un tutor a fisso viene archiviato o passa "a ore".
+//
+// L'ultimo mese a fisso è il mese PRIMA di quello in corso. Decisione di Alessandro
+// del 09/10/2026: archiviato (o passato a ore) il 15 ottobre → l'ultimo fisso dovuto
+// è settembre, ottobre non si paga.
+// Restituisce le colonne da scrivere sul profilo, oppure {} se non c'è niente da
+// chiudere: tutor non a fisso, o fisso già chiuso (la fine che c'è resta quella).
+// ─────────────────────────────────────────────
+function chiusuraFisso(
+  prima: { modalitaPagamento: string | null; forfaitDal: string | null; forfaitAl: string | null } | undefined,
+): { forfaitDal?: string; forfaitAl?: string } {
+  if (prima?.modalitaPagamento !== 'FORFAIT' || prima.forfaitAl) return {}
+  const oggi = meseDiOggi()
+  return {
+    // Profilo vecchio senza mese di partenza: per la regola di riserva il fisso valeva
+    // "da questo mese", e lo scriviamo nero su bianco. Altrimenti un domani il modulo
+    // di modifica riproporrebbe "da questo mese" e riaprirebbe il fisso di un tutor
+    // archiviato. Con partenza = questo mese e fine = il mese prima, non resta nessun
+    // mese a fisso: esattamente come prima, quando i mesi passati restavano a ore.
+    forfaitDal: prima.forfaitDal ?? primoGiornoDelMese(oggi),
+    forfaitAl:  primoGiornoDelMese(mesePrecedente(oggi)),
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -512,6 +616,7 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
       modalitaPagamento: tutorProfiles.modalitaPagamento,
       importoForfait:    tutorProfiles.importoForfait,
       forfaitDal:        tutorProfiles.forfaitDal,
+      forfaitAl:         tutorProfiles.forfaitAl,
     })
     .from(tutorProfiles)
     .where(eq(tutorProfiles.userId, tutorId))
@@ -523,6 +628,7 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
     modalitaPagamento: tutorRec?.modalitaPagamento ?? null,
     importoForfait:    tutorRec?.importoForfait ?? null,
     forfaitDal:        tutorRec?.forfaitDal ?? null,
+    forfaitAl:         tutorRec?.forfaitAl ?? null,
   }
 
   // Mappa pagamenti per chiave YYYY-MM (Local Time per evitare shift di fuso orario).
@@ -565,24 +671,28 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
     const riga              = mesiConLezioni.get(meseKey)!
     const compensoGrezzo    = riga.compensoGrezzo
 
-    // LA REGOLA, una volta sola (shared/compenso-tutor.ts): il fisso vale solo dal
-    // suo mese di partenza in poi. I mesi precedenti restano contati a ore, come
-    // sono stati pagati davvero, con l'arrotondamento all'euro per difetto che è
-    // una regola VOLUTA e non si tocca.
-    const fissoMese         = fissoDelMese(profilo, meseKey, nowKey)
-    const compensoCalcolato = fissoMese ?? Math.floor(compensoGrezzo)
+    // LA REGOLA, una volta sola (shared/compenso-tutor.ts): il fisso vale dal suo
+    // mese di partenza al suo ultimo mese, e si paga dal 1° del mese DOPO. I mesi
+    // fuori dal fisso restano contati a ore, come sono stati pagati davvero, con
+    // l'arrotondamento all'euro per difetto che è una regola VOLUTA e non si tocca.
+    const dovuto            = dovutoDelMese(profilo, meseKey, Math.floor(compensoGrezzo), nowKey)
+    // In tabella il mese mostra quanto VALE: il fisso anche se è ancora in maturazione.
+    const compensoCalcolato = dovuto.fisso ?? dovuto.importo
 
-    // F3: compenso meno pagato in centesimi interi, arrotondato una volta sola.
-    const compensoCalcolatoCent = inCentesimi(compensoCalcolato)
+    // F3: dovuto meno pagato in centesimi interi, arrotondato una volta sola.
     const pay                   = payByMonth.get(meseKey)
     const pagatoCent            = pay?.totaleCent ?? 0
     // Pro Bono: il mese è considerato saldato (residuo 0) anche se non transita in contabilità.
-    const residuoCent           = pay?.proBono ? 0 : Math.max(0, compensoCalcolatoCent - pagatoCent)
+    // Il fisso in maturazione non è ancora dovuto: residuo 0, niente rosso.
+    const residuoCent           = pay?.proBono ? 0 : Math.max(0, inCentesimi(dovuto.importo) - pagatoCent)
     const isMeseCorrente        = meseKey === nowKey
 
     // Stesse soglie di prima, lette in centesimi: "un centesimo" invece di "0,01".
     let stato: string
     if (pay?.proBono)                              stato = 'PRO_BONO'
+    // Fisso del mese in corso: "in maturazione" finché non è pagato per intero
+    // (chi lo anticipa lo vede PAGATO).
+    else if (dovuto.inMaturazione)                 stato = pagatoCent > 0 && pagatoCent >= inCentesimi(compensoCalcolato) - 1 ? 'PAGATO' : 'IN_MATURAZIONE'
     else if (residuoCent <= 1 && pagatoCent > 0)   stato = 'PAGATO'
     else if (pagatoCent > 1 && residuoCent > 1)    stato = 'PARZIALE'
     else                                           stato = 'DA_PAGARE'
@@ -596,7 +706,7 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
       compensoCalcolato,
       // Dice all'interfaccia se QUEL mese è stato pagato a fisso o a ore: serve
       // all'etichetta "a ore" sulle righe precedenti alla partenza del fisso.
-      forfaitApplicato: fissoMese !== null,
+      forfaitApplicato: dovuto.fisso !== null,
       pagato:           inEuro(pagatoCent),
       residuo:          inEuro(residuoCent),
       stato,
@@ -714,14 +824,19 @@ export async function getMonthlyPerformance(tutorId: string, months = 6) {
       modalitaPagamento: tutorProfiles.modalitaPagamento,
       importoForfait:    tutorProfiles.importoForfait,
       forfaitDal:        tutorProfiles.forfaitDal,
+      forfaitAl:         tutorProfiles.forfaitAl,
     })
     .from(tutorProfiles)
     .where(eq(tutorProfiles.userId, tutorId))
     .limit(1)
+  // Il costo del mese segue il periodo a fisso [forfaitDal, forfaitAl]: dopo la
+  // fine (archiviato o passato a ore) il fisso non è più un costo. Il mese in corso
+  // invece CONTA il fisso anche se si pagherà il mese dopo: è un costo di quel mese.
   const profilo: ProfiloCompensoTutor = {
     modalitaPagamento: profiloPerf?.modalitaPagamento ?? null,
     importoForfait:    profiloPerf?.importoForfait ?? null,
     forfaitDal:        profiloPerf?.forfaitDal ?? null,
+    forfaitAl:         profiloPerf?.forfaitAl ?? null,
   }
   const meseOggi = meseDiOggi()
 

@@ -45,8 +45,14 @@
                   <span v-if="stu.loadingPackages" class="text-xs text-slate-400 ml-2">caricamento...</span>
                 </div>
 
+                <!-- Tutor: niente pacchetto (nome, ore rimaste, tendina) ma la classe dell'alunno.
+                     Il pacchetto lo sceglie il gestionale: quello che scade prima (D3). -->
+                <template v-if="isTutor">
+                  <span v-if="!stu.esistente && !stu.loadingPackages && !stu.packageItem" class="text-xs text-red-400">Nessun pacchetto</span>
+                  <span v-else-if="stu.classe" class="text-xs text-slate-500 break-words max-w-[8rem]">{{ stu.classe }}</span>
+                </template>
                 <!-- Studente già esistente: pacchetto in sola lettura -->
-                <div v-if="stu.esistente" class="flex items-center gap-1 text-xs text-slate-500">
+                <div v-else-if="stu.esistente" class="flex items-center gap-1 text-xs text-slate-500">
                   <UIcon name="i-heroicons-cube" class="w-4 h-4 text-slate-400 flex-shrink-0" />
                   <span class="truncate max-w-[8rem]">{{ stu.packageItem?.label || 'Pacchetto' }}</span>
                 </div>
@@ -133,6 +139,7 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import ModalSelezionaStudenti from '~/components/calendario/ModalSelezionaStudenti.vue'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
+import { primaQuelloCheScade } from '#shared/scadenza-pacchetto'
 
 const props = defineProps<{
   date: string
@@ -144,7 +151,7 @@ const props = defineProps<{
   existingLessonsInSlot: any[] // Le lezioni che appartengono già a questo slot
   // Se presente (area personale tutor), usa un pool di studenti ristretto invece
   // della lista completa degli studenti attivi.
-  studentsPool?: { studentId: string; nome: string }[]
+  studentsPool?: { studentId: string; nome: string; classe?: string | null }[]
 }>()
 
 const emit = defineEmits(['refresh', 'close'])
@@ -220,6 +227,8 @@ async function onPickerConfirm(picked: Array<{ studentId: string; nome: string; 
     if (students.value.some(s => s.studentItem?.value === p.studentId)) continue
     const stu = {
       studentItem: { label: p.nome, value: p.studentId },
+      // La classe la mostra solo il tutor (al posto del pacchetto); arriva dal pool di oggi
+      classe: props.studentsPool?.find(x => x.studentId === p.studentId)?.classe ?? null,
       packageItem: null,
       packageOptions: [],
       loadingPackages: false,
@@ -251,8 +260,12 @@ async function onStudenteSelezionato(idx: number, newVal: any, prefetched?: any[
       const res: any = await $fetch(`/api/packages?studentId=${targetId}&stati=ATTIVO`)
       pkgs = res.data || []
     }
-    pkgs.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-    
+    // Il primo della lista è quello scelto. Tutor: quello che scade prima (D3), perché la
+    // tendina lui non la vede; segreteria: il più vecchio, come sempre.
+    pkgs.sort(isTutor.value
+      ? primaQuelloCheScade
+      : (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+
     stu.packageOptions = pkgs.map((p: any) => ({
       label: `${p.nome} - Rim: ${p.tipo === 'MENSILE' ? p.giorniResiduo + 'gg' : parseFloat(p.oreResiduo) + 'h'}`,
       value: p.id
@@ -300,6 +313,7 @@ function initModal() {
           lessonId: lesson.id,
           esistente: true, // studente già nello slot → pacchetto in sola lettura
           studentItem: { label: `${ls.student?.firstName} ${ls.student?.lastName}`, value: ls.studentId },
+          classe: ls.student?.classe ?? null,
           packageItem: { label: nomePacchetto, value: ls.packageId },
           packageOptions: [{ label: nomePacchetto, value: ls.packageId }],
           loadingPackages: false

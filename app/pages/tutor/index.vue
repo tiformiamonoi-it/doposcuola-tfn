@@ -49,6 +49,10 @@
         <USwitch v-model="soloLiquidare" @update:model-value="caricaTutor" />
         Solo da liquidare
       </label>
+      <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+        <USwitch v-model="mostraArchiviati" aria-label="Mostra anche i tutor archiviati" />
+        Mostra archiviati
+      </label>
     </div>
 
     <!-- ─── TELEFONO: una scheda per tutor ─── -->
@@ -65,7 +69,7 @@
         v-for="t in tutors"
         :key="t.id"
         class="bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-4 space-y-3 transition-opacity"
-        :class="{ 'opacity-60': pending }"
+        :class="{ 'opacity-60': pending || !t.active }"
       >
         <div class="flex items-center gap-2">
           <NuxtLink :to="`/tutor/${t.id}`" class="flex items-center gap-3 flex-1 min-w-0 min-h-11">
@@ -80,8 +84,8 @@
               <span class="block text-xs text-slate-500 truncate">{{ t.email }}</span>
             </span>
           </NuxtLink>
-          <UBadge :color="t.active ? 'success' : 'neutral'" variant="subtle">
-            {{ t.active ? 'Attivo' : 'Inattivo' }}
+          <UBadge :color="t.active ? 'success' : 'neutral'" :variant="t.active ? 'subtle' : 'soft'">
+            {{ t.active ? 'Attivo' : 'Archiviato' }}
           </UBadge>
           <UDropdownMenu :items="azioniTutor(t)">
             <UButton
@@ -136,7 +140,8 @@
 
     <!-- Tabella (da computer) -->
     <UCard :ui="{ body: 'p-0' }" class="hidden lg:block">
-      <UTable :data="tutors" :columns="colonne" :loading="pending">
+      <!-- Riga sbiadita per i tutor archiviati, come nei Contatti -->
+      <UTable :data="tutors" :columns="colonne" :loading="pending" :meta="metaTabella">
 
         <template #nome-cell="{ row }">
           <NuxtLink
@@ -195,8 +200,8 @@
         </template>
 
         <template #stato-cell="{ row }">
-          <UBadge :color="row.original.active ? 'success' : 'neutral'" variant="subtle">
-            {{ row.original.active ? 'Attivo' : 'Inattivo' }}
+          <UBadge :color="row.original.active ? 'success' : 'neutral'" :variant="row.original.active ? 'subtle' : 'soft'">
+            {{ row.original.active ? 'Attivo' : 'Archiviato' }}
           </UBadge>
         </template>
 
@@ -286,11 +291,23 @@
       </template>
     </USlideover>
 
+    <ConfirmDialog
+      v-model:open="confirmOpen"
+      :title="confirmTitle"
+      :description="confirmDescription"
+      :confirm-label="confirmLabel"
+      :confirm-color="confirmColor"
+      :loading="confirmLoading"
+      @confirm="eseguiConferma"
+    />
+
   </div>
 </template>
 
 <script setup lang="ts">
 import { inizialiDa, coloreAvatar } from '~/utils/avatar'
+import { meseDiOggi, mesePrecedente } from '#shared/compenso-tutor'
+import ConfirmDialog from '~/components/ConfirmDialog.vue'
 
 definePageMeta({ middleware: ['admin-or-super'] })
 
@@ -299,6 +316,8 @@ const toast = useToast()
 // ─── Filtri ───────────────────────────────────
 const search        = ref('')
 const soloLiquidare = ref(false)
+// Gli archiviati (users.active = false) di solito non si vedono: l'elenco mostra chi lavora quest'anno
+const mostraArchiviati = ref(false)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const filterQuery = computed(() => ({
@@ -321,6 +340,8 @@ interface RigaTutor {
   importoForfait: string | null
   /** Primo giorno del mese da cui vale il fisso ('AAAA-MM-01'), o null */
   forfaitDal: string | null
+  /** Primo giorno dell'ultimo mese a fisso, o null se il fisso non ha fine */
+  forfaitAl: string | null
   /** Data di creazione: parte come data e arriva qui come testo ISO */
   createdAt: string
   numLezioniMese: number
@@ -365,7 +386,14 @@ const { data, pending, refresh } = useLazyFetch<ElencoTutor>('/api/tutors', {
   default: (): ElencoTutor => ({ data: [], kpi: { tutoriAttivi: 0, daLiquidare: 0, totaleDovuto: 0, mediaLiquidazione: 0 } }),
 })
 
-const tutors = computed(() => data.value?.data ?? [])
+// Gli archiviati si nascondono qui e non sul server: così i riquadri in alto ("Tutor da
+// liquidare", "Totale dovuto") contano anche i soldi dovuti a chi è stato archiviato.
+// Con "Solo da liquidare" acceso compaiono comunque: i soldi vanno pagati lo stesso.
+const tutors = computed(() => (data.value?.data ?? [])
+  .filter(t => t.active || mostraArchiviati.value || soloLiquidare.value))
+const metaTabella = {
+  class: { tr: (row: { original: RigaTutor }) => (row.original.active ? '' : 'opacity-60') },
+}
 const kpi    = computed(() => data.value?.kpi ?? { tutoriAttivi: 0, daLiquidare: 0, totaleDovuto: 0, mediaLiquidazione: 0 })
 
 function onSearch() {
@@ -407,9 +435,26 @@ const datiLiquida = reactive({
   note:    '',
 })
 
-function apriLiquida(tutor: RigaTutor) {
+async function apriLiquida(tutor: RigaTutor) {
   tutorSelezionato.value = tutor
-  datiLiquida.importo = String(tutor.compensoResiduo > 0 ? tutor.compensoResiduo : tutor.compensoCalcolato)
+  if (tutor.modalitaPagamento === 'FORFAIT') {
+    // Tutor a fisso: il fisso del mese si paga dal 1° del mese dopo, quindi si
+    // propone il MESE PRIMA, con il residuo di quel mese preso dalla scheda compensi.
+    const mese = mesePrecedente(meseDiOggi())
+    datiLiquida.mese    = mese
+    datiLiquida.importo = ''
+    try {
+      const comp = await $fetch<MeseCompenso[]>(`/api/tutors/${tutor.id}/compensation`)
+      datiLiquida.importo = String(comp.find(m => m.mese === mese)?.residuo ?? 0)
+    } catch {
+      // Se il dettaglio non arriva l'importo resta vuoto: lo si scrive a mano.
+    }
+  } else {
+    // Tutor a ore: il mese in corso, come sempre. Si rimette esplicitamente perché
+    // il ramo qui sopra (o "Liquida" dal dettaglio mensile) può averlo cambiato.
+    datiLiquida.mese    = meseDiOggi()
+    datiLiquida.importo = String(tutor.compensoResiduo > 0 ? tutor.compensoResiduo : tutor.compensoCalcolato)
+  }
   modalLiquidaAperto.value = true
 }
 
@@ -487,14 +532,33 @@ function azioniTutor(tutor: RigaTutor) {
       onSelect: () => apriLiquida(tutor),
     }],
     [{
-      label: tutor.active ? 'Disattiva' : 'Attiva',
-      icon: tutor.active ? 'i-heroicons-pause-circle' : 'i-heroicons-play-circle',
+      label: tutor.active ? 'Archivia' : 'Ripristina',
+      icon: tutor.active ? 'i-heroicons-archive-box-arrow-down' : 'i-heroicons-arrow-uturn-left',
       onSelect: () => toggleAttivo(tutor),
     }],
   ]
 }
 
-async function toggleAttivo(tutor: RigaTutor) {
+// ─── ConfirmDialog: stato e logica in app/composables/useConfirm.ts ───
+const {
+  confirmOpen, confirmTitle, confirmDescription, confirmLabel, confirmColor, confirmLoading,
+  chiediConferma, eseguiConferma,
+} = useConfirm()
+
+// Archiviare chiede conferma (il tutor non entra più); ripristinare no, si annulla da sé.
+function toggleAttivo(tutor: RigaTutor) {
+  if (!tutor.active) return cambiaAttivo(tutor)
+  chiediConferma({
+    title: `Archiviare ${tutor.lastName} ${tutor.firstName}?`,
+    description: 'Non potrà più entrare nel gestionale e sparirà dagli elenchi e dalle tendine di calendario, lezioni e Matching. '
+      + 'Lo storico resta tutto: lezioni, compensi e liquidazioni. Si ripristina quando vuoi da «Mostra archiviati».',
+    confirmLabel: 'Archivia',
+    confirmColor: 'warning',
+    attendi: true,
+  }, () => cambiaAttivo(tutor, true))
+}
+
+async function cambiaAttivo(tutor: RigaTutor, rilancia = false) {
   // `/api/tutors/<id>` assomiglia anche a /api/tutors/today-pool, che è di sola
   // lettura: TypeScript non sa scegliere e crede che qui si possa solo leggere.
   // Gli diciamo di quale indirizzo si tratta — quello chiamato davvero non cambia.
@@ -502,14 +566,15 @@ async function toggleAttivo(tutor: RigaTutor) {
   try {
     if (tutor.active) {
       await $fetch(rottaTutor, { method: 'DELETE' })
-      toast.add({ title: 'Tutor disattivato', color: 'info' })
+      toast.add({ title: 'Tutor archiviato', color: 'info' })
     } else {
       await $fetch(rottaTutor, { method: 'PUT', body: { active: true } })
-      toast.add({ title: 'Tutor riattivato', color: 'success' })
+      toast.add({ title: 'Tutor ripristinato', color: 'success' })
     }
     refresh()
   } catch (err: any) {
     toast.add({ title: err.data?.statusMessage ?? 'Errore aggiornamento stato', color: 'error' })
+    if (rilancia) throw err // la finestra di conferma resta aperta per riprovare
   }
 }
 </script>

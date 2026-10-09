@@ -90,3 +90,9 @@ export const consensoOrigineEnum = pgEnum('consenso_origine', ['PORTALE', 'GESTI
 // due cose diverse che condividono un elenco finiscono sempre per litigare il
 // giorno in cui una delle due ha bisogno di un valore in più.
 export const assenzaOrigineEnum = pgEnum('assenza_origine', ['PORTALE', 'GESTIONALE'])
+
+// Comunicazioni a tutte le famiglie (tabella `comunicazioni`): che genere di avviso è.
+// INFORMATIVA   = chiusure, orari, scadenze → a tutti i genitori con il portale
+// PROMOZIONALE  = corsi estivi, offerte → SOLO a chi ha il consenso marketing
+//                 attivo, come chiede la legge sulla privacy
+export const comunicazioneTipoEnum = pgEnum('comunicazione_tipo', ['INFORMATIVA', 'PROMOZIONALE'])

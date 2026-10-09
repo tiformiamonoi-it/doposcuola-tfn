@@ -28,6 +28,8 @@ declare module '#auth-utils' {
     dichiarazioniMinori?: { id: string; nome: string }[]
     // Tutorial di benvenuto al primo accesso (tutor/famiglia/studente)
     tutorialVisto?: boolean
+    // Staff: l'ultima versione della finestra "Novità" già vista (vedi shared/changelog.ts)
+    novitaVista?: string | null
   }
 
   interface UserSession {

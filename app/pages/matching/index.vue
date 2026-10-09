@@ -54,69 +54,102 @@
             Tutti gli studenti sono stati assegnati o non ci sono prenotazioni.
           </p>
 
-          <ul v-else class="p-2 flex flex-wrap lg:flex-col lg:flex-nowrap gap-1.5 max-h-48 lg:max-h-none min-h-0 overflow-y-auto">
-            <li
-              v-for="badge in tabellone.daAssegnare"
-              :key="badge.subjectId"
-              class="relative max-w-full lg:w-full rounded-lg border bg-white text-sm cursor-grab active:cursor-grabbing"
-              :class="classiTarghetta(badge)"
-              draggable="true"
-              @dragstart="iniziaTrascinamento($event, badge)"
-              @dragend="fineTrascinamento"
-            >
-              <button
-                type="button"
-                class="block w-full text-left pl-2 pr-8 py-1.5 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tfn-500"
-                :aria-pressed="selezionato?.subjectId === badge.subjectId"
-                :title="titoloTarghetta(badge)"
-                @click="selezionaTarghetta(badge)"
+          <!-- A gruppi (D2): fuori la scuola, dentro il pacchetto (Mensili / A ore); ogni
+               livello si richiude. <details> è il richiudibile nativo del browser: tastiera e
+               lettori di schermo funzionano da soli, e resta chiuso anche quando il tabellone
+               si ricarica. -->
+          <div v-else class="p-2 space-y-2 max-h-48 lg:max-h-none min-h-0 overflow-y-auto">
+            <details v-for="gruppo in gruppiSinistra" :key="gruppo.chiave" open class="group/livello">
+              <summary class="flex items-center gap-1.5 px-1 py-1 rounded cursor-pointer select-none list-none text-xs font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-tfn-500 [&::-webkit-details-marker]:hidden">
+                <UIcon name="i-heroicons-chevron-right" class="size-3.5 shrink-0 transition-transform group-open/livello:rotate-90" aria-hidden="true" />
+                <span class="flex-1">{{ gruppo.titolo }}</span>
+                <UBadge color="neutral" variant="subtle" size="sm">{{ gruppo.totale }}</UBadge>
+              </summary>
+              <p v-if="gruppo.chiave === 'DA_SISTEMARE'" class="px-1 pb-1 text-xs text-slate-500">
+                Manca la classe nella scheda dell'alunno, oppure un pacchetto in corso.
+              </p>
+              <!-- Il sottogruppo è un <details> col suo titolo ("Mensili", "A ore"); "Da sistemare"
+                   non ha sottogruppi e qui diventa un semplice <div>. Così l'elenco delle
+                   targhette qui sotto è scritto una volta sola. -->
+              <component
+                :is="sotto.titolo ? 'details' : 'div'"
+                v-for="sotto in gruppo.sottogruppi"
+                :key="sotto.chiave"
+                open
+                class="group/sotto"
+                :class="sotto.titolo ? 'ml-3 mt-1' : ''"
               >
-                <span class="font-medium text-slate-900">{{ badge.studentSurname }} {{ badge.studentName }}</span>
-                <span class="text-slate-600"> · {{ badge.subject }}</span>
-                <span v-if="badge.studentPhone" class="hidden lg:block text-xs text-slate-600">{{ badge.studentPhone }}</span>
-                <span v-if="badge.notes" class="block mt-0.5 px-1 rounded text-xs text-amber-800 bg-amber-50 line-clamp-1 lg:line-clamp-2">{{ badge.notes }}</span>
-                <!-- Assegnato a un tutor tolto dal giorno (o a una fascia cancellata): senza casella sparirebbe -->
-                <span v-if="badge.isAssigned" class="block mt-0.5 text-xs text-red-700">Il suo posto non è più nel tabellone: rimettilo in una casella</span>
-              </button>
-              <button
-                type="button"
-                class="absolute top-1 right-1 size-6 flex items-center justify-center rounded-md text-slate-600 hover:text-red-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-red-600"
-                :aria-label="`Elimina la prenotazione di ${badge.studentName} ${badge.studentSurname}`"
-                title="Elimina prenotazione"
-                @click="eliminaPrenotazioneManuale(badge)"
-              >
-                <UIcon name="i-heroicons-trash" class="size-4" />
-              </button>
-              <!-- Lezione speciale fuori data: supplemento €10 da approvare -->
-              <div v-if="badge.supplemento" class="mx-2 mb-1.5 flex flex-wrap items-center justify-between gap-1.5 bg-amber-50 border border-amber-200 rounded p-1.5">
-                <span class="text-xs font-medium" :class="badge.supplementoApplicato ? 'text-emerald-700' : 'text-amber-800'">
-                  ⭐ Speciale fuori data: +€{{ badge.supplemento }}
-                </span>
-                <span v-if="badge.supplementoApplicato" class="flex items-center gap-1">
-                  <UBadge color="success" variant="subtle" size="xs">Applicato al pacchetto</UBadge>
-                  <UButton
-                    size="xs"
-                    color="error"
-                    variant="ghost"
-                    :aria-label="`Annulla il supplemento di ${badge.studentName} ${badge.studentSurname}: si toglie dal pacchetto`"
-                    @click="chiediAnnullaSupplemento(badge)"
+                <summary v-if="sotto.titolo" class="flex items-center gap-1.5 px-1 py-0.5 rounded cursor-pointer select-none list-none text-xs font-medium text-slate-600 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-tfn-500 [&::-webkit-details-marker]:hidden">
+                  <UIcon name="i-heroicons-chevron-right" class="size-3 shrink-0 transition-transform group-open/sotto:rotate-90" aria-hidden="true" />
+                  <span class="flex-1">{{ sotto.titolo }}</span>
+                  <UBadge color="neutral" variant="outline" size="xs">{{ sotto.targhette.length }}</UBadge>
+                </summary>
+                <ul class="mt-1 flex flex-wrap lg:flex-col lg:flex-nowrap gap-1.5">
+                  <li
+                    v-for="badge in sotto.targhette"
+                    :key="badge.subjectId"
+                    class="relative max-w-full lg:w-full rounded-lg border bg-white text-sm cursor-grab active:cursor-grabbing"
+                    :class="classiTarghetta(badge)"
+                    draggable="true"
+                    @dragstart="iniziaTrascinamento($event, badge)"
+                    @dragend="fineTrascinamento"
                   >
-                    Annulla
-                  </UButton>
-                </span>
-                <UButton
-                  v-else
-                  size="xs"
-                  color="warning"
-                  variant="soft"
-                  :loading="applicandoSupplemento === badge.bookingId"
-                  @click="applicaSupplemento(badge)"
-                >
-                  OK → +€{{ SUPPLEMENTO_SPECIALE }} sul pacchetto
-                </UButton>
-              </div>
-            </li>
-          </ul>
+                    <button
+                      type="button"
+                      class="block w-full text-left pl-2 pr-8 py-1.5 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tfn-500"
+                      :aria-pressed="selezionato?.subjectId === badge.subjectId"
+                      :title="titoloTarghetta(badge)"
+                      @click="selezionaTarghetta(badge)"
+                    >
+                      <span class="font-medium text-slate-900">{{ badge.studentSurname }} {{ badge.studentName }}</span>
+                      <span class="text-slate-600"> · {{ badge.subject }}</span>
+                      <span v-if="badge.studentPhone" class="hidden lg:block text-xs text-slate-600">{{ badge.studentPhone }}</span>
+                      <span v-if="badge.notes" class="block mt-0.5 px-1 rounded text-xs text-amber-800 bg-amber-50 line-clamp-1 lg:line-clamp-2">{{ badge.notes }}</span>
+                      <!-- Assegnato a un tutor tolto dal giorno (o a una fascia cancellata): senza casella sparirebbe -->
+                      <span v-if="badge.isAssigned" class="block mt-0.5 text-xs text-red-700">Il suo posto non è più nel tabellone: rimettilo in una casella</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="absolute top-1 right-1 size-6 flex items-center justify-center rounded-md text-slate-600 hover:text-red-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-red-600"
+                      :aria-label="`Elimina la prenotazione di ${badge.studentName} ${badge.studentSurname}`"
+                      title="Elimina prenotazione"
+                      @click="eliminaPrenotazioneManuale(badge)"
+                    >
+                      <UIcon name="i-heroicons-trash" class="size-4" />
+                    </button>
+                    <!-- Lezione speciale fuori data: supplemento €10 da approvare -->
+                    <div v-if="badge.supplemento" class="mx-2 mb-1.5 flex flex-wrap items-center justify-between gap-1.5 bg-amber-50 border border-amber-200 rounded p-1.5">
+                      <span class="text-xs font-medium" :class="badge.supplementoApplicato ? 'text-emerald-700' : 'text-amber-800'">
+                        ⭐ Speciale fuori data: +€{{ badge.supplemento }}
+                      </span>
+                      <span v-if="badge.supplementoApplicato" class="flex items-center gap-1">
+                        <UBadge color="success" variant="subtle" size="xs">Applicato al pacchetto</UBadge>
+                        <UButton
+                          size="xs"
+                          color="error"
+                          variant="ghost"
+                          :aria-label="`Annulla il supplemento di ${badge.studentName} ${badge.studentSurname}: si toglie dal pacchetto`"
+                          @click="chiediAnnullaSupplemento(badge)"
+                        >
+                          Annulla
+                        </UButton>
+                      </span>
+                      <UButton
+                        v-else
+                        size="xs"
+                        color="warning"
+                        variant="soft"
+                        :loading="applicandoSupplemento === badge.bookingId"
+                        @click="applicaSupplemento(badge)"
+                      >
+                        OK → +€{{ SUPPLEMENTO_SPECIALE }} sul pacchetto
+                      </UButton>
+                    </div>
+                  </li>
+                </ul>
+              </component>
+            </details>
+          </div>
         </section>
 
         <!-- IL TABELLONE: una riga per tutor, una colonna per fascia oraria -->
@@ -215,8 +248,8 @@
                           :title="titoloTarghetta(badge)"
                           @click="selezionaTarghetta(badge)"
                         >
-                          <span class="font-semibold text-slate-900">{{ nomeBreve(badge) }}</span>
-                          <span class="sr-only"> ({{ badge.studentName }} {{ badge.studentSurname }})</span>
+                          <!-- Nome intero: se è lungo va a capo, non si taglia -->
+                          <span class="font-semibold text-slate-900 break-words">{{ badge.studentSurname }} {{ badge.studentName }}</span>
                           <span class="text-slate-600"> · {{ badge.subject }}</span>
                           <span v-if="badge.supplemento" aria-hidden="true"> ⭐</span>
                           <UIcon v-if="badge.notes" name="i-heroicons-chat-bubble-left-ellipsis" class="ml-0.5 size-3.5 align-text-bottom text-slate-500" aria-hidden="true" />
@@ -367,7 +400,7 @@ import { SUPPLEMENTO_SPECIALE } from '#shared/tariffe'
 import { MATERIE_DEFAULT } from '#shared/materie'
 import { giornoCivileValido } from '#shared/giorno-civile'
 import {
-  stessoAlunno, nomeBreve, chiaveCasella, dividiTabellone, quantiAlunni, contaAlunniUnici,
+  stessoAlunno, chiaveCasella, dividiTabellone, gruppiDaAssegnare, quantiAlunni, contaAlunniUnici,
   type TutorDelGiorno, type BadgePrenotazione, type SlotOrario, type MatchingDelGiorno,
 } from '#shared/matching'
 
@@ -398,6 +431,7 @@ const dateParam = computed(() => format(currentDate.value, 'yyyy-MM-dd'))
 
 // Chi sta in quale casella e chi è ancora da assegnare (la stessa divisione del foglio di stampa)
 const tabellone = computed(() => dividiTabellone({ tutors: tutors.value, badges: badges.value, slots: slots.value }))
+const gruppiSinistra = computed(() => gruppiDaAssegnare(tabellone.value.daAssegnare))
 
 function alunniInCasella(tutorId: string, fascia: string) {
   return tabellone.value.perCasella.get(chiaveCasella(tutorId, fascia)) ?? []

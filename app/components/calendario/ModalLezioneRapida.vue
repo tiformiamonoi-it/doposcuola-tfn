@@ -56,9 +56,15 @@
                 <span class="font-medium text-slate-800">{{ stu.studentItem.label }}</span>
                 <span v-if="stu.loadingPackages" class="text-xs text-slate-400 ml-2">caricamento...</span>
               </div>
+              <!-- Tutor: niente pacchetto (nome, ore rimaste, tendina) ma la classe dell'alunno.
+                   Il pacchetto lo sceglie il gestionale: quello che scade prima (D3). -->
+              <template v-if="isTutor">
+                <span v-if="!stu.loadingPackages && !stu.packageItem" class="text-xs text-red-400">Nessun pacchetto</span>
+                <span v-else-if="stu.classe" class="text-xs text-slate-500 break-words max-w-[8rem]">{{ stu.classe }}</span>
+              </template>
               <!-- Dropdown pacchetto solo se non auto-selezionato e ci sono più opzioni -->
               <USelectMenu
-                v-if="!stu.loadingPackages && stu.packageOptions.length > 1 && !stu.packageItem"
+                v-else-if="!stu.loadingPackages && stu.packageOptions.length > 1 && !stu.packageItem"
                 v-model="stu.packageItem"
                 :items="stu.packageOptions"
                 placeholder="Scegli pacchetto..."
@@ -135,6 +141,7 @@ import { ref, computed, watch } from 'vue'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import ModalSelezionaStudenti from '~/components/calendario/ModalSelezionaStudenti.vue'
+import { primaQuelloCheScade } from '#shared/scadenza-pacchetto'
 
 const props = defineProps<{
   date: string
@@ -142,7 +149,7 @@ const props = defineProps<{
   // ristretto invece della lista completa degli studenti attivi.
   lockedTutorId?: string
   lockedTutorName?: string
-  studentsPool?: { studentId: string; nome: string }[]
+  studentsPool?: { studentId: string; nome: string; classe?: string | null }[]
 }>()
 
 const emit = defineEmits(['refresh', 'close'])
@@ -226,6 +233,8 @@ async function onPickerConfirm(picked: Array<{ studentId: string; nome: string; 
     if (students.value.some(s => s.studentItem?.value === p.studentId)) continue
     const stu = {
       studentItem: { label: p.nome, value: p.studentId },
+      // La classe la mostra solo il tutor (al posto del pacchetto); arriva dal pool di oggi
+      classe: props.studentsPool?.find(x => x.studentId === p.studentId)?.classe ?? null,
       packageItem: null,
       packageOptions: [],
       loadingPackages: false,
@@ -252,8 +261,12 @@ async function onStudenteSelezionato(idx: number, newVal: any, prefetched?: any[
       const res: any = await $fetch(`/api/packages?studentId=${targetId}&stati=ATTIVO`)
       pkgs = res.data || []
     }
-    pkgs.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-    
+    // Il primo della lista è quello scelto. Tutor: quello che scade prima (D3), perché la
+    // tendina lui non la vede; segreteria: il più vecchio, come sempre.
+    pkgs.sort(isTutor.value
+      ? primaQuelloCheScade
+      : (a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+
     stu.packageOptions = pkgs.map((p: any) => ({
       label: `${p.nome} - Rim: ${p.tipo === 'MENSILE' ? p.giorniResiduo + 'gg' : parseFloat(p.oreResiduo) + 'h'}`,
       value: p.id

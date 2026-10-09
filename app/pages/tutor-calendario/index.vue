@@ -260,7 +260,7 @@ const { data: lezioniRes, pending, refresh } = useFetch('/api/lessons', {
   watch: [currentDate],
 })
 
-const { data: poolOggi, refresh: refreshPool } = useFetch<{ studentId: string; nome: string; materia: string }[]>('/api/tutors/today-pool', {
+const { data: poolOggi, refresh: refreshPool } = useFetch<{ studentId: string; nome: string; materia: string; classe: string | null }[]>('/api/tutors/today-pool', {
   lazy: true,
   default: () => [],
 })

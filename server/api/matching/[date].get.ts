@@ -1,8 +1,11 @@
-import { eq, and, gte, lte, ne } from 'drizzle-orm'
+import { eq, and, gte, lte, ne, inArray, arrayOverlaps } from 'drizzle-orm'
 import { db } from '../../database/client'
 import * as tables from '../../database/schema'
 import { giornoFeriale, tutorDUfficio } from '../../services/disponibilita-tutor.service'
 import { getConfigMaterieSpeciali } from '../../services/booking.service'
+import { livelloDaClasse } from '#shared/livello-scolastico'
+import { primaQuelloCheScade, type TipoPacchetto } from '#shared/scadenza-pacchetto'
+import type { BadgePrenotazione } from '#shared/matching'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
@@ -21,7 +24,7 @@ export default defineEventHandler(async (event) => {
     where: eq(tables.tutorAvailabilities.date, targetDate),
     with: {
       user: {
-        columns: { id: true, firstName: true, lastName: true, phone: true },
+        columns: { id: true, firstName: true, lastName: true, phone: true, active: true },
         with: {
           tutorProfile: true
         }
@@ -29,7 +32,9 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  const tutors = availabilities.map(a => ({
+  // Un tutor archiviato può avere ancora disponibilità segnate nei giorni futuri:
+  // nel tabellone non deve comparire (le sue righe restano nel database, innocue).
+  const tutors = availabilities.filter(a => a.user.active).map(a => ({
     id: a.user.id,
     name: `${a.user.firstName} ${a.user.lastName}`,
     phone: a.user.phone,
@@ -92,8 +97,39 @@ export default defineEventHandler(async (event) => {
   const materieDelGiorno = giornate[targetDate] ?? []
   const fuoriData = (materia: string) => speciali.includes(materia) && !materieDelGiorno.includes(materia)
 
+  // Gruppi della colonna "Da assegnare" (D2): classe e pacchetto in corso di ogni alunno,
+  // con DUE sole query per tutto il giorno (inArray), non una per targhetta.
+  const idAlunni = [...new Set(dayBookings.map(b => b.studentId).filter((id): id is string => !!id))]
+  const [schede, pacchetti] = idAlunni.length === 0 ? [[], []] : await Promise.all([
+    db.select({ id: tables.students.id, classe: tables.students.classe })
+      .from(tables.students)
+      .where(inArray(tables.students.id, idAlunni)),
+    db.select({
+      studentId:    tables.packages.studentId,
+      tipo:         tables.packages.tipo,
+      stati:        tables.packages.stati,
+      dataScadenza: tables.packages.dataScadenza,
+      createdAt:    tables.packages.createdAt,
+    })
+      .from(tables.packages)
+      .where(and(
+        inArray(tables.packages.studentId, idAlunni),
+        arrayOverlaps(tables.packages.stati, ['ATTIVO', 'DA_RINNOVARE']),
+      )),
+  ])
+  const livelloDi = new Map(schede.map(s => [s.id, livelloDaClasse(s.classe)]))
+  // Il pacchetto "in corso": fra gli ATTIVI quello che scade prima (D3); se non ce n'è
+  // uno attivo, fra quelli DA_RINNOVARE con la stessa regola.
+  const tipoPacchettoDi = new Map<string, TipoPacchetto>()
+  for (const stato of ['ATTIVO', 'DA_RINNOVARE'] as const) {
+    const candidati = pacchetti.filter(p => p.stati.includes(stato)).sort(primaQuelloCheScade)
+    for (const p of candidati) {
+      if (!tipoPacchettoDi.has(p.studentId)) tipoPacchettoDi.set(p.studentId, p.tipo)
+    }
+  }
+
   // Formattiamo le prenotazioni in "Badges" come nel .old
-  const badges: any[] = []
+  const badges: BadgePrenotazione[] = []
   dayBookings.forEach(b => {
     // Se nessuna materia corrisponde (impostazioni cambiate dopo la prenotazione) va sul
     // primo badge: un supplemento da approvare non deve sparire.
@@ -118,6 +154,8 @@ export default defineEventHandler(async (event) => {
         // Lezione speciale fuori data: supplemento €10 da approvare (o già applicato)
         supplemento: haSupplemento ? parseFloat(b.supplemento!) : 0,
         supplementoApplicato: haSupplemento && !!b.supplementoApplicatoAt,
+        livello: b.studentId ? livelloDi.get(b.studentId) ?? null : null,
+        tipoPacchetto: b.studentId ? tipoPacchettoDi.get(b.studentId) ?? null : null,
       })
     })
   })

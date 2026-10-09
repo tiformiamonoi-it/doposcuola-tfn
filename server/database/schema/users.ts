@@ -32,6 +32,10 @@ export const users = pgTable('users', {
     .references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
   // Tutorial di benvenuto al primo accesso (tutor/famiglia/studente)
   tutorialVisto: boolean('tutorial_visto').notNull().default(false),
+  // Finestra "Novità": l'ultima versione (vedi shared/changelog.ts) che l'utente ha
+  // già visto. Sta nel database e non nel browser, così si ricorda su ogni dispositivo.
+  // Vuoto = mai vista nessuna: compare la Novità più recente (una volta sola).
+  novitaVista: varchar('novita_vista', { length: 20 }),
   // Portale famiglia: ultima visita alla pagina Note (per il badge "note non lette")
   noteLastSeenAt: timestamp('note_last_seen_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -74,6 +78,14 @@ export const tutorProfiles = pgTable('tutor_profiles', {
   // difetto anche sui dati vecchi che non possiamo controllare uno per uno; sta
   // scritta una volta sola in shared/compenso-tutor.ts e la usano tutti.
   forfaitDal:        date('forfait_dal', { mode: 'string' }),
+  // FINO A QUANDO vale il fisso: PRIMO GIORNO dell'ULTIMO mese a fisso, o vuoto =
+  // "nessuna fine". Si riempie da solo quando il tutor viene archiviato o passa
+  // "a ore": diventa il mese PRIMA di quello in corso (decisione di Alessandro del
+  // 09/10/2026: archiviato il 15 ottobre → l'ultimo fisso dovuto è settembre).
+  // Serve a due cose: un tutor archiviato smette di maturare il fisso, e chi passa
+  // "a ore" non si vede ricalcolare a ore i mesi passati a fisso (un fisso non
+  // pagato poteva sparire). Stessa forma di forfaitDal: giorno civile, mai timestamptz.
+  forfaitAl:         date('forfait_al', { mode: 'string' }),
   // "SEMPRE DISPONIBILE (lunedì–venerdì)": lo accendono Admin e Super Tutor dalla scheda.
   // Il tutor risulta disponibile tutti i giorni feriali senza spuntare niente (chiusure
   // escluse) e toglie lui i giorni in cui non c'è: quei giorni stanno in tutor_assenze.

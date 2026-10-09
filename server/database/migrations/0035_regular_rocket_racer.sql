@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "novita_vista" varchar(20);

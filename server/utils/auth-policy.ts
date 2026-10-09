@@ -52,6 +52,11 @@ export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: 
   // Rientri (conferme di inizio anno): stessa riservatezza dei Contatti,
   // niente TUTOR né in lettura né in scrittura.
   { prefix: '/api/confirmations',           roles: ADMIN_SUPER },
+  // Comunicazioni a tutte le famiglie (D5): le manda solo la segreteria. Niente
+  // TUTOR né in lettura (lo storico mostra chi l'ha scritta e quante famiglie
+  // l'hanno letta) né in scrittura. Le famiglie le leggono da /api/portal/comunicazioni,
+  // che è un percorso diverso e passa dalla regola del portale.
+  { prefix: '/api/comunicazioni',           roles: ADMIN_SUPER },
   // Lettura studenti aperta allo STAFF (i dati dei genitori vengono rimossi per i TUTOR
   // nei handler GET); scritture (crea/modifica/disattiva/anonimizza) solo ADMIN/SUPER.
   { prefix: '/api/students',                roles: STAFF, mutationRoles: ADMIN_SUPER },

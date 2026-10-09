@@ -136,6 +136,17 @@
             Esci
           </span>
         </button>
+        <!-- Numero di versione (solo Admin/Super Tutor): riapre l'ultima finestra Novità.
+             A barra compressa non c'è posto per scriverlo: si nasconde. -->
+        <button
+          v-if="isAdminOrSuperTutor && !collapsed"
+          type="button"
+          @click="novitaRiapri = true"
+          :aria-label="`Versione ${ultimaVersione}: vedi le novità`"
+          class="block w-full px-2 text-left text-[10px] text-slate-500 hover:text-slate-700 hover:underline"
+        >
+          v{{ ultimaVersione }}
+        </button>
       </div>
     </aside>
 
@@ -196,8 +207,9 @@
         </span>
         <span class="text-[11px] font-medium">{{ item.label }}</span>
       </NuxtLink>
+      <!-- "Menu" sempre visibile, per tutti i ruoli: dentro c'è "Esci", che sul telefono
+           non si trova altrove (il tutor ha poche voci e prima il tasto non compariva) -->
       <button
-        v-if="navItems.length > bottomNavItems.length"
         type="button"
         @click="menuMobileAperto = true"
         class="flex-1 flex flex-col items-center justify-center gap-0.5 text-slate-400"
@@ -221,7 +233,8 @@
           </button>
         </div>
 
-        <div class="grid grid-cols-3 gap-2">
+        <!-- Le voci compaiono solo se qualcuna non sta già nella barra in basso -->
+        <div v-if="navItems.length > bottomNavItems.length" class="grid grid-cols-3 gap-2">
           <NuxtLink
             v-for="item in navItems"
             :key="item.route"
@@ -276,18 +289,35 @@
           <UIcon name="i-heroicons-arrow-right-on-rectangle" class="w-5 h-5" />
           {{ uscendo ? 'Uscita...' : 'Esci' }}
         </button>
+
+        <!-- Numero di versione (solo Admin/Super Tutor): riapre l'ultima finestra Novità -->
+        <button
+          v-if="isAdminOrSuperTutor"
+          type="button"
+          @click="menuMobileAperto = false; novitaRiapri = true"
+          :aria-label="`Versione ${ultimaVersione}: vedi le novità`"
+          class="block mx-auto mt-3 text-[11px] text-slate-500 hover:text-slate-700 hover:underline"
+        >
+          v{{ ultimaVersione }}
+        </button>
       </div>
     </div>
 
     <!-- Tutorial di benvenuto (solo primo accesso TUTOR; admin esclusi dal componente) -->
     <TutorialPrimoAccesso />
+    <!-- Finestra "Novità" dopo un aggiornamento (tutor e segreteria, mai le famiglie) -->
+    <NovitaAggiornamento />
 
   </div>
 </template>
 
 <script setup lang="ts">
-const { user, clear } = useUserSession()
-const toast  = useToast()
+import { ultimaVersione } from '#shared/changelog'
+
+const { user } = useUserSession()
+
+// Cliccando il numero di versione si riapre la finestra Novità (NovitaAggiornamento)
+const novitaRiapri = useState('novita-riapri', () => false)
 
 const nomeUtente = computed(() => {
   if (!user.value) return 'Utente'
@@ -299,20 +329,7 @@ const iniziali = computed(() => {
 })
 const ruolo = computed(() => user.value?.role ?? '')
 
-const uscendo = ref(false)
-async function logout() {
-  uscendo.value = true
-  try {
-    // Chiamata esplicita al backend per invalidare la sessione server-side
-    await $fetch('/api/auth/logout', { method: 'POST' })
-    await clear()
-    await navigateTo('/login', { external: true })
-  } catch {
-    toast.add({ title: 'Errore durante il logout', color: 'error' })
-  } finally {
-    uscendo.value = false
-  }
-}
+const { uscendo, logout } = useLogout()
 
 const collapsed = useCookie<boolean>('sidebar-collapsed', {
   default: () => false,
@@ -364,6 +381,7 @@ const navItems = computed(() => {
     return [
       { icon: 'i-heroicons-calendar', label: 'Il mio Calendario', route: '/tutor-calendario' },
       { icon: 'i-heroicons-user',     label: 'Area Tutor',        route: '/area-tutor' },
+      { icon: 'i-heroicons-chat-bubble-left-right', label: 'Note', route: '/area-tutor/note' },
       { icon: 'i-heroicons-identification', label: 'Il mio profilo', route: '/area-tutor/profilo' },
     ]
   }
@@ -379,6 +397,8 @@ const navItems = computed(() => {
     { icon: 'i-heroicons-list-bullet',   label: 'Lezioni',      route: '/lezioni' },
     { icon: 'i-heroicons-academic-cap',  label: 'Tutor',        route: '/tutor' },
     { icon: 'i-heroicons-phone-arrow-down-left', label: 'Contatti', route: '/contatti' },
+    // Dopo le prime 4 voci apposta: la barra in basso del telefono resta com'è
+    { icon: 'i-heroicons-megaphone',     label: 'Comunicazioni', route: '/comunicazioni' },
     // Contabilità e Impostazioni sono pagine solo per l'Admin (middleware admin-only):
     // al Super Tutor non si mostrano voci che poi lo rimandano indietro.
     ...(isAdmin ? [{ icon: 'i-heroicons-banknotes', label: 'Contabilità', route: '/contabilita' }] : []),
@@ -391,9 +411,12 @@ const navItems = computed(() => {
   ]
 })
 
+// Vince la voce più precisa: su /area-tutor/note si accende "Note", non anche
+// "Area Tutor" (che è l'inizio dello stesso indirizzo). Idem per "Il mio profilo".
 function isActive(path: string) {
   if (path === '/') return route.path === '/'
-  return route.path.startsWith(path)
+  if (!route.path.startsWith(path)) return false
+  return !navItems.value.some(n => n.route.length > path.length && n.route.startsWith(path) && route.path.startsWith(n.route))
 }
 
 // ─── Navigazione mobile ───
@@ -405,9 +428,6 @@ const menuMobileAperto = ref(false)
 watch(() => route.path, () => { menuMobileAperto.value = false })
 
 const pageTitle = computed(() => {
-  const item = navItems.value.find(n =>
-    n.route === '/' ? route.path === '/' : route.path.startsWith(n.route)
-  )
-  return item?.label ?? 'Gestionale'
+  return navItems.value.find(n => isActive(n.route))?.label ?? 'Gestionale'
 })
 </script>

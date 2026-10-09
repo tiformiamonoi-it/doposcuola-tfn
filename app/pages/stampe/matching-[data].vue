@@ -87,7 +87,7 @@
                 class="h-[2em] border border-slate-500 px-[0.35em] py-[0.2em] align-top"
               >
                 <div v-for="b in tabellone.perCasella.get(chiaveCasella(tutor.id, slot.id)) ?? []" :key="b.subjectId" class="break-words">
-                  <span class="font-semibold">{{ nomeBreve(b) }}</span>
+                  <span class="font-semibold">{{ b.studentSurname }} {{ b.studentName }}</span>
                   <span class="text-slate-700"> · {{ b.subject }}</span>
                 </div>
               </td>
@@ -97,10 +97,17 @@
 
         <section v-if="tabellone.daAssegnare.length" class="mt-[0.6em] break-inside-avoid border border-slate-500 px-[0.5em] py-[0.35em]">
           <h2 class="font-semibold">Non ancora assegnati ({{ tabellone.daAssegnare.length }})</h2>
-          <p class="text-slate-800">
-            <template v-for="(b, i) in tabellone.daAssegnare" :key="b.subjectId">
-              <span class="whitespace-nowrap">{{ b.studentSurname }} {{ b.studentName }} ({{ b.subject }})</span>
-              <template v-if="i < tabellone.daAssegnare.length - 1"> · </template>
+          <!-- Gli stessi gruppi della colonna "Da assegnare" dello schermo, una riga per scuola:
+               "Superiori (12) — Mensili (5): … / A ore (7): …"; "Da sistemare (2): …" -->
+          <p v-for="gruppo in gruppiDaAssegnare(tabellone.daAssegnare)" :key="gruppo.chiave" class="text-slate-800">
+            <span class="font-semibold">{{ gruppo.titolo }} ({{ gruppo.totale }})</span>
+            <template v-for="(sotto, j) in gruppo.sottogruppi" :key="sotto.chiave">
+              <template v-if="j > 0"> / </template>
+              <template v-if="sotto.titolo"><template v-if="j === 0"> — </template><span class="font-medium">{{ sotto.titolo }} ({{ sotto.targhette.length }})</span></template>:
+              <template v-for="(b, i) in sotto.targhette" :key="b.subjectId">
+                <span class="whitespace-nowrap">{{ b.studentSurname }} {{ b.studentName }} ({{ b.subject }})</span>
+                <template v-if="i < sotto.targhette.length - 1"> · </template>
+              </template>
             </template>
           </p>
         </section>
@@ -118,7 +125,7 @@
 import { format, parseISO } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { giornoCivileValido } from '#shared/giorno-civile'
-import { dividiTabellone, chiaveCasella, nomeBreve, quantiAlunni, contaAlunniUnici, type MatchingDelGiorno } from '#shared/matching'
+import { dividiTabellone, chiaveCasella, gruppiDaAssegnare, quantiAlunni, contaAlunniUnici, type MatchingDelGiorno } from '#shared/matching'
 
 definePageMeta({ layout: false, middleware: ['admin-or-super'] })
 
