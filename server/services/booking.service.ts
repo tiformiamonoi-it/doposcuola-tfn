@@ -291,13 +291,9 @@ export async function listBookingsForPortalByStudents(studentIds: string[], user
     ),
     orderBy: [desc(bookings.createdAt)],
     with: {
-      subjects: {
-        with: {
-          assignedTutor: {
-            columns: { firstName: true, lastName: true }
-          }
-        }
-      },
+      // Le famiglie vedono che c'è la lezione, non con quale tutor: niente
+      // tutor né id del tutor nella risposta del portale.
+      subjects: { columns: { assignedTutorId: false } },
     }
   })
 }
