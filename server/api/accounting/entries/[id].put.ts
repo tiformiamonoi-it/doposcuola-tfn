@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { updateAccountingEntry } from '../../../services/accounting.service'
+import { updateAccountingEntry, canSeeProventiDiversi, isMovimentoProventiDiversi } from '../../../services/accounting.service'
+import { CATEGORIE_PROVENTI_DIVERSI } from '#shared/accounting-categories'
 import { toHttpError } from '../../../utils/http-error'
 
 const bodySchema = z.object({
@@ -30,6 +31,18 @@ export default defineEventHandler(async (event) => {
   if (!parsed.success) {
     throw createError({ statusCode: 422, statusMessage: 'Dati non validi', data: parsed.error.format() })
   }
+
+  // Proventi diversi: riservati agli ADMIN in lista. A chi non li vede in elenco
+  // il movimento "non esiste" (404); portarci dentro un movimento normale è vietato.
+  if (!(await canSeeProventiDiversi(user))) {
+    if (await isMovimentoProventiDiversi(id)) {
+      throw createError({ statusCode: 404, statusMessage: 'Movimento non trovato' })
+    }
+    if (parsed.data.categoria && CATEGORIE_PROVENTI_DIVERSI.includes(parsed.data.categoria)) {
+      throw createError({ statusCode: 403, statusMessage: 'I proventi diversi sono riservati all\'amministrazione' })
+    }
+  }
+
   try {
     return await updateAccountingEntry(id, parsed.data)
   } catch (err: any) {

@@ -2,7 +2,7 @@ import { db } from '../../../database/client'
 import { bookings, bookingSubjects } from '../../../database/schema'
 import { eq } from 'drizzle-orm'
 import { getPortalStudentIds } from '../../../utils/portal'
-import { oggiRomeStr } from '../../../utils/tutor-time-window'
+import { oggiRomeStr, oraRomeAlmeno } from '../../../utils/tutor-time-window'
 
 // DELETE /api/portal/bookings/[id] — genitore o studente collegato
 export default defineEventHandler(async (event) => {
@@ -40,10 +40,8 @@ export default defineEventHandler(async (event) => {
   const requestedStr = requestedDate.toISOString().split('T')[0]
 
   if (requestedStr === todayStr) {
-    // Stesso giorno: controllo limite 12:30
-    const limit = new Date(now)
-    limit.setHours(12, 30, 0, 0)
-    if (now.getTime() >= limit.getTime()) {
+    // Stesso giorno: controllo limite 12:30 (ora italiana)
+    if (oraRomeAlmeno(12, 30)) {
       throw createError({ statusCode: 400, statusMessage: 'Le lezioni per oggi potevano essere cancellate solo entro le 12:30' })
     }
   } else if (requestedDate.getTime() < now.getTime() && requestedStr !== todayStr) {

@@ -8,6 +8,7 @@ import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import { db } from '../database/client'
 import { packages, students, studentParents, users } from '../database/schema'
 import { sendEmail, emailAvvisoPacchetto } from '../utils/email'
+import { motiviRinnovo } from './package.service'
 
 // ponytail: cap 50 pacchetti/run — ben sotto il limite Brevo (300/giorno); il resto passa al giro dopo
 const MAX_PER_RUN = 50
@@ -28,23 +29,27 @@ export async function runPackageAlerts() {
   })
     .from(packages)
     .innerJoin(students, eq(packages.studentId, students.id))
+    // Pre-selezione LARGA: la decisione vera la prende motiviRinnovo() qui sotto, a
+    // giorni italiani. Il margine di un giorno per parte copre lo sfasamento tra
+    // istante UTC e giorno civile; i pacchetti esauriti o scaduti da più di un giorno
+    // restano fuori, così non occupano i 50 posti del giro senza mai ricevere nulla.
     .where(and(
       eq(packages.sospeso, false),
       sql`NOT ('CHIUSO' = ANY(${packages.stati}))`,
+      sql`${packages.oreAcquistate}::numeric > 0`,
+      sql`${packages.oreResiduo}::numeric > 0`,
+      sql`(${packages.dataScadenza} IS NULL OR ${packages.dataScadenza} >= now() - interval '1 day')`,
       or(
-        // Ore quasi esaurite (ma non a zero: a zero il pacchetto è ESAURITO, non serve avviso)
+        // Ore quasi esaurite
         and(
           isNull(packages.avvisoOreInviatoAt),
-          sql`${packages.oreAcquistate}::numeric > 0`,
-          sql`${packages.oreResiduo}::numeric > 0`,
           sql`${packages.oreResiduo}::numeric / ${packages.oreAcquistate}::numeric < 0.20`,
         ),
-        // In scadenza entro 3 giorni
+        // In scadenza entro 3 giorni (4 di pre-selezione)
         and(
           isNull(packages.avvisoScadenzaInviatoAt),
           sql`${packages.dataScadenza} IS NOT NULL`,
-          sql`${packages.dataScadenza} >= now()`,
-          sql`${packages.dataScadenza} <= now() + interval '3 days'`,
+          sql`${packages.dataScadenza} <= now() + interval '4 days'`,
         ),
       ),
     ))
@@ -87,15 +92,11 @@ export async function runPackageAlerts() {
     if (destinatari.length === 0) continue
 
     const nomeStudente = `${row.studentFirstName} ${row.studentLastName}`
-    // Ricontrollo completo in JS: la riga può essere entrata nel result per l'altra condizione
-    const acquistate = parseFloat(row.oreAcquistate)
-    const residue = parseFloat(row.oreResiduo)
-    const oreQuasiEsaurite = row.avvisoOreInviatoAt === null
-      && acquistate > 0 && residue > 0 && residue / acquistate < 0.20
-    const inScadenza = row.avvisoScadenzaInviatoAt === null
-      && row.dataScadenza !== null
-      && row.dataScadenza.getTime() >= Date.now()
-      && row.dataScadenza.getTime() <= Date.now() + 3 * 24 * 60 * 60 * 1000
+    // Ricontrollo completo in JS con la STESSA regola dello stato DA_RINNOVARE
+    // (giorni italiani, solo pacchetti attivi): un pacchetto scaduto non riceve nulla
+    const rinnovo = motiviRinnovo(row)
+    const oreQuasiEsaurite = row.avvisoOreInviatoAt === null && rinnovo.oreQuasiFinite
+    const inScadenza = row.avvisoScadenzaInviatoAt === null && rinnovo.inScadenza
 
     const flags: Record<string, Date> = {}
 

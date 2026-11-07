@@ -3,6 +3,7 @@ import { accountingEntries } from '../../../database/schema'
 import { createProventiDiversi, canSeeProventiDiversi } from '../../../services/accounting.service'
 import { registraBolloMovimentoInTransazione } from '../../../services/bollo.service'
 import { conFattura } from '#shared/fattura'
+import { CATEGORIE_PROVENTI_DIVERSI } from '#shared/accounting-categories'
 import { z } from 'zod'
 
 const bodySchema = z.object({
@@ -40,6 +41,11 @@ export default defineEventHandler(async (event) => {
 
   if (!body.categoria) {
     throw createError({ statusCode: 400, statusMessage: 'Categoria obbligatoria' })
+  }
+
+  // Stessa porta chiusa anche passando dalla categoria invece che dal tipo
+  if (CATEGORIE_PROVENTI_DIVERSI.includes(body.categoria) && !(await canSeeProventiDiversi(user))) {
+    throw createError({ statusCode: 403, statusMessage: 'I proventi diversi sono riservati all\'amministrazione' })
   }
 
   const emessa = body.fatturaEmessa ?? false

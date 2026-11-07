@@ -53,11 +53,34 @@ type PackageStateInput = {
 // Tolleranza centesimi per confronti floating point (evita 0.1+0.2=0.300...04)
 const EPSILON = 0.001
 
+// Regola DA_RINNOVARE, scritta una volta sola: la usano lo stato del pacchetto e le
+// email di avviso (package-alerts.service.ts), così le due cose non si contraddicono.
+// Vale solo per un pacchetto ATTIVO (ore > 0 e non scaduto) con ore acquistate > 0.
+// Giorni del calendario italiano: il pacchetto vale tutto il giorno di scadenza,
+// quindi quello che scade oggi è ancora "in scadenza", non scaduto.
+export function motiviRinnovo(pkg: { oreAcquistate: string; oreResiduo: string; dataScadenza: Date | null }) {
+  const oreResiduo    = parseFloat(pkg.oreResiduo)
+  const oreAcquistate = parseFloat(pkg.oreAcquistate)
+  const oggiStr       = oggiRomeStr()
+  const scadenzaStr   = pkg.dataScadenza ? romeDateStr(new Date(pkg.dataScadenza)) : null
+
+  const attivo = oreResiduo > 0 && !(scadenzaStr && scadenzaStr < oggiStr)
+  if (!attivo || !(oreAcquistate > 0)) return { oreQuasiFinite: false, inScadenza: false }
+
+  const giorniAllaScadenza = scadenzaStr
+    ? Math.round((Date.parse(scadenzaStr) - Date.parse(oggiStr)) / (1000 * 60 * 60 * 24))
+    : Infinity
+
+  return {
+    oreQuasiFinite: (oreResiduo / oreAcquistate) * 100 < 20,
+    inScadenza:     giorniAllaScadenza <= 3,
+  }
+}
+
 export function computePackageStates(pkg: PackageStateInput): PackageStatus[] {
   if (pkg.sospeso) return ['SOSPESO']
 
   const oreResiduo    = parseFloat(pkg!.oreResiduo)
-  const oreAcquistate = parseFloat(pkg!.oreAcquistate)
   const importoResiduo = parseFloat(pkg.importoResiduo)
 
   // Confronti per GIORNO CIVILE ITALIANO ('YYYY-MM-DD'), mai per istante: la scadenza
@@ -87,18 +110,9 @@ export function computePackageStates(pkg: PackageStateInput): PackageStatus[] {
   const isEsaurito = stati.includes('ESAURITO')
   if (oreResiduo > 0 && !isScaduto) stati.push('ATTIVO')
 
-  // REGOLA 4 — DA_RINNOVARE (solo se già ATTIVO)
-  if (stati.includes('ATTIVO') && oreAcquistate > 0) {
-    const percentuale = (oreResiduo / oreAcquistate) * 100
-
-    let giorniAllaScadenza = Infinity
-    if (pkg!.dataScadenza) {
-      const scadenzaStr = romeDateStr(new Date(pkg!.dataScadenza))
-      giorniAllaScadenza = Math.round((Date.parse(scadenzaStr) - Date.parse(oggiStr)) / (1000 * 60 * 60 * 24))
-    }
-
-    if (percentuale < 20 || giorniAllaScadenza <= 3) stati.push('DA_RINNOVARE')
-  }
+  // REGOLA 4 — DA_RINNOVARE (solo se già ATTIVO: lo controlla motiviRinnovo)
+  const rinnovo = motiviRinnovo(pkg)
+  if (rinnovo.oreQuasiFinite || rinnovo.inScadenza) stati.push('DA_RINNOVARE')
 
   // REGOLA 5 — DA_PAGARE / PAGATO (sempre uno dei due, mai entrambi)
   if (importoResiduo > EPSILON) {

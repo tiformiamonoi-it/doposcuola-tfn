@@ -1,4 +1,4 @@
-import { deleteAccountingEntry } from '../../../services/accounting.service'
+import { deleteAccountingEntry, canSeeProventiDiversi, isMovimentoProventiDiversi } from '../../../services/accounting.service'
 import { toHttpError } from '../../../utils/http-error'
 
 // DELETE /api/accounting/entries/:id?mode=delete|storno
@@ -11,6 +11,11 @@ export default defineEventHandler(async (event) => {
   }
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'ID mancante' })
+
+  // Proventi diversi: a chi non li vede in elenco il movimento "non esiste"
+  if (!(await canSeeProventiDiversi(user)) && await isMovimentoProventiDiversi(id)) {
+    throw createError({ statusCode: 404, statusMessage: 'Movimento non trovato' })
+  }
 
   const mode = getQuery(event).mode === 'storno' ? 'storno' : 'delete'
   try {

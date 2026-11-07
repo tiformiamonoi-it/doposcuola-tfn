@@ -45,6 +45,14 @@ export function oraRome(): { ora: number; minuti: number } {
   return { ora: hour, minuti: minute }
 }
 
+// Vero se in Italia sono già le HH:MM o più tardi. Usata dai limiti del portale
+// famiglie (prenota/modifica entro le 11:30, cancella entro le 12:30): con
+// setHours() sul server UTC il limite scattava un'ora o due dopo.
+export function oraRomeAlmeno(ora: number, minuti: number): boolean {
+  const adesso = oraRome()
+  return adesso.ora > ora || (adesso.ora === ora && adesso.minuti >= minuti)
+}
+
 // La disponibilità di OGGI si può modificare solo entro le 9:30 (ora italiana)
 export function disponibilitaOggiAncoraAperta(): boolean {
   const { hour, minute } = romeParts(new Date())

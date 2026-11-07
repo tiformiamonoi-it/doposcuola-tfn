@@ -831,7 +831,9 @@ export async function getMonthlyPerformance(tutorId: string, months = 6) {
     LEFT JOIN LATERAL (
       SELECT COUNT(ls.id) AS num_studenti,
              SUM(
-               CASE WHEN l.mezza_lezione THEN 0.5 ELSE 1.0 END
+               -- Ore pagate dalla famiglia, come in dashboard e calendario: la mezza
+               -- lezione scala comunque 1 ora (lo 0,5 vale solo per il compenso del tutor)
+               ls.ore_scalate::numeric
                -- Stessa formula/precedenza di ricavoOrarioPacchetto() in shared/tariffe.ts
                -- (prima preferiva tariffa_oraria con fallback 25€: numeri diversi dal calendario)
                * CASE

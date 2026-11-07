@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm'
 import { getPortalStudentIds } from '../../../utils/portal'
 import { valutaMaterieSpeciali } from '../../../services/booking.service'
 import { toHttpError } from '../../../utils/http-error'
-import { oggiRomeStr } from '../../../utils/tutor-time-window'
+import { oggiRomeStr, oraRomeAlmeno } from '../../../utils/tutor-time-window'
 
 // PUT /api/portal/bookings/[id] — genitore o studente collegato
 export default defineEventHandler(async (event) => {
@@ -54,9 +54,7 @@ export default defineEventHandler(async (event) => {
 
   // 1. Controllo orario limite 11:30 per oggi sulla data originale
   if (originalStr === todayStr) {
-    const limit = new Date(now)
-    limit.setHours(11, 30, 0, 0)
-    if (now.getTime() >= limit.getTime()) {
+    if (oraRomeAlmeno(11, 30)) {
       throw createError({ statusCode: 400, statusMessage: 'Non puoi modificare una prenotazione per oggi dopo le 11:30' })
     }
   } else if (originalDate.getTime() < now.getTime() && originalStr !== todayStr) {
@@ -65,9 +63,7 @@ export default defineEventHandler(async (event) => {
 
   // 2. Controllo orario limite 11:30 per oggi sulla NUOVA data
   if (newStr === todayStr) {
-    const limit = new Date(now)
-    limit.setHours(11, 30, 0, 0)
-    if (now.getTime() >= limit.getTime()) {
+    if (oraRomeAlmeno(11, 30)) {
       throw createError({ statusCode: 400, statusMessage: 'Non puoi spostare la prenotazione a oggi dopo le 11:30' })
     }
   } else if (newDate.getTime() < now.getTime() && newStr !== todayStr) {

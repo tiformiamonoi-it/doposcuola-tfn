@@ -205,6 +205,13 @@ export async function canSeeProventiDiversi(user: { id: string; role: string }):
   return !!u && EMAILS_PROVENTI_DIVERSI.includes(u.email.toLowerCase())
 }
 
+// Vero se il movimento è una gamba dei proventi diversi: modifica ed eliminazione
+// devono fermare chi non li vede in elenco (la gemella ha la stessa famiglia di categoria)
+export async function isMovimentoProventiDiversi(entryId: string): Promise<boolean> {
+  const [e] = await db.select({ categoria: accountingEntries.categoria }).from(accountingEntries).where(eq(accountingEntries.id, entryId)).limit(1)
+  return !!e?.categoria && CATEGORIE_PROVENTI.includes(e.categoria)
+}
+
 // Totali dei proventi diversi nel periodo (per le righe "di cui…" e "+X tasse" delle card)
 export async function getProventiDiversiTotali(startDate: Date, endDate: Date) {
   const rows = await db

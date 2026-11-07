@@ -380,9 +380,10 @@ const ACCENTI: Record<string, { iconBg: string; iconText: string; valore: string
 const tessere = computed(() => [
   { key: 'totali',      label: 'Studenti totali', valore: stats.value.total,       icon: 'i-heroicons-users',        accento: 'tfn'     },
   { key: 'attivi',      label: 'Attivi',          valore: stats.value.attivi,      icon: 'i-heroicons-check-circle', accento: 'emerald' },
-  { key: 'daPagare',    label: 'Da pagare',       valore: stats.value.daPagare,    icon: 'i-heroicons-banknotes',    accento: 'rose'    },
+  { key: 'daPagare',    label: 'Da pagare',       valore: 'daPagare' in stats.value ? stats.value.daPagare : 0, icon: 'i-heroicons-banknotes',    accento: 'rose'    },
   { key: 'daRinnovare', label: 'Da rinnovare',    valore: stats.value.daRinnovare, icon: 'i-heroicons-arrow-path',    accento: 'amber'   },
-])
+// Il TUTOR non vede dati economici: il server non gli manda "Da pagare"
+].filter(t => !(isTutor.value && t.key === 'daPagare')))
 
 // Quale tessera è "accesa" in base ai filtri attivi.
 const tesseraAttiva = computed(() => {
@@ -510,6 +511,7 @@ const wizardAperto = ref(false)
 // Creazione studenti riservata alla segreteria (il server blocca comunque i TUTOR)
 const { user: sessionUser } = useUserSession()
 const isAdmin = computed(() => ['ADMIN', 'SUPER_TUTOR'].includes(sessionUser.value?.role ?? ''))
+const isTutor = computed(() => sessionUser.value?.role === 'TUTOR')
 
 // Il file Excel lo scarica solo l'ADMIN. È un limite dell'interfaccia, non del
 // server: il SUPER_TUTOR quegli stessi dati li legge già nell'elenco, qui si evita

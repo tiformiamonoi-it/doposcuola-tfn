@@ -5,6 +5,7 @@ import { db } from '../../database/client'
 import { students, packages, bookings } from '../../database/schema'
 import { eq } from 'drizzle-orm'
 import { toHttpError } from '../../utils/http-error'
+import { oggiRomeStr, oraRomeAlmeno } from '../../utils/tutor-time-window'
 
 // POST /api/portal/bookings — genitori e studenti (account studente = solo prenotazioni)
 export default defineEventHandler(async (event) => {
@@ -23,28 +24,13 @@ export default defineEventHandler(async (event) => {
   // Controlli temporali di sicurezza (fuso orario italiano)
   const requestedDate = new Date(result.data.dataDesiderata)
   const now = new Date()
-  
-  // Otteniamo la data odierna in Italia come YYYY-MM-DD
-  const formatter = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Rome',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
-  
-  const formattedParts = formatter.formatToParts(now)
-  const p = (type: string) => formattedParts.find(x => x.type === type)?.value
-  const todayStr = `${p('year')}-${p('month')}-${p('day')}`
-  const italyHour = parseInt(p('hour') || '0', 10)
-  const italyMinute = parseInt(p('minute') || '0', 10)
+  // Giorno e ora italiani dallo stesso helper di modifica e cancellazione
+  const todayStr = oggiRomeStr()
 
   const requestedStr = requestedDate.toISOString().split('T')[0]
 
   if (requestedStr === todayStr) {
-    if (italyHour > 11 || (italyHour === 11 && italyMinute >= 30)) {
+    if (oraRomeAlmeno(11, 30)) {
       throw createError({ statusCode: 400, statusMessage: 'Le prenotazioni per oggi si potevano effettuare solo entro le 11:30' })
     }
   } else if (requestedDate.getTime() < now.getTime() && requestedStr !== todayStr) {
