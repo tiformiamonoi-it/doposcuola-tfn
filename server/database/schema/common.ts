@@ -64,7 +64,8 @@ export const confirmationStatusEnum = pgEnum('confirmation_status', ['DA_SENTIRE
 //              togliere un valore da un enum Postgres è un'operazione distruttiva:
 //              meglio prevederlo adesso che dover rifare l'enum domani.
 // GENERICA   = avviso libero scritto dal gestionale
-export const notificaTipoEnum = pgEnum('notifica_tipo', ['CONSENSO', 'COMPLEANNO', 'GENERICA'])
+// EMAIL      = com'è andata un'email (o un invio di massa): vedi sendEmail in utils/email.ts
+export const notificaTipoEnum = pgEnum('notifica_tipo', ['CONSENSO', 'COMPLEANNO', 'GENERICA', 'EMAIL'])
 
 // Consensi privacy (tabella `consensi`): DI CHE COSA si parla.
 // MINORE_14 = autorizzazione del genitore per l'alunno che non ha ancora 14 anni

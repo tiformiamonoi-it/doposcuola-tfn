@@ -111,6 +111,9 @@
               · email partite <strong>{{ c.emailInviate }}</strong>
               <template v-if="c.emailNonPartite > 0">
                 · <span class="text-error font-semibold">non partite {{ c.emailNonPartite }}</span>
+                <span v-if="c.emailSpente > 0" class="text-slate-500">
+                  ({{ c.emailSpente === c.emailNonPartite ? 'tutte' : c.emailSpente }} perché l'invio email è spento nelle Impostazioni)
+                </span>
               </template>
               <StatHelp text="«Letta» vuol dire che il genitore ha aperto la pagina Comunicazioni del portale dopo l'invio. Chi la legge solo nella posta qui non risulta." />
             </p>
@@ -240,11 +243,20 @@ function chiediInvio() {
   }, invia)
 }
 
+// Email spente in Impostazioni: la comunicazione è comunque nel portale, va detto
+// chiaro, altrimenti "non partite" sembra un guasto della posta.
+function avvisoEmailSpente(spente: number): string | undefined {
+  if (!spente) return undefined
+  return 'Invio email spento nelle Impostazioni (scheda Email): la comunicazione è comunque nel portale. '
+    + 'Quando riaccendi l\'invio puoi usare «Riprova le email non partite».'
+}
+
 async function invia() {
   try {
     const r = await $fetch('/api/comunicazioni', { method: 'POST', body: corpo() })
     toast.add({
       title: `Inviata a ${r.destinatari} ${r.destinatari === 1 ? 'famiglia' : 'famiglie'}, email partite ${r.inviate}, non partite ${r.nonPartite}`,
+      description: avvisoEmailSpente(r.spente),
       color: r.nonPartite > 0 ? 'warning' : 'success',
     })
     titolo.value = ''
@@ -268,6 +280,7 @@ async function riprova(id: string) {
     const r = await $fetch(`/api/comunicazioni/${id}/riprova`, { method: 'POST' })
     toast.add({
       title: `Email partite ${r.inviate}, non partite ${r.nonPartite}`,
+      description: avvisoEmailSpente(r.spente),
       color: r.nonPartite > 0 ? 'warning' : 'success',
     })
     await refreshStorico()

@@ -10,17 +10,32 @@
 // oppure il server che non riesce proprio a raggiungere Brevo (RETE).
 // Chi chiama può così dire all'admin cosa è successo davvero.
 
+import { count, eq, inArray } from 'drizzle-orm'
+import { db } from '../database/client'
+import { emailLog, systemConfigs } from '../database/schema'
+import { creaNotifica } from '../services/notifiche.service'
+
 interface EmailPayload {
   to: string
   subject: string
   html: string
+  /** Obbligatorio: decide se l'email può partire e come si chiama nel registro */
+  tipo: TipoEmail
+  /** Solo per registro e notifiche ("A Mario Rossi") */
+  nomeDestinatario?: string | null
+  /** Le email di uno stesso invio di massa: niente notifica a testa, una sola riassuntiva alla fine */
+  invioId?: string
 }
 
 // Il vocabolario dei motivi vive in shared/: lo stesso elenco serve al server
 // (che decide) e alle pagine (che scelgono la frase da mostrare). Definirlo due
 // volte significherebbe, prima o poi, aggiungerne uno solo da una parte.
-export type { MotivoEmail } from '#shared/email'
-import type { MotivoEmail } from '#shared/email'
+export type { MotivoEmail, TipoEmail } from '#shared/email'
+import type { MotivoEmail, TipoEmail } from '#shared/email'
+import {
+  ETICHETTA_TIPO_EMAIL, INTERRUTTORE_EMAIL_GENERALE, INTERRUTTORI_EMAIL,
+  TESTO_MOTIVO_EMAIL, interruttoreAcceso,
+} from '#shared/email'
 
 /** Esito di un invio: o è partita, o si sa perché no. */
 export type EsitoEmail =
@@ -47,7 +62,119 @@ function dettaglioLeggibile(testo: unknown, chiave: string): string | undefined 
   return pulito.length > 200 ? `${pulito.slice(0, 197)}…` : pulito
 }
 
-export async function sendEmail({ to, subject, html }: EmailPayload): Promise<EsitoEmail> {
+/**
+ * Questo tipo di email può partire? Guarda l'interruttore generale e quello del
+ * tipo (la tabella con i valori di partenza è in shared/email.ts). Inviti,
+ * recupero password e prove rispondono sempre sì, senza nemmeno chiedere al database.
+ */
+export async function tipoEmailAttivo(tipo: TipoEmail): Promise<boolean> {
+  const interruttore = INTERRUTTORI_EMAIL[tipo]
+  if (!interruttore) return true
+
+  const righe = await db.select({ key: systemConfigs.key, value: systemConfigs.value })
+    .from(systemConfigs)
+    .where(inArray(systemConfigs.key, [INTERRUTTORE_EMAIL_GENERALE.chiave, interruttore.chiave]))
+  const valore = (chiave: string) => righe.find((r) => r.key === chiave)?.value
+
+  return interruttoreAcceso(valore(INTERRUTTORE_EMAIL_GENERALE.chiave), INTERRUTTORE_EMAIL_GENERALE.seAssente)
+    && interruttoreAcceso(valore(interruttore.chiave), interruttore.seAssente)
+}
+
+/** "Mario Rossi (mario@x.it)", oppure solo l'indirizzo se il nome non lo sappiamo */
+function chi(p: EmailPayload): string {
+  const nome = p.nomeDestinatario?.trim()
+  return nome ? `${nome} (${p.to})` : p.to
+}
+
+/**
+ * LA PORTA UNICA della posta: ogni email del gestionale passa di qui.
+ * 1. se il suo tipo è spento in Impostazioni non parte (motivo DISATTIVATO);
+ * 2. altrimenti va a Brevo;
+ * 3. in ogni caso finisce una riga nel registro email_log e, se non fa parte di
+ *    un invio di massa, una notifica nel campanellino.
+ * Registro e notifica sono "di contorno": se non riescono a scriversi l'email
+ * resta com'è andata, non diventa un errore.
+ */
+export async function sendEmail(p: EmailPayload): Promise<EsitoEmail> {
+  let attivo: boolean
+  try {
+    attivo = await tipoEmailAttivo(p.tipo)
+  } catch (err) {
+    // Se non riusciamo a leggere gli interruttori si sta dalla parte prudente:
+    // meglio un'email in meno che una che il titolare aveva spento.
+    console.error('[email] Interruttori non leggibili, email non inviata:', p.subject, err)
+    attivo = false
+  }
+
+  const esito: EsitoEmail = attivo
+    ? await consegnaABrevo(p)
+    : { sent: false, motivo: 'DISATTIVATO' }
+
+  try {
+    await db.insert(emailLog).values({
+      tipo:             p.tipo,
+      destinatario:     p.to.slice(0, 320),
+      nomeDestinatario: p.nomeDestinatario?.trim().slice(0, 200) || null,
+      oggetto:          p.subject.slice(0, 300),
+      esito:            esito.sent ? 'INVIATA' : esito.motivo === 'DISATTIVATO' ? 'DISATTIVATA' : 'NON_PARTITA',
+      motivo:           esito.sent ? null : esito.motivo,
+      dettaglio:        esito.sent ? null : (esito.dettaglio ?? null),
+      invioId:          p.invioId ?? null,
+    })
+  } catch (err) {
+    console.error('[email] Registro email non scritto:', p.subject, err)
+  }
+
+  if (!p.invioId) {
+    try {
+      const etichetta = ETICHETTA_TIPO_EMAIL[p.tipo]
+      await creaNotifica({
+        tipo:      'EMAIL',
+        titolo:    esito.sent ? `Email inviata: ${etichetta}` : `Email NON partita: ${etichetta}`,
+        messaggio: esito.sent ? `A ${chi(p)}` : `A ${chi(p)} — ${TESTO_MOTIVO_EMAIL[esito.motivo]}`,
+        link:      '/impostazioni?tab=email',
+      })
+    } catch (err) {
+      console.error('[email] Notifica email non creata:', p.subject, err)
+    }
+  }
+
+  return esito
+}
+
+/**
+ * La notifica UNICA di fine invio di massa ("Riepilogo serale: 87 email partite,
+ * 2 non partite"), con il link al registro filtrato su quell'invio. I numeri si
+ * contano dal registro stesso, così chi chiama non deve tenere i conti.
+ * Le email spente non contano: se il giro non ha davvero provato a spedire
+ * niente, nessuna notifica.
+ */
+export async function notificaInvioDiMassa(invioId: string, cosa: string): Promise<void> {
+  try {
+    const righe = await db.select({ esito: emailLog.esito, n: count() })
+      .from(emailLog)
+      .where(eq(emailLog.invioId, invioId))
+      .groupBy(emailLog.esito)
+    const quante = (e: string) => righe.find((r) => r.esito === e)?.n ?? 0
+    const inviate = quante('INVIATA')
+    const nonPartite = quante('NON_PARTITA')
+    if (inviate + nonPartite === 0) return
+
+    await creaNotifica({
+      tipo:      'EMAIL',
+      titolo:    (`${cosa}: ${inviate} ${inviate === 1 ? 'email partita' : 'email partite'}`
+        + (nonPartite > 0 ? `, ${nonPartite} non ${nonPartite === 1 ? 'partita' : 'partite'}` : '')).slice(0, 200),
+      messaggio: nonPartite > 0
+        ? 'Apri il registro per vedere a chi non è arrivata e perché.'
+        : 'Apri il registro per vedere a chi è arrivata.',
+      link:      `/impostazioni?tab=email&invio=${encodeURIComponent(invioId)}`,
+    })
+  } catch (err) {
+    console.error('[email] Notifica riassuntiva non creata:', cosa, err)
+  }
+}
+
+async function consegnaABrevo({ to, subject, html }: EmailPayload): Promise<EsitoEmail> {
   const config = useRuntimeConfig()
 
   if (!config.brevoApiKey || !config.emailFrom) {

@@ -1,6 +1,7 @@
 import { pgTable, text, varchar, timestamp, date, index } from 'drizzle-orm/pg-core'
 import { cuid, contactRequestStatusEnum, notificaTipoEnum } from './common'
 import { users } from './users'
+import type { TipoEmail, MotivoEmail, EsitoRegistroEmail } from '../../../shared/email'
 
 export const closureDates = pgTable('closure_dates', {
   id:          text('id').primaryKey().$defaultFn(cuid),
@@ -64,6 +65,33 @@ export const notifiche = pgTable('notifiche', {
   // storico che cresce.
   daLeggereIdx: index('notifiche_da_leggere_idx').on(t.lettaAt, t.createdAt),
   entityIdx:    index('notifiche_entity_idx').on(t.entityType, t.entityId),
+}))
+
+// IL REGISTRO DELLE EMAIL: una riga per OGNI tentativo, anche quelli spenti o
+// falliti. Lo scrive solo sendEmail (utils/email.ts), così nessun invio sfugge.
+//
+// NON c'è il corpo dell'email, apposta: quello di inviti e recupero password
+// contiene il link d'accesso, e qui resterebbe leggibile per sempre. Solo l'oggetto.
+//
+// ponytail: il registro cresce senza limite (qualche migliaio di righe al mese).
+// Se diventa pesante, una riga nel cron giornaliero (package-alerts.get.ts):
+// delete from email_log where created_at < now() - interval '12 months'.
+export const emailLog = pgTable('email_log', {
+  id:               text('id').primaryKey().$defaultFn(cuid),
+  createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  tipo:             varchar('tipo', { length: 40 }).$type<TipoEmail>().notNull(),
+  destinatario:     varchar('destinatario', { length: 320 }).notNull(),
+  nomeDestinatario: varchar('nome_destinatario', { length: 200 }),
+  oggetto:          varchar('oggetto', { length: 300 }).notNull(),
+  esito:            varchar('esito', { length: 20 }).$type<EsitoRegistroEmail>().notNull(),
+  motivo:           varchar('motivo', { length: 40 }).$type<MotivoEmail>(),
+  dettaglio:        text('dettaglio'),
+  // Lo stesso valore per tutte le email di un invio di massa (un riepilogo serale,
+  // una comunicazione): il link della notifica riassuntiva filtra su questo.
+  invioId:          text('invio_id'),
+}, (t) => ({
+  createdAtIdx: index('email_log_created_at_idx').on(t.createdAt),
+  invioIdx:     index('email_log_invio_idx').on(t.invioId),
 }))
 
 export const contactRequests = pgTable('contact_requests', {

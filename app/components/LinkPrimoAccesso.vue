@@ -36,6 +36,7 @@
 </template>
 
 <script setup lang="ts">
+import type { MotivoEmail } from '#shared/email'
 // IL PIANO B DELLA SEGRETERIA.
 // Quando la posta non parte (servizio email spento o bloccato) l'account resterebbe
 // irraggiungibile: qui il link si legge a schermo e si copia con un clic, per
@@ -52,7 +53,7 @@ const props = defineProps<{
   /** Esito dell'invio email riportato dal server */
   emailInviata?: boolean
   /** Perché l'email non è partita (arriva dal server). Assente = motivo sconosciuto. */
-  motivoEmail?: 'NON_CONFIGURATO' | 'RIFIUTATO' | 'RETE'
+  motivoEmail?: MotivoEmail
   /** Riga di spiegazione tecnica breve, es. il messaggio con cui la posta ha rifiutato l'invio */
   dettaglioEmail?: string
 }>()
@@ -73,6 +74,10 @@ const spiegazioneMancatoInvio = computed(() => {
         : `La posta ha rifiutato l'invio${coda}`
     case 'RETE':
       return `Non è stato possibile contattare il servizio di posta${coda}`
+    // Gli inviti partono sempre: qui non dovrebbe arrivarci mai, ma se un giorno
+    // cambiasse la regola la frase giusta c'è già
+    case 'DISATTIVATO':
+      return `Invio email spento nelle Impostazioni${coda}`
     default:
       return `Email non inviata${coda}`
   }

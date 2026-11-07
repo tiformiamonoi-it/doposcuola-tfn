@@ -631,7 +631,7 @@
                     <p v-if="!riepilogoSeraleGeneraleAttivo" class="mt-2 text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded-lg p-2">
                       L'email della sera è spenta per TUTTI dalla pagina Impostazioni, quindi questo
                       interruttore ora non ha effetto: nessuna famiglia riceve l'avviso. Per riattivarlo
-                      vai in Impostazioni → «Email della sera alle famiglie».
+                      vai in Impostazioni → scheda Email → «Quali email inviare».
                     </p>
                   </div>
                 </UCard>

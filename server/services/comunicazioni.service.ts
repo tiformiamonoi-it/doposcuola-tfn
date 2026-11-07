@@ -12,7 +12,8 @@
 import { and, count, desc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../database/client'
 import { comunicazioni, comunicazioniDestinatari, consensi, studentParents, students, users } from '../database/schema'
-import { sendEmail, emailComunicazione } from '../utils/email'
+import { randomUUID } from 'node:crypto'
+import { sendEmail, emailComunicazione, notificaInvioDiMassa } from '../utils/email'
 import type { ComunicazioneInput, ComunicazioneTipo } from '#shared/schemas/comunicazione.schema'
 
 // Quante email partono insieme. Una alla volta, 150 famiglie farebbero aspettare la
@@ -38,7 +39,7 @@ function consensoMarketingAttivo() {
  * I genitori che riceverebbero una comunicazione di questo tipo, adesso.
  * Genitore = account GENITORE attivo, collegato ad almeno un alunno ATTIVO.
  */
-async function destinatariPer(tipo: ComunicazioneTipo): Promise<{ id: string; email: string }[]> {
+async function destinatariPer(tipo: ComunicazioneTipo): Promise<{ id: string; email: string; nome: string }[]> {
   const condizioni = [
     eq(users.role, 'GENITORE'),
     eq(users.active, true),
@@ -48,7 +49,7 @@ async function destinatariPer(tipo: ComunicazioneTipo): Promise<{ id: string; em
   if (tipo === 'PROMOZIONALE') condizioni.push(consensoMarketingAttivo())
 
   // DISTINCT: una mamma con due figli è UNA famiglia, riceve una comunicazione sola
-  return await db.selectDistinct({ id: users.id, email: users.email })
+  return await db.selectDistinct({ id: users.id, email: users.email, nome: nomeUtente })
     .from(users)
     .innerJoin(studentParents, eq(studentParents.parentUserId, users.id))
     .innerJoin(students, eq(students.id, studentParents.studentId))
@@ -59,6 +60,9 @@ async function destinatariPer(tipo: ComunicazioneTipo): Promise<{ id: string; em
 export async function contaDestinatari(tipo: ComunicazioneTipo): Promise<number> {
   return (await destinatariPer(tipo)).length
 }
+
+/** "Mario Rossi": serve solo al registro delle email, non viaggia nell'email */
+const nomeUtente = sql<string>`${users.firstName} || ' ' || ${users.lastName}`
 
 function baseUrl(): string | undefined {
   const base = (useRuntimeConfig().appUrl ?? '').replace(/\/+$/, '')
@@ -77,18 +81,26 @@ async function aGruppi<T>(lista: T[], quanti: number, fn: (x: T) => Promise<void
 /**
  * Spedisce l'email a ciascuna riga e segna sulla riga com'è andata.
  * Un'email che non parte non ferma le altre: si registra il motivo e si va avanti.
+ *
+ * Con le email delle comunicazioni spente in Impostazioni la comunicazione resta
+ * nel portale come sempre; le righe si segnano DISATTIVATO e `spente` lo conta,
+ * così la pagina può dire "invio email spento" invece di "non partite" e basta.
  */
 async function spedisci(
   c: { titolo: string; testo: string; tipo: ComunicazioneTipo },
-  righe: { rigaId: string; email: string }[],
-): Promise<{ inviate: number; nonPartite: number }> {
+  righe: { rigaId: string; email: string; nome?: string }[],
+): Promise<{ inviate: number; nonPartite: number; spente: number }> {
   const contenuto = emailComunicazione({ titolo: c.titolo, testo: c.testo, tipo: c.tipo, base: baseUrl() })
+  // Un invio = un gruppo nel registro email e una sola notifica alla fine
+  const invioId = randomUUID()
   let inviate = 0
   let nonPartite = 0
+  let spente = 0
 
   await aGruppi(righe, EMAIL_IN_PARALLELO, async (r) => {
     try {
-      const esito = await sendEmail({ to: r.email, ...contenuto })
+      const esito = await sendEmail({ to: r.email, tipo: 'COMUNICAZIONE', nomeDestinatario: r.nome, invioId, ...contenuto })
+      if (!esito.sent && esito.motivo === 'DISATTIVATO') spente++
       if (esito.sent) {
         inviate++
         await db.update(comunicazioniDestinatari)
@@ -108,7 +120,8 @@ async function spedisci(
     }
   })
 
-  return { inviate, nonPartite }
+  await notificaInvioDiMassa(invioId, `Comunicazione «${c.titolo}»`)
+  return { inviate, nonPartite, spente }
 }
 
 /**
@@ -130,8 +143,8 @@ export async function inviaComunicazione(input: ComunicazioneInput, authorId: st
       .returning({ id: comunicazioniDestinatari.id, userId: comunicazioniDestinatari.userId })
   })
 
-  const emailDi = new Map(elenco.map((u) => [u.id, u.email]))
-  const esito = await spedisci(input, righe.map((r) => ({ rigaId: r.id, email: emailDi.get(r.userId)! })))
+  const persona = new Map(elenco.map((u) => [u.id, u]))
+  const esito = await spedisci(input, righe.map((r) => ({ rigaId: r.id, email: persona.get(r.userId)!.email, nome: persona.get(r.userId)!.nome })))
 
   return { destinatari: elenco.length, ...esito }
 }
@@ -143,6 +156,7 @@ export async function inviaProva(input: ComunicazioneInput, userId: string) {
 
   const esito = await sendEmail({
     to: io.email,
+    tipo: 'COMUNICAZIONE_PROVA',
     ...emailComunicazione({ ...input, base: baseUrl(), prova: true }),
   })
   return { email: io.email, ...esito }
@@ -156,7 +170,7 @@ export async function riprovaEmail(comunicazioneId: string) {
 
   // Solo verso account ancora attivi: un genitore disattivato nel frattempo non
   // deve ricevere niente.
-  const righe = await db.select({ rigaId: comunicazioniDestinatari.id, email: users.email })
+  const righe = await db.select({ rigaId: comunicazioniDestinatari.id, email: users.email, nome: nomeUtente })
     .from(comunicazioniDestinatari)
     .innerJoin(users, eq(users.id, comunicazioniDestinatari.userId))
     .where(and(
@@ -195,6 +209,8 @@ export async function storicoComunicazioni() {
     destinatari:  count(comunicazioniDestinatari.id),
     lette:        count(comunicazioniDestinatari.lettaAt),
     emailInviate: count(comunicazioniDestinatari.emailInviataAt),
+    // Le non partite perché le email delle comunicazioni erano spente (non un guasto)
+    emailSpente:  sql<number>`count(*) filter (where ${comunicazioniDestinatari.emailErrore} = 'DISATTIVATO')`.mapWith(Number),
   })
     .from(comunicazioni)
     .leftJoin(users, eq(users.id, comunicazioni.authorId))

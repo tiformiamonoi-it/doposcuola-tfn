@@ -31,18 +31,26 @@ export const PUBLIC_API_PREFIXES = [
 // Regole ordinate: la PRIMA che matcha decide i ruoli ammessi.
 // `mutationRoles` (opzionale): ruoli ammessi per i metodi di scrittura (POST/PUT/PATCH/DELETE);
 // se assente, `roles` vale per tutti i metodi.
-export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: Role[] }> = [
+// esatto: true = la regola vale SOLO per quel percorso, non per quelli sotto.
+export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: Role[]; esatto?: boolean }> = [
   // Endpoint auth accessibili anche a genitori/studenti (il default STAFF li escluderebbe)
   { prefix: '/api/auth/change-password',    roles: [...STAFF, ...FAMIGLIA] },
   { prefix: '/api/auth/accept-terms',       roles: FAMIGLIA },
   { prefix: '/api/auth/tutorial-visto',     roles: [...STAFF, ...FAMIGLIA] },
   { prefix: '/api/auth/logout',             roles: [...STAFF, ...FAMIGLIA] },
   { prefix: '/api/accounting',              roles: ADMIN_ONLY },
+  // Registro delle email: indirizzi e nomi di tutte le famiglie, e cosa hanno
+  // ricevuto. È lo strumento di chi gestisce la posta: solo ADMIN.
+  { prefix: '/api/email-log',               roles: ADMIN_ONLY },
   // Portale: GENITORE/STUDENTE + ADMIN/SUPER in preview (gli handler restituiscono [] agli altri)
   { prefix: '/api/portal',                  roles: [...FAMIGLIA, 'ADMIN', 'SUPER_TUTOR'] },
   { prefix: '/api/admin',                   roles: ADMIN_SUPER },
-  { prefix: '/api/tutors/availabilities',   roles: STAFF },
-  { prefix: '/api/tutors/today-pool',       roles: STAFF },
+  // Le uniche tre pagine di /api/tutors aperte anche al TUTOR, e solo loro (esatto):
+  // ogni altro percorso, come PUT /api/tutors/today-pool o /api/tutors/availabilities,
+  // il router lo manda a /api/tutors/[id] e deve restare sotto la regola ADMIN/SUPER.
+  { prefix: '/api/tutors/availabilities/me',     roles: STAFF, esatto: true },
+  { prefix: '/api/tutors/availabilities/toggle', roles: STAFF, esatto: true },
+  { prefix: '/api/tutors/today-pool',            roles: STAFF, mutationRoles: ADMIN_SUPER, esatto: true },
   { prefix: '/api/tutor-payments',          roles: ADMIN_SUPER },
   { prefix: '/api/notes',                   roles: STAFF },
   // Centro notifiche (il campanellino): il default STAFF non basterebbe.
@@ -110,7 +118,7 @@ export function allowedRolesFor(rawPath: string, method = 'GET'): Role[] {
   // altrimenti '/api/tutors/availabilitiesX/...' (che il router manda a /api/tutors/:id/...)
   // prenderebbe la regola STAFF di '/api/tutors/availabilities' e il TUTOR passerebbe.
   const path = rawPath.split('?')[0] ?? rawPath
-  const rule = API_POLICY.find((r) => path === r.prefix || path.startsWith(r.prefix + '/'))
+  const rule = API_POLICY.find((r) => path === r.prefix || (!r.esatto && path.startsWith(r.prefix + '/')))
   if (!rule) return DEFAULT_ROLES
   if (rule.mutationRoles && MUTATION_METHODS.has(method.toUpperCase())) return rule.mutationRoles
   return rule.roles

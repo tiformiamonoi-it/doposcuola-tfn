@@ -248,12 +248,14 @@ export async function consumaToken(token: string, nuovaPassword: string): Promis
  * della segreteria, che lo copia a schermo e lo manda su WhatsApp.
  */
 export async function inviaInvitoPassword(
-  user: { id: string; email: string; firstName: string },
+  user: { id: string; email: string; firstName: string; lastName?: string | null },
   scopo: ScopoToken = 'PRIMO_ACCESSO',
 ): Promise<EsitoInvito> {
   const { link } = await creaLinkPassword(user.id, scopo)
   const esito = await sendEmail({
     to: user.email,
+    tipo: scopo === 'PRIMO_ACCESSO' ? 'INVITO_ACCESSO' : 'RECUPERO_PASSWORD',
+    nomeDestinatario: `${user.firstName} ${user.lastName ?? ''}`,
     ...emailInvitoPassword({ nome: user.firstName, link, scopo }),
   })
 
@@ -277,7 +279,7 @@ export async function inviaInvitoPassword(
 export async function inviaInvitoPasswordAUtente(userId: string): Promise<EsitoInvito & { email: string }> {
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),
-    columns: { id: true, email: true, firstName: true },
+    columns: { id: true, email: true, firstName: true, lastName: true },
   })
   if (!user) throw new Error('Account non trovato')
 

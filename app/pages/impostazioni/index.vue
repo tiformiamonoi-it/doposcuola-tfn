@@ -9,6 +9,8 @@
 
     <!-- Da mobile i tab non entrano tutti: la lista scorre in orizzontale -->
     <UTabs
+      v-model="schedaAperta"
+      value-key="slot"
       :ui="{ list: 'overflow-x-auto', trigger: 'shrink-0' }"
       :items="[
       { label: 'Pacchetti Standard', slot: 'pacchetti' },
@@ -393,43 +395,6 @@
             </template>
           </UCard>
 
-          <!-- CARD RIEPILOGO SERALE ALLE FAMIGLIE -->
-          <UCard>
-            <template #header>
-              <div class="flex items-center gap-2">
-                <UIcon name="i-heroicons-envelope" class="w-4 h-4 text-tfn-500" />
-                <span class="font-medium text-slate-800">Email della sera alle famiglie</span>
-              </div>
-            </template>
-            <div class="space-y-3">
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                  <p class="text-sm font-medium text-slate-800">Avvisa le famiglie delle nuove comunicazioni</p>
-                  <p class="text-xs text-slate-500 mt-0.5">
-                    Ogni sera, se durante la giornata è stata approvata una comunicazione nuova, la famiglia
-                    riceve un'email che dice solo «c'è qualcosa di nuovo nel portale». Il testo della
-                    comunicazione non viene mai scritto nell'email.
-                  </p>
-                </div>
-                <USwitch v-model="riepilogoSeraleAttivo" aria-label="Email della sera alle famiglie" />
-              </div>
-
-              <p v-if="!riepilogoSeraleAttivo" class="text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded-lg p-2">
-                Al momento l'email della sera è spenta per tutti. Le comunicazioni continuano ad arrivare
-                regolarmente nel portale e le famiglie le leggono entrando: semplicemente non ricevono più
-                l'avviso via email. Finché questo interruttore resta giù, l'interruttore che trovi sulla
-                scheda del singolo alunno non ha effetto.
-              </p>
-              <p v-else class="text-xs text-slate-400">
-                Puoi spegnere l'avviso anche per un solo alunno: lo trovi nella sua scheda, nel riquadro
-                «Accesso Portale».
-              </p>
-            </div>
-            <template #footer>
-              <UButton @click="salvaConfigs()" :loading="salvandoConfigs">Salva Modifiche</UButton>
-            </template>
-          </UCard>
-
           <!-- CARD ANNO SCOLASTICO -->
           <UCard>
             <template #header>
@@ -776,6 +741,66 @@
             </div>
           </div>
         </UCard>
+
+        <!-- QUALI EMAIL INVIARE: l'unico posto dove si accendono e spengono -->
+        <UCard class="mt-4">
+          <template #header>
+            <div class="flex items-center gap-2">
+              <UIcon name="i-heroicons-adjustments-horizontal" class="w-4 h-4 text-tfn-500" />
+              <span class="font-medium text-slate-800">Quali email inviare</span>
+            </div>
+          </template>
+
+          <div class="space-y-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-slate-800">Tutte le email automatiche</p>
+                <p class="text-xs text-slate-500 mt-0.5">
+                  Spento, non parte nessuna delle email qui sotto, qualunque sia il loro interruttore.
+                </p>
+              </div>
+              <USwitch v-model="emailAttive" aria-label="Tutte le email automatiche" />
+            </div>
+
+            <div class="border-t border-slate-100 pt-4 space-y-4" :class="{ 'opacity-60': !emailAttive }">
+              <div v-for="e in EMAIL_SPEGNIBILI" :key="e.tipo" class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-slate-800">{{ ETICHETTA_TIPO_EMAIL[e.tipo] }}</p>
+                  <p class="text-xs text-slate-500 mt-0.5">{{ e.spiegazione }}</p>
+                </div>
+                <USwitch
+                  v-model="emailPerTipo[e.tipo]"
+                  :disabled="!emailAttive"
+                  :aria-label="ETICHETTA_TIPO_EMAIL[e.tipo]"
+                />
+              </div>
+            </div>
+
+            <p v-if="!emailAttive || !emailPerTipo.RIEPILOGO_SERALE" class="text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded-lg p-2">
+              Al momento il riepilogo serale è spento per tutti. Le comunicazioni continuano ad arrivare
+              regolarmente nel portale e le famiglie le leggono entrando: semplicemente non ricevono più
+              l'avviso via email. Finché resta spento, l'interruttore che trovi sulla scheda del singolo
+              alunno non ha effetto.
+            </p>
+            <p v-else class="text-xs text-slate-400">
+              Il riepilogo serale si può spegnere anche per un solo alunno: lo trovi nella sua scheda,
+              nel riquadro «Accesso Portale».
+            </p>
+
+            <p class="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">
+              Partono <strong>sempre</strong>, anche con tutto spento: gli inviti al primo accesso, il recupero
+              della password e le email di prova. Senza le prime due qualcuno resterebbe chiuso fuori;
+              le prove le chiedi tu, per te.
+            </p>
+          </div>
+
+          <template #footer>
+            <UButton @click="salvaConfigs()" :loading="salvandoConfigs">Salva Modifiche</UButton>
+          </template>
+        </UCard>
+
+        <!-- REGISTRO: componente a parte perché questa pagina è già lunga -->
+        <RegistroEmail class="mt-4" :invio="invioDaLink" />
       </template>
 
     </UTabs>
@@ -929,10 +954,25 @@ import ConfirmDialog from '~/components/ConfirmDialog.vue'
 import { SUPPLEMENTO_SPECIALE, TARIFFE_DEFAULT } from '#shared/tariffe'
 import { MATERIE_SUPERIORI, materieDaAggiungere } from '#shared/materie'
 import { annoScolasticoDa, inizioAnnoProposto } from '#shared/rientri'
+import {
+  ETICHETTA_TIPO_EMAIL, INTERRUTTORE_EMAIL_GENERALE, INTERRUTTORI_EMAIL, interruttoreAcceso,
+  type MotivoEmail, type TipoEmail,
+} from '#shared/email'
 import { addMonths, format, getDay, getDaysInMonth, setDate, startOfMonth } from 'date-fns'
 import { it } from 'date-fns/locale'
 
 definePageMeta({ middleware: ['admin-only'] })
+
+// LA SCHEDA APERTA. ?tab=email è il link delle notifiche email del campanellino;
+// con &invio=<id> il registro si apre già filtrato su quell'invio di massa. Si
+// osserva l'indirizzo e non solo l'arrivo sulla pagina: se si è GIÀ qui e si
+// clicca una notifica, cambia solo la query e Nuxt non ricarica la pagina.
+const route = useRoute()
+const schedaAperta = ref<string | number>('pacchetti')
+const invioDaLink = computed(() => typeof route.query.invio === 'string' ? route.query.invio : undefined)
+watch(() => route.query.tab, (tab) => {
+  if (tab === 'email') schedaAperta.value = 'email'
+}, { immediate: true })
 
 const toast = useToast()
 
@@ -954,7 +994,7 @@ type EsitoProvaEmail = {
   ok: boolean
   destinatario: string
   sent: boolean
-  motivo?: 'NON_CONFIGURATO' | 'RIFIUTATO' | 'RETE'
+  motivo?: MotivoEmail
   dettaglio?: string
 }
 
@@ -969,6 +1009,8 @@ const testoMotivoProva = computed(() => {
       return 'Non partita: il servizio di posta ha rifiutato l\'invio.'
     case 'RETE':
       return 'Non partita: il gestionale non è riuscito a contattare il servizio di posta.'
+    case 'DISATTIVATO':
+      return 'Non partita: questo tipo di email è spento qui sotto, in «Quali email inviare».'
     default:
       return 'Non partita: motivo sconosciuto.'
   }
@@ -1311,11 +1353,20 @@ const materie = ref<string[]>([])
 const tariffe = ref({ SINGOLA: 5, GRUPPO: 8, MAXI: 8.5 })
 const speseFisse = ref<{ nome: string; importo: number; dal: string; al: string; categoria: string }[]>([])
 const whatsappNumero = ref('')
-// Interruttore generale dell'email serale alle famiglie (system_configs.riepilogo_serale_attivo).
-// Si parte da ACCESO: è com'era il gestionale prima che l'interruttore esistesse, e una
-// configurazione non ancora salvata non deve spegnere di nascosto un avviso che le
-// famiglie si aspettano. Lo stesso criterio del server, in note-digest.service.ts.
-const riepilogoSeraleAttivo = ref(true)
+// GLI INTERRUTTORI DELLE EMAIL (scheda Email). Chiavi e valori di partenza non si
+// scrivono qui: arrivano da shared/email.ts, la stessa tabella che usa il server
+// per decidere. Così pagina e server non possono raccontare due cose diverse
+// (es. gli avvisi pacchetto nascono spenti, il riepilogo serale acceso).
+const EMAIL_SPEGNIBILI: { tipo: TipoEmail; spiegazione: string }[] = [
+  { tipo: 'COMUNICAZIONE', spiegazione: 'Alle famiglie, quando invii una comunicazione dalla pagina Comunicazioni. Spenta, la comunicazione arriva solo nel portale.' },
+  { tipo: 'RIEPILOGO_SERALE', spiegazione: 'Alle famiglie, ogni sera alle 20 (alle 19 con l\'ora solare), solo se in giornata è stata approvata una comunicazione nuova o c\'è una convenzione nuova. Dice solo «c\'è qualcosa di nuovo nel portale»: il testo non viaggia mai per email.' },
+  { tipo: 'AVVISO_ORE', spiegazione: 'Ai genitori, ogni mattina alle 7 (alle 8 con l\'ora legale), quando a un pacchetto resta meno del 20% delle ore. Non dice quante ore restano.' },
+  { tipo: 'AVVISO_SCADENZA', spiegazione: 'Ai genitori, ogni mattina alle 7 (alle 8 con l\'ora legale), quando un pacchetto scade entro 3 giorni.' },
+]
+const emailAttive = ref(true)
+const emailPerTipo = reactive<Record<TipoEmail, boolean>>(
+  Object.fromEntries(Object.entries(INTERRUTTORI_EMAIL).map(([t, i]) => [t, i?.seAssente ?? true])) as Record<TipoEmail, boolean>,
+)
 // Maxi gruppo (system_configs.maxi_gruppo_attivo): acceso finché non si salva "false",
 // stesso criterio del server (lesson.service.ts → getMaxiAttivo). La tariffa MAXI resta salvata.
 const maxiGruppoAttivo = ref(true)
@@ -1358,8 +1409,11 @@ watchEffect(() => {
     giornateSpeciali.value = out
   } catch(e){}
   whatsappNumero.value = configs.value.whatsapp_numero || ''
-  // Spento SOLO se qualcuno ha salvato "false": riga assente o valore strano = acceso.
-  riepilogoSeraleAttivo.value = (configs.value.riepilogo_serale_attivo ?? '').trim().toLowerCase() !== 'false'
+  emailAttive.value = interruttoreAcceso(configs.value[INTERRUTTORE_EMAIL_GENERALE.chiave], INTERRUTTORE_EMAIL_GENERALE.seAssente)
+  for (const { tipo } of EMAIL_SPEGNIBILI) {
+    const i = INTERRUTTORI_EMAIL[tipo]!
+    emailPerTipo[tipo] = interruttoreAcceso(configs.value[i.chiave], i.seAssente)
+  }
   maxiGruppoAttivo.value = (configs.value.maxi_gruppo_attivo ?? '').trim().toLowerCase() !== 'false'
   annoScolastico.value = configs.value.anno_scolastico_corrente || annoScolasticoDa(oggiISO())
   inizioAnnoScolastico.value = configs.value.anno_scolastico_inizio || inizioAnnoProposto(annoScolastico.value)
@@ -1674,7 +1728,8 @@ async function salvaConfigs(opzioni?: { silenzioso?: boolean; rilancia?: boolean
         }))),
         whatsapp_numero: whatsappNumero.value,
         // Le configurazioni si salvano sempre come testo: qui "true"/"false".
-        riepilogo_serale_attivo: riepilogoSeraleAttivo.value ? 'true' : 'false',
+        [INTERRUTTORE_EMAIL_GENERALE.chiave]: emailAttive.value ? 'true' : 'false',
+        ...Object.fromEntries(EMAIL_SPEGNIBILI.map(({ tipo }) => [INTERRUTTORI_EMAIL[tipo]!.chiave, emailPerTipo[tipo] ? 'true' : 'false'])),
         maxi_gruppo_attivo: maxiGruppoAttivo.value ? 'true' : 'false',
         sconti: JSON.stringify(sconti.value),
         materie_speciali: JSON.stringify(materieSpeciali.value),

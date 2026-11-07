@@ -248,7 +248,7 @@ export async function segnaLetteDellaPratica(entityType: string, entityId: strin
 // sola, non in ogni punto che genera notifiche.
 // ─────────────────────────────────────────────
 export async function creaNotifica(input: {
-  tipo: 'CONSENSO' | 'COMPLEANNO' | 'GENERICA'
+  tipo: 'CONSENSO' | 'COMPLEANNO' | 'GENERICA' | 'EMAIL'
   titolo: string
   messaggio: string
   link?: string | null

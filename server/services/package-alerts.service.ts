@@ -7,13 +7,31 @@
 import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import { db } from '../database/client'
 import { packages, students, studentParents, users } from '../database/schema'
-import { sendEmail, emailAvvisoPacchetto } from '../utils/email'
+import { randomUUID } from 'node:crypto'
+import { sendEmail, emailAvvisoPacchetto, notificaInvioDiMassa, tipoEmailAttivo } from '../utils/email'
 import { motiviRinnovo } from './package.service'
 
 // ponytail: cap 50 pacchetti/run — ben sotto il limite Brevo (300/giorno); il resto passa al giro dopo
 const MAX_PER_RUN = 50
 
 export async function runPackageAlerts() {
+  // GLI INTERRUTTORI (Impostazioni → Email), chiesti una volta all'inizio: un tipo
+  // spento non entra nemmeno nella ricerca, così non occupa i 50 posti del giro
+  // e non riempie il registro di righe "spenta". Nascono spenti tutti e due.
+  const [oreAttivi, scadenzaAttivi] = await Promise.all([
+    tipoEmailAttivo('AVVISO_ORE'),
+    tipoEmailAttivo('AVVISO_SCADENZA'),
+  ])
+  if (!oreAttivi && !scadenzaAttivi) {
+    // Stessa forma del riepilogo serale spento: nel registro del cron "non doveva
+    // partire" non deve somigliare a "è andato storto qualcosa".
+    return {
+      processati: 0, inviati: 0, emailInviate: 0,
+      saltato: true,
+      motivo: 'Gli avvisi sui pacchetti (o l\'invio di tutte le email) sono spenti nelle Impostazioni: nessuna email inviata',
+    }
+  }
+
   const rows = await db.select({
     id:                      packages.id,
     nome:                    packages.nome,
@@ -26,6 +44,7 @@ export async function runPackageAlerts() {
     studentFirstName:        students.firstName,
     studentLastName:         students.lastName,
     parentEmail:             students.parentEmail,
+    parentName:              students.parentName,
   })
     .from(packages)
     .innerJoin(students, eq(packages.studentId, students.id))
@@ -41,16 +60,16 @@ export async function runPackageAlerts() {
       sql`(${packages.dataScadenza} IS NULL OR ${packages.dataScadenza} >= now() - interval '1 day')`,
       or(
         // Ore quasi esaurite
-        and(
+        oreAttivi ? and(
           isNull(packages.avvisoOreInviatoAt),
           sql`${packages.oreResiduo}::numeric / ${packages.oreAcquistate}::numeric < 0.20`,
-        ),
+        ) : undefined,
         // In scadenza entro 3 giorni (4 di pre-selezione)
-        and(
+        scadenzaAttivi ? and(
           isNull(packages.avvisoScadenzaInviatoAt),
           sql`${packages.dataScadenza} IS NOT NULL`,
           sql`${packages.dataScadenza} <= now() + interval '4 days'`,
-        ),
+        ) : undefined,
       ),
     ))
     .limit(MAX_PER_RUN)
@@ -58,28 +77,35 @@ export async function runPackageAlerts() {
   // Una sola query per tutti gli alunni coinvolti: email dei genitori con account attivo
   const studentIds = [...new Set(rows.map((r) => r.studentId))]
   const parentRows = studentIds.length
-    ? await db.select({ studentId: studentParents.studentId, email: users.email })
+    ? await db.select({ studentId: studentParents.studentId, email: users.email, nome: sql<string>`${users.firstName} || ' ' || ${users.lastName}` })
         .from(studentParents)
         .innerJoin(users, eq(studentParents.parentUserId, users.id))
         .where(and(inArray(studentParents.studentId, studentIds), eq(users.active, true)))
     : []
 
-  const emailPerStudente = new Map<string, string[]>()
+  type Destinatario = { email: string; nome: string | null }
+  const emailPerStudente = new Map<string, Destinatario[]>()
   for (const p of parentRows) {
     const lista = emailPerStudente.get(p.studentId) ?? []
-    if (!lista.includes(p.email)) lista.push(p.email)
+    if (!lista.some((d) => d.email === p.email)) lista.push({ email: p.email, nome: p.nome })
     emailPerStudente.set(p.studentId, lista)
   }
 
   let inviati = 0
   let emailInviate = 0
+  // Un giro = un invio nel registro email, con una sola notifica alla fine
+  const invioId = randomUUID()
 
   // Invia lo stesso avviso a ogni destinatario (sendEmail accetta un solo `to`).
   // L'avviso conta come inviato se almeno un destinatario lo ha ricevuto.
-  async function inviaATutti(destinatari: string[], contenuto: { subject: string; html: string }) {
+  async function inviaATutti(
+    destinatari: Destinatario[],
+    tipo: 'AVVISO_ORE' | 'AVVISO_SCADENZA',
+    contenuto: { subject: string; html: string },
+  ) {
     let almenoUno = false
-    for (const to of destinatari) {
-      const { sent } = await sendEmail({ to, ...contenuto })
+    for (const d of destinatari) {
+      const { sent } = await sendEmail({ to: d.email, tipo, nomeDestinatario: d.nome, invioId, ...contenuto })
       if (sent) { almenoUno = true; emailInviate++ }
     }
     return almenoUno
@@ -88,20 +114,22 @@ export async function runPackageAlerts() {
   for (const row of rows) {
     // Destinatari: tutti i genitori con account attivo; in mancanza, l'email in anagrafica
     const genitori = emailPerStudente.get(row.studentId) ?? []
-    const destinatari = genitori.length > 0 ? genitori : (row.parentEmail ? [row.parentEmail] : [])
+    const destinatari: Destinatario[] = genitori.length > 0
+      ? genitori
+      : (row.parentEmail ? [{ email: row.parentEmail, nome: row.parentName }] : [])
     if (destinatari.length === 0) continue
 
     const nomeStudente = `${row.studentFirstName} ${row.studentLastName}`
     // Ricontrollo completo in JS con la STESSA regola dello stato DA_RINNOVARE
     // (giorni italiani, solo pacchetti attivi): un pacchetto scaduto non riceve nulla
     const rinnovo = motiviRinnovo(row)
-    const oreQuasiEsaurite = row.avvisoOreInviatoAt === null && rinnovo.oreQuasiFinite
-    const inScadenza = row.avvisoScadenzaInviatoAt === null && rinnovo.inScadenza
+    const oreQuasiEsaurite = oreAttivi && row.avvisoOreInviatoAt === null && rinnovo.oreQuasiFinite
+    const inScadenza = scadenzaAttivi && row.avvisoScadenzaInviatoAt === null && rinnovo.inScadenza
 
     const flags: Record<string, Date> = {}
 
     if (oreQuasiEsaurite) {
-      const sent = await inviaATutti(destinatari, emailAvvisoPacchetto({
+      const sent = await inviaATutti(destinatari, 'AVVISO_ORE', emailAvvisoPacchetto({
         nomeStudente,
         nomePacchetto: row.nome,
         tipoAvviso: 'ore',
@@ -110,7 +138,7 @@ export async function runPackageAlerts() {
     }
 
     if (inScadenza) {
-      const sent = await inviaATutti(destinatari, emailAvvisoPacchetto({
+      const sent = await inviaATutti(destinatari, 'AVVISO_SCADENZA', emailAvvisoPacchetto({
         nomeStudente,
         nomePacchetto: row.nome,
         tipoAvviso: 'scadenza',
@@ -125,5 +153,6 @@ export async function runPackageAlerts() {
     }
   }
 
+  await notificaInvioDiMassa(invioId, 'Avvisi pacchetto')
   return { processati: rows.length, inviati, emailInviate }
 }

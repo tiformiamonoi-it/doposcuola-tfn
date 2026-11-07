@@ -44,7 +44,7 @@ export default defineEventHandler(async (event) => {
 
   const user = await db.query.users.findFirst({
     where: eq(users.email, email),
-    columns: { id: true, email: true, firstName: true, active: true },
+    columns: { id: true, email: true, firstName: true, lastName: true, active: true },
   })
   if (!user || !user.active) return rispostaGenerica
 
@@ -54,6 +54,8 @@ export default defineEventHandler(async (event) => {
 
   await sendEmail({
     to: user.email,
+    tipo: 'RECUPERO_PASSWORD',
+    nomeDestinatario: `${user.firstName} ${user.lastName}`,
     ...emailInvitoPassword({ nome: user.firstName, link, scopo: 'RECUPERO' }),
   })
 

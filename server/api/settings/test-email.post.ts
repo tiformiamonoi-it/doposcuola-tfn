@@ -27,6 +27,7 @@ export default defineEventHandler(async (event) => {
 
   const esito = await sendEmail({
     to: user.email,
+    tipo: 'PROVA',
     ...emailProva(new Date()),
   })
 

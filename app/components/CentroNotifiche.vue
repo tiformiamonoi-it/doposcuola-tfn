@@ -116,6 +116,8 @@
                 class="rounded-lg border border-tfn-100 bg-tfn-50/60 p-2.5"
               >
                 <div class="flex items-start gap-2">
+                  <!-- Le notifiche sulla posta si riconoscono a colpo d'occhio -->
+                  <UIcon v-if="n.tipo === 'EMAIL'" name="i-heroicons-envelope" class="w-4 h-4 mt-0.5 shrink-0 text-tfn-500" aria-hidden="true" />
                   <div class="min-w-0 flex-1">
                     <NuxtLink
                       v-if="n.link"

@@ -16,8 +16,9 @@
 //    finisce nello spam — che è poi l'unico modo perché le email arrivino davvero.
 //
 // DUE INTERRUTTORI PER SPEGNERLO (aggiunti dopo, su richiesta della segreteria):
-// - GENERALE: system_configs.riepilogo_serale_attivo, dalla pagina Impostazioni.
-//   Spento, la sera non parte niente per nessuno.
+// - GENERALE: system_configs.riepilogo_serale_attivo, dalla pagina Impostazioni
+//   (scheda Email). Spento lui, o spento l'interruttore di TUTTE le email
+//   (email_attive), la sera non parte niente per nessuno.
 // - PER ALUNNO: students.riepilogo_serale_attivo, dalla scheda dell'alunno.
 //   Spento, quella famiglia non riceve l'email; tutte le altre sì.
 // Il generale VINCE sempre sul singolo: se è spento lui, l'interruttore della
@@ -35,7 +36,8 @@
 import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../database/client'
 import { studentNotes, students, studentParents, users, systemConfigs } from '../database/schema'
-import { sendEmail, emailNoteNelPortale } from '../utils/email'
+import { randomUUID } from 'node:crypto'
+import { sendEmail, emailNoteNelPortale, notificaInvioDiMassa, tipoEmailAttivo } from '../utils/email'
 import { confiniGiornoOggiRome } from '../utils/tutor-time-window'
 
 // TETTO DI EMAIL PER GIRO: solo una rete contro le anomalie.
@@ -89,27 +91,22 @@ async function convenzioniDaAnnunciare(): Promise<{ nuove: { nome: string; descr
   return { nuove, ultima }
 }
 
-// L'INTERRUTTORE GENERALE, in system_configs come spese_fisse o whatsapp_numero.
-// Nessuna colonna nuova e nessuna migrazione: la riga nasce da sola la prima volta
-// che la segreteria salva le Impostazioni.
+// L'INTERRUTTORE GENERALE, in system_configs (riepilogo_serale_attivo). La chiave
+// e il valore di partenza stanno insieme a quelli delle altre email, in
+// shared/email.ts (INTERRUTTORI_EMAIL).
 //
 // SE LA RIGA NON C'È, IL RIEPILOGO È ACCESO. È la regola più importante di tutto
 // il file: prima che questo interruttore esistesse l'email partiva sempre, e una
 // configurazione semplicemente assente non deve spegnere di nascosto un avviso che
 // le famiglie si aspettano. Si spegne solo se qualcuno ha scritto "false" apposta.
-export const CHIAVE_RIEPILOGO_SERALE = 'riepilogo_serale_attivo'
 
 /**
- * L'interruttore generale del riepilogo serale: true = la sera le email partono.
- * Spento SOLO se la configurazione dice esattamente "false"; riga assente, vuota o
- * con un valore strano valgono ACCESO (vedi CHIAVE_RIEPILOGO_SERALE).
+ * true = stasera le email del riepilogo partono: acceso il suo interruttore E
+ * quello di tutte le email. È la stessa domanda che sendEmail fa a ogni email:
+ * chiederla qui all'inizio evita centinaia di righe "spenta" nel registro.
  */
 export async function riepilogoSeraleAttivoGlobalmente(): Promise<boolean> {
-  const [row] = await db.select({ value: systemConfigs.value })
-    .from(systemConfigs)
-    .where(eq(systemConfigs.key, CHIAVE_RIEPILOGO_SERALE))
-    .limit(1)
-  return (row?.value ?? '').trim().toLowerCase() !== 'false'
+  return await tipoEmailAttivo('RIEPILOGO_SERALE')
 }
 
 /** Esito di un giro del riepilogo: serve al log del cron per capire cosa è successo senza tirare a indovinare. */
@@ -214,7 +211,7 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
   if (!(await riepilogoSeraleAttivoGlobalmente())) {
     return esitoVuoto({
       saltato: true,
-      motivo: 'Il riepilogo serale è spento nelle Impostazioni: nessuna email inviata (le comunicazioni restano nel portale)',
+      motivo: 'Il riepilogo serale (o l\'invio di tutte le email) è spento nelle Impostazioni: nessuna email inviata (le comunicazioni restano nel portale)',
     })
   }
 
@@ -423,6 +420,9 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
   let emailInviate = 0
   const falliti: EsitoRiepilogoNote['falliti'] = []
   const noteDaSegnare = new Set<string>()
+  // Tutte le email di stasera sotto lo stesso invio: nel registro si ritrovano
+  // insieme, e alla fine parte UNA notifica riassuntiva invece di una a testa.
+  const invioId = randomUUID()
 
   for (const dest of elenco) {
     // Un invio che va male non deve far saltare il giro degli altri: si registra
@@ -431,7 +431,7 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
     // alle bretelle: qui dentro ci finisce anche un guasto imprevisto.
     try {
       const contenuto = emailNoteNelPortale({ nome: dest.nome, figli: dest.figli, link, convenzioni, linkConvenzioni })
-      const esito = await sendEmail({ to: dest.email, ...contenuto })
+      const esito = await sendEmail({ to: dest.email, tipo: 'RIEPILOGO_SERALE', nomeDestinatario: dest.nome, invioId, ...contenuto })
 
       if (esito.sent) {
         emailInviate++
@@ -447,6 +447,8 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
       falliti.push({ email: dest.email, motivo: 'IMPREVISTO', dettaglio: err instanceof Error ? err.message : undefined })
     }
   }
+
+  await notificaInvioDiMassa(invioId, 'Riepilogo serale')
 
   // ── 6. IL TIMBRO CONTRO I DOPPIONI ──
   // Da qui in poi queste note risultano "già annunciate": se il riepilogo
