@@ -1319,7 +1319,10 @@ const riepilogoSeraleAttivo = ref(true)
 // Maxi gruppo (system_configs.maxi_gruppo_attivo): acceso finché non si salva "false",
 // stesso criterio del server (lesson.service.ts → getMaxiAttivo). La tariffa MAXI resta salvata.
 const maxiGruppoAttivo = ref(true)
-const sconti = ref<{ nome: string; descrizione: string; immagine: string }[]>([])
+// creataAt: quando la convenzione è stata aggiunta. Serve al riepilogo serale per
+// annunciare alle famiglie SOLO le convenzioni nuove (vedi note-digest.service.ts).
+// Quelle nate prima di questo campo non ce l'hanno e contano come già note.
+const sconti = ref<{ nome: string; descrizione: string; immagine: string; creataAt?: string }[]>([])
 const materieSpeciali = ref<string[]>([])
 const giornateSpeciali = ref<Record<string, string[]>>({})
 // Anno scolastico dei Rientri: se non è mai stato salvato, la pagina propone
@@ -1464,7 +1467,12 @@ function aggiungiSconto() {
     toast.add({ title: 'Compila nome e descrizione', color: 'warning', icon: 'i-heroicons-exclamation-circle' })
     return
   }
-  sconti.value.push({ nome: nuovoSconto.nome.trim(), descrizione: nuovoSconto.descrizione.trim(), immagine: nuovoSconto.immagine })
+  sconti.value.push({
+    nome: nuovoSconto.nome.trim(),
+    descrizione: nuovoSconto.descrizione.trim(),
+    immagine: nuovoSconto.immagine,
+    creataAt: new Date().toISOString(),
+  })
   Object.assign(nuovoSconto, { nome: '', descrizione: '', immagine: '' })
   fileSconto.value = null
   toast.add({ title: 'Convenzione aggiunta', description: 'Ricordati di premere "Salva Modifiche".', color: 'info' })

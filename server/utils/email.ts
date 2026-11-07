@@ -215,14 +215,30 @@ export function emailAvvisoPacchetto(p: {
 // Un genitore con due figli riceve UNA email che parla di tutti e due: due
 // email nello stesso minuto dallo stesso mittente sembrano un errore, e i
 // filtri antispam le guardano peggio.
+//
+// LE NUOVE CONVENZIONI viaggiano nella STESSA email, per lo stesso motivo: la
+// sera parte al massimo un messaggio per casella. Le sezioni sono due e
+// indipendenti: quella delle note compare solo se ci sono figli con novità,
+// quella delle convenzioni solo se ce ne sono di nuove. Delle convenzioni si
+// mandano nome e descrizione, NON l'immagine: è salvata come "data URI" dentro
+// la configurazione, e molti programmi di posta (Gmail in testa) le bloccano o le
+// mostrano come allegato rotto. L'immagine si vede nel portale.
 export function emailNoteNelPortale(p: {
   /** Nome di battesimo del destinatario; se non lo conosciamo si saluta senza nome */
   nome?: string | null
-  /** Un elemento per figlio, con quante comunicazioni nuove ci sono per lui */
+  /** Un elemento per figlio, con quante comunicazioni nuove ci sono per lui (vuoto = niente note stasera) */
   figli: { nome: string; quante: number }[]
   /** Link assoluto alla pagina Note del portale; assente se appUrl non è configurato */
   link?: string
+  /** Convenzioni aggiunte dall'ultimo annuncio; vuoto o assente = nessuna sezione convenzioni */
+  convenzioni?: { nome: string; descrizione: string }[]
+  /** Link assoluto alla pagina Sconti del portale; assente se appUrl non è configurato */
+  linkConvenzioni?: string
 }): { subject: string; html: string } {
+  const conNote = p.figli.length > 0
+  const convenzioni = p.convenzioni ?? []
+  const conConvenzioni = convenzioni.length > 0
+
   const totale = p.figli.reduce((somma, f) => somma + f.quante, 0)
   const unaSola = totale === 1
 
@@ -257,17 +273,57 @@ export function emailNoteNelPortale(p: {
       </p>`
     : '<p style="font-size: 14px;">Entra nel portale delle famiglie di tiformiamonoi e apri la sezione <strong>Note</strong>.</p>'
 
-  return {
-    subject: unaSola
-      ? 'Una nuova comunicazione nel portale — tiformiamonoi'
-      : 'Nuove comunicazioni nel portale — tiformiamonoi',
-    html: layout('Novità nel portale', `
+  // La riga sulla riservatezza parla del testo delle NOTE: senza note sarebbe
+  // una frase fuori posto, quindi vive dentro la loro sezione.
+  const sezioneNote = conNote
+    ? `
       <p style="font-size: 14px;">${saluto} ${frase}</p>
       <p style="font-size: 14px;">${invito}</p>
       ${azione}
       <p style="font-size: 13px; color: #64748b;">
         Per riservatezza il testo della comunicazione non viaggia mai per email: si legge solo nel portale, dopo l'accesso.
-      </p>
+      </p>`
+    : ''
+
+  // Nome e descrizione li scrive la segreteria a mano: passano da escapeHtml
+  // come ogni testo digitato, e gli "a capo" della descrizione restano a capo.
+  const elencoConvenzioni = convenzioni.map((c) => `
+      <p style="font-size: 14px; margin: 0 0 12px;">
+        <strong>${escapeHtml(c.nome)}</strong><br>
+        ${escapeHtml(c.descrizione).replace(/\r?\n/g, '<br>')}
+      </p>`).join('')
+
+  const azioneConvenzioni = p.linkConvenzioni
+    ? `<p style="margin: 20px 0;">
+        <a href="${p.linkConvenzioni}" style="display:inline-block;background:#0063A6;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;">
+          Vedi le convenzioni
+        </a>
+      </p>`
+    : '<p style="font-size: 14px;">Le trovi nel portale delle famiglie di tiformiamonoi, nella sezione <strong>Sconti</strong>.</p>'
+
+  // Se l'email parla SOLO di convenzioni il saluto apre questa sezione; se ci
+  // sono anche le note il saluto l'ha già fatto la sezione di sopra.
+  const sezioneConvenzioni = conConvenzioni
+    ? `
+      ${conNote ? '' : `<p style="font-size: 14px;">${saluto} ci sono novità tra le convenzioni riservate alle famiglie di tiformiamonoi.</p>`}
+      <h4 style="font-size: 15px; margin: 24px 0 12px;">Nuove convenzioni per voi</h4>
+      ${elencoConvenzioni}
+      ${azioneConvenzioni}`
+    : ''
+
+  const subject = conNote && conConvenzioni
+    ? 'Novità nel portale — tiformiamonoi'
+    : conConvenzioni
+      ? 'Nuove convenzioni per le famiglie — tiformiamonoi'
+      : unaSola
+        ? 'Una nuova comunicazione nel portale — tiformiamonoi'
+        : 'Nuove comunicazioni nel portale — tiformiamonoi'
+
+  return {
+    subject,
+    html: layout('Novità nel portale', `
+      ${sezioneNote}
+      ${sezioneConvenzioni}
       <p style="font-size: 13px; color: #64748b; margin-top: 16px;">
         Ricevi questa email perché sei collegato al portale famiglie di tiformiamonoi:
         ti scriviamo una volta sola a fine giornata, e soltanto nei giorni in cui c'è davvero qualcosa di nuovo.

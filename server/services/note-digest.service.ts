@@ -24,21 +24,70 @@
 // scheda non conta (ed è quello che l'interfaccia deve far capire a colpo d'occhio).
 // In nessuno dei due casi la comunicazione sparisce: resta nel portale e si legge
 // entrando. Si spegne la posta, non il contenuto.
+//
+// LE NUOVE CONVENZIONI (aggiunte dopo): nella stessa email della sera, sotto le
+// note, finiscono anche le convenzioni (Impostazioni → Sconti) aggiunte
+// dall'ultimo annuncio. Quando ce n'è almeno una nuova l'email parte a TUTTE le
+// famiglie, anche a quelle senza note; i due interruttori qui sopra valgono anche
+// per loro. Una casella riceve comunque UN messaggio solo, con dentro quello che
+// la riguarda. Come si riconosce una convenzione "nuova" è spiegato in
+// convenzioniDaAnnunciare, qui sotto.
 import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../database/client'
 import { studentNotes, students, studentParents, users, systemConfigs } from '../database/schema'
 import { sendEmail, emailNoteNelPortale } from '../utils/email'
 import { confiniGiornoOggiRome } from '../utils/tutor-time-window'
 
-// TETTO PRUDENTE DI EMAIL PER GIRO.
-// Il piano gratuito di Brevo si ferma a 300 email al giorno, e quella quota è
-// condivisa con gli avvisi dei pacchetti e con gli inviti a scegliere la
-// password. Con ~99 alunni un riepilogo normale sta sotto le 50 email: se un
-// giorno ne venissero fuori più di 120 vuol dire che è successo qualcosa di
-// anomalo (un'approvazione in blocco dell'arretrato, per esempio). In quel caso
-// è meglio FERMARSI e segnalarlo che bruciare la quota giornaliera e lasciare
-// la scuola senza posta per il resto della giornata.
-const MAX_EMAIL_PER_RUN = 120
+// TETTO DI EMAIL PER GIRO: solo una rete contro le anomalie.
+// La quota di Brevo non è più un problema (confermato dalla segreteria), e con le
+// convenzioni nuove l'email parte a tutte le famiglie: con ~150 caselle un tetto
+// a 120 fermerebbe proprio le sere giuste. Resta un limite alto, che una scuola
+// di queste dimensioni non può raggiungere davvero: se lo supera vuol dire che
+// qualcosa è andato storto (indirizzi duplicati a valanga, un ciclo impazzito),
+// e allora è meglio FERMARSI e segnalarlo che spedire alla cieca.
+const MAX_EMAIL_PER_RUN = 1000
+
+// IL SEGNALIBRO DELLE CONVENZIONI, in system_configs accanto alla riga 'sconti'.
+// Contiene la data di creazione dell'ultima convenzione già annunciata; lo scrive
+// SOLO questo file. Sta in una riga a parte e non dentro il JSON delle convenzioni
+// perché quel JSON lo riscrive per intero la pagina Impostazioni a ogni "Salva":
+// un timbro messo lì dal riepilogo verrebbe cancellato dal primo salvataggio di
+// una pagina aperta da prima. Il salvataggio delle Impostazioni tocca solo le
+// righe che invia, quindi questa non la sfiora.
+const CHIAVE_CONVENZIONI_ANNUNCIATE = 'sconti_annunciate_fino_a'
+
+/**
+ * Le convenzioni da annunciare stasera, più la data dell'ultima (in millisecondi)
+ * che diventerà il nuovo segnalibro se l'annuncio parte.
+ *
+ * NUOVA = ha la data di creazione (creataAt, timbrata da "Aggiungi convenzione")
+ * ed è successiva al segnalibro. Quelle senza data sono nate prima che la data
+ * esistesse e contano come GIÀ NOTE: è ciò che impedisce, il giorno della messa in
+ * linea, di riannunciare a tutte le famiglie le convenzioni di sempre. Segnalibro
+ * assente = nessun annuncio fatto finora = valgono tutte quelle con la data.
+ */
+async function convenzioniDaAnnunciare(): Promise<{ nuove: { nome: string; descrizione: string }[]; ultima: number }> {
+  const righe = await db.select({ key: systemConfigs.key, value: systemConfigs.value })
+    .from(systemConfigs)
+    .where(inArray(systemConfigs.key, ['sconti', CHIAVE_CONVENZIONI_ANNUNCIATE]))
+  const valore = (chiave: string) => righe.find((r) => r.key === chiave)?.value ?? ''
+
+  const segnalibro = Date.parse(valore(CHIAVE_CONVENZIONI_ANNUNCIATE))
+  let elenco: any
+  try { elenco = JSON.parse(valore('sconti') || '[]') } catch { elenco = [] }
+  if (!Array.isArray(elenco)) elenco = []
+
+  const nuove: { nome: string; descrizione: string }[] = []
+  let ultima = 0
+  for (const s of elenco) {
+    const creata = Date.parse(s?.creataAt ?? '')
+    if (!Number.isFinite(creata)) continue
+    if (Number.isFinite(segnalibro) && creata <= segnalibro) continue
+    nuove.push({ nome: String(s.nome ?? ''), descrizione: String(s.descrizione ?? '') })
+    ultima = Math.max(ultima, creata)
+  }
+  return { nuove, ultima }
+}
 
 // L'INTERRUTTORE GENERALE, in system_configs come spese_fisse o whatsapp_numero.
 // Nessuna colonna nuova e nessuna migrazione: la riga nasce da sola la prima volta
@@ -88,6 +137,12 @@ export interface EsitoRiepilogoNote {
    * nessuno se ne accorga.
    */
   alunniConInvioSpento: number
+  /**
+   * Convenzioni nuove trovate e messe nelle email di stasera. Il segnalibro avanza
+   * (e quindi domani non si riannunciano) solo se emailInviate è almeno 1: con la
+   * posta del tutto giù, domani ci si riprova.
+   */
+  convenzioniNuove: number
   /**
    * true quando il giro non ha mandato niente PER SCELTA (interruttore generale
    * spento), non per un guasto. Stessa forma della risposta del cron quando la
@@ -146,6 +201,7 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
     noteSegnate: 0,
     tettoRaggiunto: false,
     alunniConInvioSpento: 0,
+    convenzioniNuove: 0,
     ...extra,
   })
 
@@ -187,7 +243,12 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
       sql`${studentNotes.approvataAt} <= now()`,
     ))
 
-  if (note.length === 0) return esitoVuoto()
+  // ── 1b. LE CONVENZIONI DA ANNUNCIARE ──
+  // Si esce a vuoto solo se mancano TUTTE E DUE le cose: una sera senza note ma
+  // con una convenzione nuova l'email deve partire lo stesso.
+  const { nuove: convenzioni, ultima: ultimaConvenzione } = await convenzioniDaAnnunciare()
+
+  if (note.length === 0 && convenzioni.length === 0) return esitoVuoto()
 
   // ── 2. RAGGRUPPAMENTO PER ALUNNO ──
   interface Alunno {
@@ -233,12 +294,35 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
     })
   }
 
-  // Se TUTTE le note trovate erano di alunni con l'avviso spento non resta niente da
-  // spedire, ma il giro non è "vuoto": il conteggio degli alunni saltati deve
-  // arrivare lo stesso nel registro. (Serve anche a evitare la query qui sotto con
-  // un elenco di id vuoto.)
+  const alunniConNote = alunni.size
+
+  // CON CONVENZIONI NUOVE ENTRANO IN SCENA TUTTI GLI ALUNNI ATTIVI con l'avviso
+  // serale acceso, anche senza note: a loro arriva la sola sezione convenzioni
+  // (noteIds vuoto). Chi ha già delle note è già nell'elenco e non si duplica.
+  // Gli alunni con l'interruttore spento restano fuori anche qui: la segreteria
+  // ha chiesto che valga per tutta la posta della sera, non solo per le note.
+  if (convenzioni.length > 0) {
+    const attivi = await db.select({
+      id:          students.id,
+      firstName:   students.firstName,
+      parentName:  students.parentName,
+      parentEmail: students.parentEmail,
+    })
+      .from(students)
+      .where(and(eq(students.active, true), eq(students.riepilogoSeraleAttivo, true)))
+
+    for (const s of attivi) {
+      if (alunni.has(s.id)) continue
+      alunni.set(s.id, { nome: s.firstName, parentName: s.parentName, parentEmail: s.parentEmail, noteIds: [] })
+    }
+  }
+
+  // Se TUTTE le note trovate erano di alunni con l'avviso spento (e non ci sono
+  // convenzioni da annunciare) non resta niente da spedire, ma il giro non è
+  // "vuoto": il conteggio degli alunni saltati deve arrivare lo stesso nel
+  // registro. (Serve anche a evitare la query qui sotto con un elenco di id vuoto.)
   if (alunni.size === 0) {
-    return esitoVuoto({ noteTrovate: note.length, alunniConInvioSpento: alunniConInvioSpento.size })
+    return esitoVuoto({ noteTrovate: note.length, alunniConInvioSpento: alunniConInvioSpento.size, convenzioniNuove: convenzioni.length })
   }
 
   // ── 3. I DESTINATARI ──
@@ -294,31 +378,37 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
     for (const r of recapiti) {
       const chiave = chiaveEmail(r.email)
       const dest = destinatari.get(chiave) ?? { email: r.email, nome: primoNome(r.nome), figli: [], noteIds: [] }
-      dest.figli.push({ nome: alunno.nome, quante: alunno.noteIds.length })
-      dest.noteIds.push(...alunno.noteIds)
+      // Un figlio senza note (entrato solo per le convenzioni) non va nominato:
+      // "0 comunicazioni per Luca" sarebbe un rumore. La casella resta comunque
+      // in elenco e riceve la sezione convenzioni.
+      if (alunno.noteIds.length > 0) {
+        dest.figli.push({ nome: alunno.nome, quante: alunno.noteIds.length })
+        dest.noteIds.push(...alunno.noteIds)
+      }
       destinatari.set(chiave, dest)
     }
   }
 
   const elenco = [...destinatari.values()]
   if (elenco.length === 0) {
-    return esitoVuoto({ noteTrovate: note.length, alunniConNote: alunni.size, alunniSenzaRecapito, alunniConInvioSpento: alunniConInvioSpento.size })
+    return esitoVuoto({ noteTrovate: note.length, alunniConNote, alunniSenzaRecapito, alunniConInvioSpento: alunniConInvioSpento.size, convenzioniNuove: convenzioni.length })
   }
 
-  // Il tetto ferma TUTTO il giro invece di mandarne 120 e tagliare il resto: se
-  // il numero è anomalo, il problema va guardato in faccia prima di spedire.
+  // Il tetto ferma TUTTO il giro invece di mandarne una parte e tagliare il resto:
+  // se il numero è anomalo, il problema va guardato in faccia prima di spedire.
   if (elenco.length > MAX_EMAIL_PER_RUN) {
     console.error(
-      `[note-digest] Fermato: ${elenco.length} email da mandare, oltre il tetto prudente di ${MAX_EMAIL_PER_RUN}. ` +
-      'Nessuna email inviata: controllare se sono state approvate note arretrate in blocco.'
+      `[note-digest] Fermato: ${elenco.length} email da mandare, oltre il tetto di sicurezza di ${MAX_EMAIL_PER_RUN}. ` +
+      'Nessuna email inviata: controllare indirizzi duplicati o note arretrate approvate in blocco.'
     )
     return esitoVuoto({
       noteTrovate: note.length,
-      alunniConNote: alunni.size,
+      alunniConNote,
       destinatari: elenco.length,
       alunniSenzaRecapito,
       tettoRaggiunto: true,
       alunniConInvioSpento: alunniConInvioSpento.size,
+      convenzioniNuove: convenzioni.length,
     })
   }
 
@@ -328,6 +418,7 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
   const config = useRuntimeConfig()
   const base = (config.appUrl ?? '').replace(/\/+$/, '')
   const link = base ? `${base}/portale/note` : undefined
+  const linkConvenzioni = base ? `${base}/portale/sconti` : undefined
 
   let emailInviate = 0
   const falliti: EsitoRiepilogoNote['falliti'] = []
@@ -339,7 +430,7 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
     // pacchetti. sendEmail di suo non lancia mai, ma il try è la cintura oltre
     // alle bretelle: qui dentro ci finisce anche un guasto imprevisto.
     try {
-      const contenuto = emailNoteNelPortale({ nome: dest.nome, figli: dest.figli, link })
+      const contenuto = emailNoteNelPortale({ nome: dest.nome, figli: dest.figli, link, convenzioni, linkConvenzioni })
       const esito = await sendEmail({ to: dest.email, ...contenuto })
 
       if (esito.sent) {
@@ -370,10 +461,29 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
       .where(inArray(studentNotes.id, [...noteDaSegnare]))
   }
 
+  // ── 7. IL SEGNALIBRO DELLE CONVENZIONI ──
+  // Stesso spirito del timbro sulle note: si sposta in avanti solo se almeno
+  // un'email è partita davvero (tutte le email di stasera contengono le
+  // convenzioni). Con Brevo del tutto giù resta dov'è e domani si riprova.
+  //
+  // PERCHÉ LA DATA DELL'ULTIMA CONVENZIONE ANNUNCIATA E NON L'ORA DEL GIRO: la
+  // data di creazione si timbra quando la segreteria preme "Aggiungi
+  // convenzione", ma la convenzione arriva nel database solo con "Salva
+  // Modifiche", magari qualche minuto dopo. Con l'ora del giro, una convenzione
+  // aggiunta alle 19:58 e salvata alle 20:05 resterebbe per sempre "più vecchia
+  // del segnalibro" e non verrebbe annunciata mai. Così invece entra nel giro di
+  // domani sera.
+  if (convenzioni.length > 0 && emailInviate > 0) {
+    const value = new Date(ultimaConvenzione).toISOString()
+    await db.insert(systemConfigs)
+      .values({ key: CHIAVE_CONVENZIONI_ANNUNCIATE, value })
+      .onConflictDoUpdate({ target: systemConfigs.key, set: { value, updatedAt: new Date() } })
+  }
+
   return {
     finestra,
     noteTrovate: note.length,
-    alunniConNote: alunni.size,
+    alunniConNote,
     destinatari: elenco.length,
     emailInviate,
     emailFallite: falliti.length,
@@ -382,5 +492,6 @@ export async function runNoteDigest(): Promise<EsitoRiepilogoNote> {
     noteSegnate: noteDaSegnare.size,
     tettoRaggiunto: false,
     alunniConInvioSpento: alunniConInvioSpento.size,
+    convenzioniNuove: convenzioni.length,
   }
 }
