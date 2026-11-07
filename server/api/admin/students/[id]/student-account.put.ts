@@ -1,4 +1,7 @@
 import { z } from 'zod'
+import { and, eq } from 'drizzle-orm'
+import { db } from '../../../../database/client'
+import { students, users } from '../../../../database/schema'
 import { correggiEmailAccount, inviaLinkPassword, setStudentAccountActive } from '../../../../services/portal-user.service'
 import { toHttpError } from '../../../../utils/http-error'
 
@@ -43,6 +46,22 @@ export default defineEventHandler(async (event) => {
       })
     }
     if (result.data.action === 'reset-password') {
+      // Il link si manda solo all'account STUDENTE collegato proprio a QUESTO alunno:
+      // senza questo controllo un userId qualsiasi (anche di un admin) riceverebbe un
+      // link "scegli la tua password". Se non torna, 404 e nessun token creato.
+      const studentId = getRouterParam(event, 'id')
+      if (!studentId) throw createError({ statusCode: 400, statusMessage: 'ID studente mancante' })
+      const [collegato] = await db
+        .select({ id: users.id })
+        .from(students)
+        .innerJoin(users, eq(users.id, students.studentUserId))
+        .where(and(
+          eq(students.id, studentId),
+          eq(students.studentUserId, result.data.userId),
+          eq(users.role, 'STUDENTE'),
+        ))
+        .limit(1)
+      if (!collegato) throw createError({ statusCode: 404, statusMessage: 'Account studente non trovato' })
       // motivoEmail/dettaglioEmail valorizzati solo se l'email non è partita
       const { linkPassword, emailInviata, motivoEmail, dettaglioEmail } = await inviaLinkPassword(result.data.userId)
       return { ok: true, linkPassword, emailInviata, motivoEmail, dettaglioEmail }

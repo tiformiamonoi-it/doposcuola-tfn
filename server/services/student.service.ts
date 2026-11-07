@@ -30,19 +30,30 @@ function pacchettoAperto() {
   )
 }
 
+// Neutralizza i caratteri jolly di LIKE/ILIKE nel testo digitato dall'utente
+// (stessa funzione di contact.service e confirmation.service): "100%" deve
+// cercare "100%", non "qualsiasi cosa che inizi con 100".
+function escapeLike(testo: string) {
+  return testo.replace(/[\\%_]/g, (c) => `\\${c}`)
+}
+
 // ─────────────────────────────────────────────
 // LIST  — GET /api/students
 // ─────────────────────────────────────────────
 
-export async function listStudents(query: StudentQuery) {
+// perTutor: la lista la chiede un TUTOR. Il tutor non vede né l'email del genitore
+// né lo stato dei pagamenti, quindi non può nemmeno cercarli o filtrarli: anche
+// solo "quali righe tornano" gli farebbe indovinare il dato nascosto.
+export async function listStudents(query: StudentQuery, opzioni: { perTutor?: boolean } = {}) {
+  const testo = query.search ? `%${escapeLike(query.search)}%` : undefined
   const conditions = [
     query.active !== undefined ? eq(students.active, query.active === 'true') : undefined,
     query.classe ? eq(students.classe, query.classe) : undefined,
-    query.search
+    testo
       ? or(
-          ilike(students.lastName,   `%${query.search}%`),
-          ilike(students.firstName,  `%${query.search}%`),
-          ilike(students.parentEmail, `%${query.search}%`),
+          ilike(students.lastName,   testo),
+          ilike(students.firstName,  testo),
+          opzioni.perTutor ? undefined : ilike(students.parentEmail, testo),
         )
       : undefined,
   ]
@@ -70,7 +81,9 @@ export async function listStudents(query: StudentQuery) {
   // anche se nessuno dei suoi pacchetti è davvero un mensile da pagare.
   // (Con "Nessun pacchetto" + un tipo scelto la lista resta vuota: è giusto così,
   // le due richieste si contraddicono.)
-  const statoPacchetto = query.packageStatus !== 'all' && query.packageStatus !== 'NESSUNO' ? query.packageStatus : undefined
+  // Per il TUTOR il filtro "Da pagare" viene ignorato (vedi perTutor qui sopra)
+  const statoPacchetto = query.packageStatus !== 'all' && query.packageStatus !== 'NESSUNO'
+    && !(opzioni.perTutor && query.packageStatus === 'DA_PAGARE') ? query.packageStatus : undefined
   if (statoPacchetto || query.packageTipo || query.standardPackageId) {
     conditions.push(
       exists(
@@ -193,10 +206,11 @@ export async function listStudents(query: StudentQuery) {
          // (contabilità, filtri e conteggi non cambiano), ma un saldo aperto su un pacchetto
          // NON ancora iniziato non è un'urgenza e non deve dipingere l'alunno di rosso.
          // Rosso solo se il servizio è già finito o scaduto e i soldi non sono stati incassati.
-         const debitoUrgente = pkgs.some(p => p.stati.includes('DA_PAGARE')
+         // Per il TUTOR "Da saldare" non esiste: il badge racconta solo il servizio.
+         const debitoUrgente = !opzioni.perTutor && pkgs.some(p => p.stati.includes('DA_PAGARE')
            && (p.stati.includes('SCADUTO') || p.stati.includes('ESAURITO')))
          // Servizio già partito (giorno civile italiano) ma non saldato: giallo, non rosso
-         const debitoInCorso = pkgs.some(p => p.stati.includes('DA_PAGARE')
+         const debitoInCorso = !opzioni.perTutor && pkgs.some(p => p.stati.includes('DA_PAGARE')
            && romeDateStr(new Date(p.dataInizio)) <= oggiStr)
          const hasDaRinnovare = pkgs.some(p => p.stati.includes('DA_RINNOVARE') || p.stati.includes('ESAURITO'))
          const hasScaduto = pkgs.some(p => p.stati.includes('SCADUTO'))

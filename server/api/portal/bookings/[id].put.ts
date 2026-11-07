@@ -26,11 +26,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 422, statusMessage: 'Dati non validi', data: result.error.format() })
   }
 
-  // Proprietà: creata da questo utente OPPURE relativa a uno studente collegato
+  // Proprietà: relativa a uno studente collegato
   // (così genitore e studente possono agire sulle stesse prenotazioni)
   const booking = await db.query.bookings.findFirst({ where: eq(bookings.id, id) })
   const portalIds = await getPortalStudentIds(user)
-  const isOwner = booking && (booking.userId === user.id || (booking.studentId && portalIds.includes(booking.studentId)))
+  // Se la prenotazione ha uno studente conta solo il legame attuale con lui:
+  // chi è stato scollegato dal figlio perde l'accesso anche a quelle che aveva creato.
+  // Il "creata da me" vale solo per le prenotazioni storiche senza studente.
+  const isOwner = booking && (booking.studentId ? portalIds.includes(booking.studentId) : booking.userId === user.id)
 
   if (!booking || !isOwner) {
     throw createError({ statusCode: 404, statusMessage: 'Prenotazione non trovata' })

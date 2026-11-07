@@ -156,11 +156,13 @@ export async function listTutors(query: TutorQuery) {
   // mostra nella colonna "Lez. mese".
   const meseOggi  = meseDiOggi()
 
-  const searchWhere = query.search
+  // Caratteri jolly di ILIKE neutralizzati (come in student.service): "%" cerca "%"
+  const cerca = query.search ? `%${query.search.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : undefined
+  const searchWhere = cerca
     ? or(
-        ilike(users.firstName, `%${query.search}%`),
-        ilike(users.lastName,  `%${query.search}%`),
-        ilike(users.email,     `%${query.search}%`),
+        ilike(users.firstName, cerca),
+        ilike(users.lastName,  cerca),
+        ilike(users.email,     cerca),
       )
     : undefined
 
@@ -409,9 +411,22 @@ export async function createTutor(data: CreateTutorInput) {
 }
 
 // ─────────────────────────────────────────────
+// CHI PUÒ GESTIRE QUALE ACCOUNT DELLO STAFF
+// Conta il ruolo ATTUALE dell'account, non quello che gli si vuole dare:
+// l'ADMIN gestisce tutto lo staff; il SUPER_TUTOR (e chiunque altro) solo i TUTOR.
+// Altrimenti un SUPER_TUTOR potrebbe cambiare email o password di un ADMIN,
+// archiviarlo o mandarsi un link per entrare al suo posto.
+// ─────────────────────────────────────────────
+export function ruoliStaffGestibili(ruoloChiamante: string): Array<'TUTOR' | 'SUPER_TUTOR' | 'ADMIN'> {
+  return ruoloChiamante === 'ADMIN' ? ['TUTOR', 'SUPER_TUTOR', 'ADMIN'] : ['TUTOR']
+}
+
+// ─────────────────────────────────────────────
 // UPDATE — PUT /api/tutors/:id
 // ─────────────────────────────────────────────
-export async function updateTutor(id: string, data: UpdateTutorInput) {
+// proprioProfilo: chi chiama modifica SÉ STESSO. Il handler ha già tolto dai dati
+// ruolo, attivo, password, email e campi economici: qui basta lasciar passare il suo account.
+export async function updateTutor(id: string, data: UpdateTutorInput, ruoloChiamante: string, proprioProfilo = false) {
   const userChanges: Record<string, unknown>    = { updatedAt: new Date() }
   const profileChanges: Record<string, unknown> = { updatedAt: new Date() }
 
@@ -436,6 +451,22 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
     userChanges.mustChangePassword = true // il tutor dovrà cambiarla al prossimo accesso
   }
 
+  // CHIUSURA DELLE SESSIONI APERTE (vedi users.sessionVersion): password reimpostata,
+  // ruolo cambiato, archiviato o ripristinato → i dispositivi già collegati escono.
+  // Il modulo rimanda ruolo e "attivo" a ogni salvataggio anche quando non cambiano:
+  // per questo si confronta col valore attuale DENTRO la stessa UPDATE (a destra del
+  // SET Postgres legge la riga com'era prima), così correggere un telefono non butta
+  // fuori nessuno.
+  const cambiaAccesso = [
+    userChanges.role !== undefined ? sql`${users.role}::text IS DISTINCT FROM ${userChanges.role}` : null,
+    userChanges.active !== undefined ? sql`${users.active} IS DISTINCT FROM ${userChanges.active}` : null,
+  ].filter((c) => c !== null)
+  if (data.password) {
+    userChanges.sessionVersion = sql`${users.sessionVersion} + 1`
+  } else if (cambiaAccesso.length > 0) {
+    userChanges.sessionVersion = sql`CASE WHEN ${sql.join(cambiaAccesso, sql` OR `)} THEN ${users.sessionVersion} + 1 ELSE ${users.sessionVersion} END`
+  }
+
   const updated = await db.transaction(async (tx) => {
     // L'email di prima serve solo se il modulo ne porta una: è l'unico modo di
     // sapere se sta cambiando davvero (il modulo la rimanda anche quando è la stessa).
@@ -445,8 +476,10 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
 
     const [user] = await tx.update(users)
       .set(userChanges as any)
-      // Tutto lo staff è modificabile (serve per cambiare ruolo in entrambe le direzioni)
-      .where(and(eq(users.id, id), inArray(users.role, ['TUTOR', 'SUPER_TUTOR', 'ADMIN'])))
+      // Solo gli account che chi chiama può gestire (vedi ruoliStaffGestibili): il vincolo
+      // sta nella stessa UPDATE, così non c'è un attimo tra controllo e scrittura.
+      // Per l'ADMIN resta tutto lo staff (serve per cambiare ruolo in entrambe le direzioni).
+      .where(and(eq(users.id, id), inArray(users.role, proprioProfilo ? ['TUTOR', 'SUPER_TUTOR', 'ADMIN'] : ruoliStaffGestibili(ruoloChiamante))))
       .returning()
 
     if (!user) return null
@@ -528,11 +561,13 @@ export async function updateTutor(id: string, data: UpdateTutorInput) {
 // ─────────────────────────────────────────────
 // DEACTIVATE — DELETE /api/tutors/:id (soft)
 // ─────────────────────────────────────────────
-export async function deactivateTutor(id: string) {
+export async function deactivateTutor(id: string, ruoloChiamante: string) {
   return db.transaction(async (tx) => {
     const [updated] = await tx.update(users)
-      .set({ active: false, updatedAt: new Date() })
-      .where(and(eq(users.id, id), inArray(users.role, ['TUTOR', 'SUPER_TUTOR', 'ADMIN'])))
+      // sessionVersion + 1: i dispositivi su cui il tutor è collegato escono subito
+      .set({ active: false, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() })
+      // Come in updateTutor: si archivia solo un account che chi chiama può gestire
+      .where(and(eq(users.id, id), inArray(users.role, ruoliStaffGestibili(ruoloChiamante))))
       .returning()
     if (!updated) return null
 

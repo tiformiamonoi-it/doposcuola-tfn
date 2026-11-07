@@ -3,6 +3,7 @@ import { db } from '../../../database/client'
 import { users } from '../../../database/schema'
 import { inviaInvitoPasswordAUtente } from '../../../utils/password-token'
 import { toHttpError } from '../../../utils/http-error'
+import { ruoliStaffGestibili } from '../../../services/tutor.service'
 
 // POST /api/tutors/:id/link-password
 // Manda al tutor un link "scegli la tua password" (e lo restituisce alla
@@ -20,9 +21,10 @@ export default defineEventHandler(async (event) => {
   if (!id) throw createError({ statusCode: 400, statusMessage: 'ID tutor mancante' })
 
   // Questa route vive sotto /api/tutors: deve poter agire solo su account staff,
-  // mai su un genitore o uno studente passato per id.
+  // mai su un genitore o uno studente passato per id. E solo su quelli che chi
+  // chiama può gestire: un SUPER_TUTOR non può mandarsi il link di un ADMIN.
   const target = await db.query.users.findFirst({
-    where: and(eq(users.id, id), inArray(users.role, ['TUTOR', 'SUPER_TUTOR', 'ADMIN'])),
+    where: and(eq(users.id, id), inArray(users.role, ruoliStaffGestibili(user.role))),
     columns: { id: true },
   })
   if (!target) throw createError({ statusCode: 404, statusMessage: 'Tutor non trovato' })

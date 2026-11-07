@@ -12,6 +12,11 @@ const FAMIGLIA: Role[] = ['GENITORE', 'STUDENTE']
 // Path pubblici: nessun login richiesto
 export const PUBLIC_API_PREFIXES = [
   '/api/auth/login',
+  // Uscire deve riuscire SEMPRE, anche con una sessione già scaduta o appena chiusa
+  // dalla guardia (account disattivato, password cambiata altrove): altrimenti il
+  // tasto "Esci" risponderebbe 401 e il menu mostrerebbe "Errore durante il logout".
+  // Il logout cancella soltanto il cookie di chi chiama: non c'è niente da proteggere.
+  '/api/auth/logout',
   '/api/auth/forgot-password', // recupero password self-service (rate-limited)
   // Pagina "scegli la tua password": chi arriva dal link NON è ancora loggato.
   // isPublicApi() confronta il percorso INTERO (o un suo sotto-percorso), quindi
@@ -63,7 +68,9 @@ export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: 
   // Lettura pacchetti aperta allo STAFF (serve al tutor per scalare le ore in una lezione),
   // ma i campi economici vengono rimossi per i TUTOR nei handler GET; scritture solo ADMIN/SUPER.
   { prefix: '/api/packages',                roles: STAFF, mutationRoles: ADMIN_SUPER },
-  { prefix: '/api/standard-packages',       roles: ADMIN_SUPER },
+  // Listino pacchetti standard: lo legge anche il SUPER_TUTOR (per creare i pacchetti),
+  // ma crearlo, modificarlo, archiviarlo o ripristinarlo è solo dell'ADMIN.
+  { prefix: '/api/standard-packages',       roles: ADMIN_SUPER, mutationRoles: ADMIN_ONLY },
   // I tutor possono creare/modificare solo le proprie lezioni del giorno, entro le 20:00
   // (controllo granulare dentro service/handler) — la policy qui apre solo l'accesso di massima.
   { prefix: '/api/lessons',                 roles: STAFF },
@@ -98,8 +105,12 @@ export function isPublicApi(rawPath: string): boolean {
 
 const MUTATION_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
-export function allowedRolesFor(path: string, method = 'GET'): Role[] {
-  const rule = API_POLICY.find((r) => path.startsWith(r.prefix))
+export function allowedRolesFor(rawPath: string, method = 'GET'): Role[] {
+  // Come in isPublicApi(): via la query string e confronto per segmento intero,
+  // altrimenti '/api/tutors/availabilitiesX/...' (che il router manda a /api/tutors/:id/...)
+  // prenderebbe la regola STAFF di '/api/tutors/availabilities' e il TUTOR passerebbe.
+  const path = rawPath.split('?')[0] ?? rawPath
+  const rule = API_POLICY.find((r) => path === r.prefix || path.startsWith(r.prefix + '/'))
   if (!rule) return DEFAULT_ROLES
   if (rule.mutationRoles && MUTATION_METHODS.has(method.toUpperCase())) return rule.mutationRoles
   return rule.roles

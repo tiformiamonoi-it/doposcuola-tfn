@@ -8,7 +8,7 @@
 // dump per errore) troverebbe stringhe inutilizzabili: dall'impronta non si
 // risale al link, quindi non si entra in nessun account.
 
-import { and, eq, isNull, gt, ne } from 'drizzle-orm'
+import { and, eq, isNull, gt, ne, sql } from 'drizzle-orm'
 import { createHash, randomBytes } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { db, type Db } from '../database/client'
@@ -74,7 +74,8 @@ export async function annullaLinkAperti(userId: string, esecutore: Pick<Db, 'upd
  * Crea un nuovo link "scegli la tua password" per un account.
  * Invalida tutti i link precedenti ancora aperti dello stesso utente: vale
  * sempre e solo l'ultimo mandato, così un vecchio link finito in una chat
- * dimenticata non resta buono.
+ * dimenticata non resta buono. (Eccezione: il RECUPERO lascia aperto l'invito
+ * PRIMO_ACCESSO; quando uno dei due viene usato, consumaToken brucia l'altro.)
  *
  * Restituisce il token in chiaro (che NON viene salvato) e il link completo.
  */
@@ -93,8 +94,22 @@ export async function creaLinkPassword(userId: string, scopo: ScopoToken): Promi
   const expiresAt = new Date(Date.now() + ore * 60 * 60 * 1000)
 
   await db.transaction(async (tx) => {
-    // Un solo link valido per volta
-    await annullaLinkAperti(userId, tx)
+    if (scopo === 'RECUPERO') {
+      // Recupero chiesto dal sito ("password dimenticata", unico punto che usa
+      // RECUPERO): annulla solo i recuperi precedenti, NON l'invito di primo
+      // accesso mandato dalla segreteria. Altrimenti chiunque conosca l'email di
+      // una famiglia potrebbe bruciarle l'invito con un clic.
+      await tx.update(passwordTokens)
+        .set({ usedAt: new Date() })
+        .where(and(
+          eq(passwordTokens.userId, userId),
+          eq(passwordTokens.scopo, 'RECUPERO'),
+          isNull(passwordTokens.usedAt),
+        ))
+    } else {
+      // Un solo link valido per volta
+      await annullaLinkAperti(userId, tx)
+    }
 
     await tx.insert(passwordTokens).values({
       userId,
@@ -212,6 +227,10 @@ export async function consumaToken(token: string, nuovaPassword: string): Promis
         // La password se l'è scelta l'utente: non c'è più niente da "cambiare
         // al primo accesso", quindi il gate non deve scattare.
         mustChangePassword: false,
+        // Password nuova = le sessioni aperte con quella vecchia escono (anche quella
+        // di chi avesse rubato la vecchia). Chi usa il link entra subito dopo con il
+        // numero nuovo: imposta-password rilegge la riga e apre la sessione da lì.
+        sessionVersion: sql`${users.sessionVersion} + 1`,
         updatedAt: adesso,
       })
       .where(eq(users.id, riga.userId))

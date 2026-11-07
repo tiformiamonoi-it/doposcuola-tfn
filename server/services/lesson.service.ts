@@ -308,6 +308,15 @@ export async function createLesson(data: CreateLessonInput, utenteId: string) {
     const pacchetti = pacchettiDellaLezione(tx)
     await pacchetti.leggi(data.studenti.map(s => s.packageId))
 
+    // Ogni alunno scala ore SOLO dal proprio pacchetto: controllo sulle righe bloccate,
+    // prima di qualunque scalamento (un errore annulla tutta la transazione).
+    for (const studente of data.studenti) {
+      const p = pacchetti.ultima(studente.packageId)
+      if (p && p.studentId !== studente.studentId) {
+        throw new Error(`${nomeStudente(studente.studentId)}: il pacchetto non è di questo alunno.`)
+      }
+    }
+
     for (const studente of data.studenti) {
       // REGOLA: L'alunno, anche se fa mezz'ora, scala SEMPRE un'ora dal pacchetto
       const oreScalate = 1.0
@@ -486,6 +495,15 @@ export async function updateLesson(id: string, data: UpdateLessonInput, utenteId
       // e bloccata fino alla fine come in createLesson (vedi pacchettiDellaLezione.leggi).
       const cambiati = data.studenti.filter(s => existing.some(e => e.studentId === s.studentId && e.packageId !== s.packageId))
       await pacchetti.leggi([...studentiNuovi, ...cambiati].map(s => s.packageId))
+
+      // Ogni alunno scala ore SOLO dal proprio pacchetto (nuovi e cambio pacchetto):
+      // controllo sulle righe bloccate, prima di rimborsi e scalamenti.
+      for (const s of [...studentiNuovi, ...cambiati]) {
+        const p = pacchetti.ultima(s.packageId)
+        if (p && p.studentId !== s.studentId) {
+          throw new Error(`${nomeStudenteUpd(s.studentId)}: il pacchetto non è di questo alunno.`)
+        }
+      }
 
       // Aggiunge i nuovi studenti: valida pacchetto e scala le ore (stessa logica di createLesson)
       for (const nuovo of studentiNuovi) {
@@ -958,7 +976,8 @@ export async function verificaPoolOggiPerTutor(studentIds: string[]): Promise<st
 // Tutte le lezioni in cui sono state scalate ore da questo pacchetto.
 // ─────────────────────────────────────────────
 
-export async function getLessonsByPackage(packageId: string) {
+// soloTutorId: se c'è, solo le lezioni di quel tutor (il TUTOR non vede quelle dei colleghi)
+export async function getLessonsByPackage(packageId: string, soloTutorId?: string) {
   const rows = await db
     .select({
       lessonId:    lessons.id,
@@ -974,7 +993,10 @@ export async function getLessonsByPackage(packageId: string) {
     .innerJoin(lessons, eq(lessonStudents.lessonId, lessons.id))
     .innerJoin(students, eq(lessonStudents.studentId, students.id))
     .innerJoin(users, eq(lessons.tutorId, users.id))
-    .where(eq(lessonStudents.packageId, packageId))
+    .where(and(
+      eq(lessonStudents.packageId, packageId),
+      soloTutorId ? eq(lessons.tutorId, soloTutorId) : undefined,
+    ))
     .orderBy(desc(lessons.data))
 
   return rows

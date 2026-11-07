@@ -308,10 +308,11 @@ export async function unlinkParent(studentId: string, parentUserId: string) {
   }
 }
 
-// Attiva/disattiva l'account studente (users.active): disattivo = niente login né prenotazioni
+// Attiva/disattiva l'account studente (users.active): disattivo = niente login né prenotazioni.
+// sessionVersion + 1 nella stessa UPDATE: chi è già collegato esce subito (vedi la guardia).
 export async function setStudentAccountActive(userId: string, active: boolean) {
   const [updated] = await db.update(users)
-    .set({ active, updatedAt: new Date() })
+    .set({ active, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() })
     .where(and(eq(users.id, userId), eq(users.role, 'STUDENTE')))
     .returning()
   if (!updated) throw new Error('Account studente non trovato')

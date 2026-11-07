@@ -87,6 +87,8 @@ export async function apriSessioneAccesso(
     role:               user.role,
     linkedStudentIds,
     mustChangePassword: user.mustChangePassword,
+    // La guardia lo confronta con il database a ogni chiamata (01.auth-guard.ts)
+    sessionVersion:     user.sessionVersion,
     termsAccepted,
     dichiarazioniMinori,
     tutorialVisto:      user.tutorialVisto,

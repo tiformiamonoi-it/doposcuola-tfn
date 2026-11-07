@@ -294,17 +294,6 @@ const figlioVuoto = (f: DatiFiglio) => !f.nome && !f.classeScuola && !f.materie
 /** Il nome del figlio in formato "Nome Proprio", come quello del contatto */
 const nomeFiglio = (nome: string | null | undefined) => (nome ? nomeProprio(nome) : null)
 
-/** "Luca  ROSSI" e "luca rossi" sono lo stesso ragazzo: via maiuscole, accenti e spazi doppi */
-function chiaveNome(nome: string | null | undefined): string {
-  return (nome ?? '')
-    .normalize('NFD')
-    // via gli accenti: 'è' scomposta diventa 'e' + segno, il segno si butta
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
 /** Le righe da inserire per dei figli nuovi, numerate da `primo` in poi */
 function righeFigliNuove(contactId: string, figli: DatiFiglio[], primo = 0): Array<typeof contactFigli.$inferInsert> {
   return figli.map((f, i) => ({
@@ -1127,8 +1116,8 @@ export async function findDuplicates(params: { telefono?: string | null; email?:
 
 // ─────────────────────────────────────────────
 // FORM PUBBLICO DEL SITO — /api/contact
-// Crea il contatto col suo primo figlio. Se lo conosciamo già aggiunge una riga
-// di diario e, se ci scrive per un figlio nuovo, quel figlio in coda agli altri.
+// Crea il contatto col suo primo figlio. Se lo conosciamo già aggiunge SOLO una
+// riga di diario (vedi sotto il perché).
 // ─────────────────────────────────────────────
 
 export async function upsertFromPublicRequest(input: {
@@ -1192,45 +1181,14 @@ export async function upsertFromPublicRequest(input: {
 
     if (esistente) {
       contactId = esistente.id
-      const changes: ContactChanges = { ultimoContattoAt: adesso, updatedAt: adesso }
-      // Ci riscrive dopo essere stato archiviato come chiuso: torna in lavorazione
-      if (esistente.stato === 'CONVERTITO' || esistente.stato === 'PERSO') {
-        changes.stato = 'NUOVO'
-        changes.convertitoAt = null
-      }
+      // Il form è anonimo: conoscere un recapito non prova di essere quella famiglia.
+      // Quindi si registra solo il messaggio (riga di diario qui sotto) e la data
+      // dell'ultimo contatto. Stato, data di conversione e figli NON si toccano:
+      // riaprire un contatto chiuso o aggiungere un figlio lo decide la segreteria
+      // dopo aver letto il messaggio. Niente updatedAt: un contatto PERSO non deve
+      // allungarsi da solo il tempo di conservazione (anonymizeLostContacts).
+      const changes: ContactChanges = { ultimoContattoAt: adesso }
       if (!esistente.contactRequestId) changes.contactRequestId = input.requestId
-
-      // Una famiglia che conosciamo già ci scrive per un altro figlio: si aggiunge
-      // in coda ai suoi. Se il nome c'è già (anche scritto diverso: maiuscole,
-      // accenti, spazi doppi) è lo stesso ragazzo e non si duplica; la riga di
-      // diario qui sotto c'è comunque. Un candidato tutor con lo stesso recapito
-      // resta com'è, come prima: solo la riga di diario.
-      if (eFamiglia(esistente)) {
-        const salvati = await righeSalvate(tx, contactId)
-        const visti = figliConRipiego(esistente, salvati.map(perRipiego))
-        const chiave = chiaveNome(figlioDalSito.nome)
-
-        if (!visti.some((f) => chiaveNome(f.nome) === chiave)) {
-          const nuove: Array<typeof contactFigli.$inferInsert> = []
-          const virtuale = visti.find((f) => f.id === null)
-          if (virtuale) {
-            // Il figlio "di prima" diventa una riga vera prima di aggiungergli il
-            // fratello: se no, appena c'è una riga, sparirebbe (è il ripiego)
-            nuove.push({
-              contactId,
-              nome:         virtuale.nome,
-              classeScuola: virtuale.classeScuola,
-              materie:      virtuale.materie,
-              studentId:    virtuale.studentId,
-              ordine:       0,
-            })
-            Object.assign(changes, SENZA_CAMPI_VECCHI)
-          }
-          const primo = salvati.length > 0 ? Math.max(...salvati.map((r) => r.ordine)) + 1 : nuove.length
-          nuove.push(...righeFigliNuove(contactId, [figlioDalSito], primo))
-          await tx.insert(contactFigli).values(nuove)
-        }
-      }
 
       await tx.update(contacts).set(changes).where(eq(contacts.id, contactId))
     } else {

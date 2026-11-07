@@ -21,6 +21,20 @@ import type { ComunicazioneInput, ComunicazioneTipo } from '#shared/schemas/comu
 const EMAIL_IN_PARALLELO = 5
 
 /**
+ * Il consenso che conta è l'ULTIMA riga MARKETING della persona: se ha detto sì
+ * e poi revocato, vale il no. Nessuna riga = non ha mai risposto = niente promozioni.
+ * Va usata in una query che ha `users` fra le tabelle.
+ */
+function consensoMarketingAttivo() {
+  return sql`(
+    select ${consensi.valore} from ${consensi}
+    where ${consensi.tipo} = 'MARKETING' and ${consensi.userId} = ${users.id}
+    order by ${consensi.createdAt} desc
+    limit 1
+  ) is true`
+}
+
+/**
  * I genitori che riceverebbero una comunicazione di questo tipo, adesso.
  * Genitore = account GENITORE attivo, collegato ad almeno un alunno ATTIVO.
  */
@@ -31,16 +45,7 @@ async function destinatariPer(tipo: ComunicazioneTipo): Promise<{ id: string; em
     eq(students.active, true),
   ]
 
-  // Il consenso che conta è l'ULTIMA riga MARKETING della persona: se ha detto sì
-  // e poi revocato, vale il no. Nessuna riga = non ha mai risposto = niente promozioni.
-  if (tipo === 'PROMOZIONALE') {
-    condizioni.push(sql`(
-      select ${consensi.valore} from ${consensi}
-      where ${consensi.tipo} = 'MARKETING' and ${consensi.userId} = ${users.id}
-      order by ${consensi.createdAt} desc
-      limit 1
-    ) is true`)
-  }
+  if (tipo === 'PROMOZIONALE') condizioni.push(consensoMarketingAttivo())
 
   // DISTINCT: una mamma con due figli è UNA famiglia, riceve una comunicazione sola
   return await db.selectDistinct({ id: users.id, email: users.email })
@@ -158,6 +163,9 @@ export async function riprovaEmail(comunicazioneId: string) {
       eq(comunicazioniDestinatari.comunicazioneId, comunicazioneId),
       isNull(comunicazioniDestinatari.emailInviataAt),
       eq(users.active, true),
+      // PROMOZIONALE: il consenso si ricontrolla ADESSO, non vale quello del primo
+      // invio. Chi l'ha revocato nel frattempo non deve ricevere l'email.
+      ...(c.tipo === 'PROMOZIONALE' ? [consensoMarketingAttivo()] : []),
     ))
 
   return await spedisci(c, righe)

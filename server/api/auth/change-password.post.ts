@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { db } from '../../database/client'
 import { users } from '../../database/schema'
@@ -30,12 +30,15 @@ export default defineEventHandler(async (event) => {
   if (!valid) throw createError({ statusCode: 401, statusMessage: 'Password attuale non corretta' })
 
   const hashed = await bcrypt.hash(result.data.newPassword, 10)
-  await db.update(users)
-    .set({ password: hashed, mustChangePassword: false, updatedAt: new Date() })
+  // sessionVersion + 1: gli ALTRI dispositivi collegati con la vecchia password escono
+  const [aggiornato] = await db.update(users)
+    .set({ password: hashed, mustChangePassword: false, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() })
     .where(eq(users.id, session.user.id))
+    .returning({ sessionVersion: users.sessionVersion })
 
-  // Aggiorna la sessione: il gate non deve più scattare
-  await salvaSessioneUtente(event, { ...session.user, mustChangePassword: false })
+  // Aggiorna la sessione: il gate non deve più scattare, e QUESTO dispositivo resta
+  // dentro perché riceve il numero di versione nuovo.
+  await salvaSessioneUtente(event, { ...session.user, mustChangePassword: false, sessionVersion: aggiornato?.sessionVersion })
 
   return { ok: true }
 })

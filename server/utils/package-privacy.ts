@@ -1,14 +1,26 @@
 // I TUTOR possono leggere i pacchetti (per verificare ore/giorni residui quando
 // registrano una lezione) ma NON i dati economici dello studente.
-const CAMPI_ECONOMICI = ['prezzoTotale', 'importoPagato', 'importoResiduo', 'recharges'] as const
+// Elenco dei campi AMMESSI, non di quelli esclusi: una colonna economica aggiunta
+// domani al pacchetto (come è successo con tariffaOraria) resta nascosta da sola.
+const CAMPI_TUTOR = [
+  'id', 'studentId', 'standardPackageId', 'nome', 'tipo',
+  'oreAcquistate', 'oreResiduo', 'orePerse',
+  'giorniAcquistati', 'giorniResiduo', 'orarioGiornaliero',
+  'dataInizio', 'dataScadenza', 'stati', 'sospeso', 'note',
+  'createdAt', 'updatedAt', 'studentFirstName', 'studentLastName',
+] as const
+
+// Stati che raccontano i pagamenti: il tutor non li vede e non può filtrarci sopra
+export const STATI_ECONOMICI = ['DA_PAGARE', 'PAGATO']
 
 export function isTutorRole(role: string | undefined): boolean {
   return role === 'TUTOR'
 }
 
 export function sanitizePackageForTutor<T extends Record<string, any>>(pkg: T): T {
-  const copy: Record<string, any> = { ...pkg }
-  for (const campo of CAMPI_ECONOMICI) delete copy[campo]
+  const copy: Record<string, any> = {}
+  for (const campo of CAMPI_TUTOR) if (campo in pkg) copy[campo] = pkg[campo]
+  if (Array.isArray(copy.stati)) copy.stati = copy.stati.filter((s: string) => !STATI_ECONOMICI.includes(s))
   return copy as T
 }
 

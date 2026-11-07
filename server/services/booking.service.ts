@@ -1,4 +1,4 @@
-import { eq, desc, or, inArray } from 'drizzle-orm'
+import { eq, desc, or, and, inArray, isNull } from 'drizzle-orm'
 import { db } from '../database/client'
 import { bookings, bookingSubjects, students, closureDates, systemConfigs, packages } from '../database/schema'
 import { computePackageStates } from './package.service'
@@ -282,12 +282,13 @@ export async function createBooking(input: CreateBookingInput, userId: string) {
 
 // Lista prenotazioni del portale per STUDENTI collegati (genitore o studente stesso):
 // così le prenotazioni fatte dallo studente restano visibili alla famiglia e viceversa.
-// L'OR su userId copre le prenotazioni storiche senza studentId valorizzato.
+// L'OR su userId copre SOLO le prenotazioni storiche senza studentId valorizzato:
+// un genitore scollegato da un figlio non deve più vedere quelle create per lui.
 export async function listBookingsForPortalByStudents(studentIds: string[], userId: string) {
   return await db.query.bookings.findMany({
     where: or(
       studentIds.length > 0 ? inArray(bookings.studentId, studentIds) : undefined,
-      eq(bookings.userId, userId),
+      and(eq(bookings.userId, userId), isNull(bookings.studentId)),
     ),
     orderBy: [desc(bookings.createdAt)],
     with: {

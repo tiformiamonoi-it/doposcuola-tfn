@@ -397,18 +397,10 @@ function refreshTutto() {
 
 
 function esportaCsv() {
-  const righe = [
-    ['Data', 'Tutor', 'Tipo', 'Ore scalate'],
-    ...lezioni.value.map((l: any) => [formatData(l.data), `${l.tutorLastName} ${l.tutorFirstName}`, l.tipo, parseFloat(l.oreScalate)]),
-  ]
-  const csv = righe.map(r => r.join(';')).join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `lezioni-${pacchetto.value?.nome ?? id}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
+  const intestazione = ['Data', 'Tutor', 'Tipo', 'Ore scalate']
+  const corpo = lezioni.value.map((l: any) => [formatData(l.data), `${l.tutorLastName} ${l.tutorFirstName}`, l.tipo, parseFloat(l.oreScalate)])
+  // Stessa funzione delle altre esportazioni (app/utils/csv.ts): virgolette, BOM e niente formule
+  scaricaCsv(`lezioni-${pacchetto.value?.nome ?? id}.csv`, righeInCsv(intestazione, corpo))
 }
 
 // ─── Eliminazione pacchetto (solo se senza pagamenti/lezioni) ───

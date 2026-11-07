@@ -18,7 +18,8 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const result = await listStudents(parsed.data)
+  // Il TUTOR non cerca per email del genitore e non vede lo stato dei pagamenti
+  const result = await listStudents(parsed.data, { perTutor: isTutorRole(user.role) })
 
   // I TUTOR non vedono recapiti/dati fiscali dei genitori
   if (isTutorRole(user.role)) {

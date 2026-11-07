@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { db } from '../../database/client'
 import { users } from '../../database/schema'
@@ -44,13 +44,16 @@ export default defineEventHandler(async (event) => {
 
     updates.password = await bcrypt.hash(data.newPassword, 10)
     updates.mustChangePassword = false // cambio volontario: il gate non serve più
+    // Gli altri dispositivi collegati con la vecchia password escono (vedi la guardia)
+    updates.sessionVersion = sql`${users.sessionVersion} + 1`
   }
 
   const [updated] = await db.update(users).set(updates).where(eq(users.id, user.id)).returning()
   if (!updated) throw createError({ statusCode: 404, statusMessage: 'Account non trovato' })
 
   if (data.newPassword) {
-    await salvaSessioneUtente(event, { ...user, mustChangePassword: false })
+    // Questo dispositivo invece resta dentro: riceve il numero di versione nuovo
+    await salvaSessioneUtente(event, { ...user, mustChangePassword: false, sessionVersion: updated.sessionVersion })
   }
   return { ok: true, firstName: updated.firstName, lastName: updated.lastName }
 })

@@ -4,8 +4,17 @@
 //  - ogni cella fra virgolette, con le " interne raddoppiate;
 //  - BOM in testa al file, altrimenti le lettere accentate si vedono sbagliate.
 
-/** Una cella: sempre fra virgolette, con le " raddoppiate. */
-export const cellaCsv = (v: unknown): string => `"${String(v ?? '').replace(/"/g, '""')}"`
+/**
+ * Una cella: sempre fra virgolette, con le " raddoppiate.
+ * Se il testo inizia con = + - @, tabulazione o a capo, Excel potrebbe leggerlo come
+ * formula (es. un "=..." scritto nel modulo contatti pubblico): gli mettiamo davanti
+ * un apostrofo. I numeri veri (es. "-12,50") restano come sono.
+ */
+export const cellaCsv = (v: unknown): string => {
+  let s = String(v ?? '')
+  if (/^[=+\-@\t\r\n]/.test(s) && !/^[+-]?\d+([.,]\d+)?$/.test(s)) s = `'${s}`
+  return `"${s.replace(/"/g, '""')}"`
+}
 
 /** Intestazione + righe → testo del file CSV già pronto (BOM compreso). */
 export function righeInCsv(intestazione: string[], righe: unknown[][]): string {

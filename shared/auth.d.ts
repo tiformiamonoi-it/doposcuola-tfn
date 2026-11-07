@@ -18,6 +18,10 @@ declare module '#auth-utils' {
     linkedStudentIds?: string[]
     // Password temporanea: obbligo di cambio al primo accesso
     mustChangePassword?: boolean
+    // Copia di users.sessionVersion al momento dell'accesso: se nel database cambia
+    // (disattivazione, cambio ruolo o password) questa sessione non vale più.
+    // Assente nei cookie aperti prima che esistesse: vale 0.
+    sessionVersion?: number
     // GENITORE/STUDENTE: false finché non accetta la versione corrente dei documenti legali
     termsAccepted?: boolean
     // Solo GENITORE: i figli sotto i 14 anni per cui manca ancora la dichiarazione

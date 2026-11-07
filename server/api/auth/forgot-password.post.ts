@@ -30,11 +30,20 @@ export default defineEventHandler(async (event) => {
   if (!parsed.success) {
     throw createError({ statusCode: 422, statusMessage: 'Email non valida' })
   }
+  const email = parsed.data.email.toLowerCase()
+
+  // Secondo limite, per indirizzo destinatario (3 all'ora): il limite per IP si
+  // aggira cambiando IP, e senza questo la casella di una famiglia si potrebbe
+  // inondare di email (e la quota Brevo esaurire). Vale per qualsiasi indirizzo,
+  // registrato o no, quindi non rivela chi è iscritto.
+  if (rateLimitExceeded(`forgot-email:${email}`, 3, 60 * 60 * 1000)) {
+    throw createError({ statusCode: 429, statusMessage: 'Troppi tentativi per questo indirizzo: riprova tra un\'ora' })
+  }
 
   const rispostaGenerica = { ok: true, message: 'Se l\'email è registrata riceverai un link per scegliere una nuova password.' }
 
   const user = await db.query.users.findFirst({
-    where: eq(users.email, parsed.data.email.toLowerCase()),
+    where: eq(users.email, email),
     columns: { id: true, email: true, firstName: true, active: true },
   })
   if (!user || !user.active) return rispostaGenerica

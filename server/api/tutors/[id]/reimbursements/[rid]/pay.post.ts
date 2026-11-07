@@ -2,6 +2,12 @@ import { PayReimbursementSchema } from '#shared/schemas/tutor.schema'
 import { payReimbursement } from '../../../../../services/tutor.service'
 
 export default defineEventHandler(async (event) => {
+  // Pagare un rimborso muove soldi: come per l'eliminazione, solo ADMIN/SUPER_TUTOR
+  // (la policy di /api/tutors lo dice già, ma il controllo qui non dipende da come si scrive il percorso).
+  const { user } = await requireUserSession(event)
+  if (!['ADMIN', 'SUPER_TUTOR'].includes(user.role)) {
+    throw createError({ statusCode: 403, statusMessage: 'Riservato ad ADMIN/SUPER_TUTOR' })
+  }
   const rid    = getRouterParam(event, 'rid')!
   const body   = await readBody(event)
   const parsed = PayReimbursementSchema.safeParse(body)

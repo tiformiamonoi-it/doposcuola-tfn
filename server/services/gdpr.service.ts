@@ -7,8 +7,8 @@
 // - anonymizeLostContacts → art. 5.1.e (limitazione della conservazione): pulizia
 //   automatica dei contatti "Persi" da oltre 12 mesi, lanciata dal cron giornaliero
 import { db } from '../database/client'
-import { students, studentParents, studentNotes, bookings, users, packages, payments, packageRecharges, lessons, lessonStudents, contacts, contactInteractions, contactFigli } from '../database/schema'
-import { and, eq, ne, inArray, isNull, lt, sql } from 'drizzle-orm'
+import { students, studentParents, studentNotes, bookings, users, packages, payments, packageRecharges, lessons, lessonStudents, contacts, contactInteractions, contactFigli, notifiche, assenze, studentConfirmations, consensi } from '../database/schema'
+import { and, eq, ne, or, like, inArray, isNull, lt, sql } from 'drizzle-orm'
 import { INIZIO_NOTA_CONVERSIONE } from '#shared/contatti'
 
 export async function anonymizeStudent(id: string) {
@@ -35,6 +35,7 @@ export async function anonymizeStudent(id: string) {
         firstName: 'Studente',
         lastName:  'Anonimizzato',
         phone:     null,
+        dataNascita: null,
         updatedAt: new Date(),
       }).where(eq(users.id, student.studentUserId))
     }
@@ -46,6 +47,9 @@ export async function anonymizeStudent(id: string) {
       .where(eq(studentParents.studentId, id))
 
     let genitoriAnonimizzati = 0
+    // Account anonimizzati qui (studente + genitori senza altri figli): servono sotto
+    // per togliere anche i loro avvisi e le note dei loro consensi
+    const utentiAnonimizzati: string[] = student.studentUserId ? [student.studentUserId] : []
     for (const { parentUserId } of collegamenti) {
       const [altroFiglio] = await tx.select({ id: studentParents.id }).from(studentParents)
         .where(and(eq(studentParents.parentUserId, parentUserId), ne(studentParents.studentId, id)))
@@ -58,19 +62,25 @@ export async function anonymizeStudent(id: string) {
         firstName: 'Genitore',
         lastName:  'Anonimizzato',
         phone:     null,
+        dataNascita: null,
         updatedAt: new Date(),
       }).where(eq(users.id, parentUserId))
       genitoriAnonimizzati++
+      utentiAnonimizzati.push(parentUserId)
     }
 
     // Nessun genitore deve più vedere questo alunno nel portale
     await tx.delete(studentParents).where(eq(studentParents.studentId, id))
 
-    // Anagrafica studente: svuotata. Pacchetti/pagamenti/contabilità NON si toccano
-    // (conservazione obbligatoria per legge), ma non rimandano più a una persona identificabile.
+    // Anagrafica studente: svuotata. Pacchetti/pagamenti/contabilità NON si toccano:
+    // conservazione obbligatoria per legge (art. 2220 c.c., 10 anni). Attenzione: la
+    // descrizione dei movimenti contabili (accounting_entries.descrizione, scritta da
+    // createPayment) contiene ANCORA cognome e nome dell'alunno, ed è voluto: è una
+    // scrittura contabile e va conservata com'è per l'obbligo fiscale.
     await tx.update(students).set({
       firstName: 'Studente',
       lastName:  'Anonimizzato',
+      dataNascita: null,
       classe: null, scuola: null, studentPhone: null, studentEmail: null,
       parentName: null, parentEmail: null, parentPhone: null, parentIndirizzo: null,
       parentCitta: null, parentCap: null, parentCF: null, parentPIva: null,
@@ -174,9 +184,48 @@ export async function anonymizeStudent(id: string) {
       contattiAnonimizzati += puliti.length
     }
 
-    // LE RIGHE DI `consensi` NON SI TOCCANO, di proposito: sono la prova di che
-    // cosa era stato acconsentito e quando, e da sole non contengono nomi né
-    // recapiti — solo dei collegamenti a righe ormai svuotate.
+    // ── LE COPIE SPARSE: testi liberi e avvisi del campanellino ──
+    //
+    // Assenze e rientri restano (servono allo storico), ma senza il testo libero
+    // scritto dalla famiglia: lì ci sono il nome del genitore e i fatti del ragazzo.
+    const assenzeSvuotate = await tx.update(assenze)
+      .set({ motivo: null })
+      .where(eq(assenze.studentId, id))
+      .returning({ id: assenze.id })
+    const rientriSvuotati = await tx.update(studentConfirmations)
+      .set({ note: null })
+      .where(eq(studentConfirmations.studentId, id))
+      .returning({ id: studentConfirmations.id })
+
+    // LE RIGHE DI `consensi` RESTANO, di proposito: sono la prova di che cosa era
+    // stato acconsentito e quando. Si svuota solo la nota a parole, che può contenere
+    // nomi ("firmata dalla mamma, Maria Rossi"): l'unica modifica ammessa a questo registro.
+    await tx.update(consensi)
+      .set({ note: null })
+      .where(or(
+        eq(consensi.studentId, id),
+        utentiAnonimizzati.length > 0 ? inArray(consensi.userId, utentiAnonimizzati) : undefined,
+      ))
+
+    // Gli avvisi del campanellino copiano nel titolo e nel messaggio il nome
+    // dell'alunno, pezzi delle note, il motivo dell'assenza, la risposta sui rientri.
+    // notifiche.entityId non ha chiave esterna, quindi niente si cancella da solo:
+    // si eliminano qui. Il link '/studenti/<id>' prende anche gli avvisi di note
+    // cancellate in passato, che non sono più tra le note eliminate sopra.
+    const idNote    = noteEliminate.map((n) => n.id)
+    const idAssenze = assenzeSvuotate.map((a) => a.id)
+    const idRientri = rientriSvuotati.map((r) => r.id)
+    const avvisiEliminati = await tx.delete(notifiche)
+      .where(or(
+        and(eq(notifiche.entityType, 'student'), eq(notifiche.entityId, id)),
+        eq(notifiche.link, `/studenti/${id}`),
+        like(notifiche.link, `/studenti/${id}?%`),
+        idNote.length    > 0 ? and(eq(notifiche.entityType, 'nota'),    inArray(notifiche.entityId, idNote))    : undefined,
+        idAssenze.length > 0 ? and(eq(notifiche.entityType, 'assenza'), inArray(notifiche.entityId, idAssenze)) : undefined,
+        idRientri.length > 0 ? and(eq(notifiche.entityType, 'rientro'), inArray(notifiche.entityId, idRientri)) : undefined,
+        utentiAnonimizzati.length > 0 ? and(eq(notifiche.entityType, 'user'), inArray(notifiche.entityId, utentiAnonimizzati)) : undefined,
+      ))
+      .returning({ id: notifiche.id })
 
     return {
       noteEliminate:            noteEliminate.length,
@@ -184,6 +233,7 @@ export async function anonymizeStudent(id: string) {
       genitoriAnonimizzati,
       figliContattoEliminati:   figliEliminati.length,
       contattiAnonimizzati,
+      avvisiEliminati:          avvisiEliminati.length,
     }
   })
 }

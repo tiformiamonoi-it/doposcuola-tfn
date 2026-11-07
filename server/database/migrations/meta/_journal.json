@@ -253,6 +253,13 @@
       "when": 1791558515821,
       "tag": "0035_regular_rocket_racer",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1794081863078,
+      "tag": "0036_supreme_rocket_raccoon",
+      "breakpoints": true
     }
   ]
 }

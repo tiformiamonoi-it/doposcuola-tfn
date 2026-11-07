@@ -1357,18 +1357,10 @@ const lezioniSvolteMeseCorrente = computed(() => {
 })
 
 function esportaCsvLezioni() {
-  const righe = [
-    ['Data', 'Tutor', 'Tipo', 'Ore scalate'],
-    ...lezioniFiltrate.value.map((l: any) => [formatData(l.data), `${l.tutorLastName} ${l.tutorFirstName}`, l.tipo || '', parseFloat(l.oreScalate)]),
-  ]
-  const csv = righe.map(r => r.join(';')).join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `lezioni-${studente.value?.lastName ?? id}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
+  const intestazione = ['Data', 'Tutor', 'Tipo', 'Ore scalate']
+  const corpo = lezioniFiltrate.value.map((l: any) => [formatData(l.data), `${l.tutorLastName} ${l.tutorFirstName}`, l.tipo || '', parseFloat(l.oreScalate)])
+  // Stessa funzione delle altre esportazioni (app/utils/csv.ts): virgolette, BOM e niente formule
+  scaricaCsv(`lezioni-${studente.value?.lastName ?? id}.csv`, righeInCsv(intestazione, corpo))
 }
 
 import { SCUOLE_TRAPANI, CLASSI_LISTA } from '~/utils/schools'
@@ -2068,23 +2060,15 @@ function statoBookingLabel(b: any): string {
 }
 
 function esportaCsvPrenotazioni() {
-  const righe = [
-    ['Data richiesta', 'Materie', 'Stato', 'Note'],
-    ...allBookings.value.map((b: any) => [
-      formatDateBooking(b.requestedDate),
-      (b.subjects ?? []).map((s: any) => s.name).join(', '),
-      statoBookingLabel(b),
-      b.notes ?? '',
-    ]),
-  ]
-  const csv = righe.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\r\n')
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `prenotazioni-${studente.value?.lastName ?? id}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
+  const intestazione = ['Data richiesta', 'Materie', 'Stato', 'Note']
+  const corpo = allBookings.value.map((b: any) => [
+    formatDateBooking(b.requestedDate),
+    (b.subjects ?? []).map((s: any) => s.name).join(', '),
+    statoBookingLabel(b),
+    b.notes ?? '',
+  ])
+  // Passa da righeInCsv (app/utils/csv.ts): le note libere non diventano formule in Excel
+  scaricaCsv(`prenotazioni-${studente.value?.lastName ?? id}.csv`, righeInCsv(intestazione, corpo))
 }
 
 // Elenco dei genitori collegati a questo alunno (possono essere più di uno)

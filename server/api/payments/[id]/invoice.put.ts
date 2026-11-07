@@ -8,6 +8,13 @@ import { toggleInvoiceStatus } from '../../../services/payment.service'
 //
 // Body: { "fatturaEmessa": true|false } e/o { "richiedeFattura": true|false }
 export default defineEventHandler(async (event) => {
+  // Fatture e marca da bollo sono contabilità: solo ADMIN (la pagina Contabilità è già admin-only,
+  // ma la policy di /api/payments aprirebbe la chiamata anche al SUPER_TUTOR).
+  const { user } = await requireUserSession(event)
+  if (user.role !== 'ADMIN') {
+    throw createError({ statusCode: 403, statusMessage: 'Riservato agli ADMIN' })
+  }
+
   const paymentId = getRouterParam(event, 'id')
 
   if (!paymentId) {

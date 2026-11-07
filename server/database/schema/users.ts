@@ -1,4 +1,4 @@
-import { pgTable, text, varchar, boolean, timestamp, date, uniqueIndex, index, numeric, type AnyPgColumn } from 'drizzle-orm/pg-core'
+import { pgTable, text, varchar, boolean, timestamp, date, integer, uniqueIndex, index, numeric, type AnyPgColumn } from 'drizzle-orm/pg-core'
 import { cuid, userRoleEnum, tutorPaymentModeEnum, passwordTokenScopoEnum } from './common'
 
 export const users = pgTable('users', {
@@ -16,6 +16,13 @@ export const users = pgTable('users', {
   dataNascita: date('data_nascita', { mode: 'string' }),
   // Forza il cambio password al primo accesso (password temporanea/impostata dall'admin)
   mustChangePassword: boolean('must_change_password').notNull().default(false),
+  // NUMERO DI VERSIONE DELLE SESSIONI APERTE. Viaggia anche dentro il cookie di
+  // sessione: la guardia (server/middleware/01.auth-guard.ts) confronta i due a
+  // ogni chiamata e, se non coincidono, fa uscire. Si incrementa quando l'account
+  // viene disattivato o riattivato, cambia ruolo o cambia password: così i
+  // dispositivi già collegati escono subito, invece di restare dentro fino alla
+  // scadenza del cookie. Un cookie senza numero (aperto prima che esistesse) vale 0.
+  sessionVersion: integer('session_version').notNull().default(0),
   // Accettazione documenti legali (GENITORE: termini+privacy; STUDENTE: privacy studente)
   termsAcceptedAt:      timestamp('terms_accepted_at', { withTimezone: true }),
   termsAcceptedVersion: varchar('terms_accepted_version', { length: 40 }),
