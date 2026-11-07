@@ -12,7 +12,6 @@ export default defineEventHandler(async (event) => {
   try {
     return await approveNote(id, user)
   } catch (err: any) {
-    const code = err.message?.includes('permessi') ? 403 : err.message?.includes('non trovata') ? 404 : 400
-    throw toHttpError(err, code)
+    throw toHttpError(err)
   }
 })

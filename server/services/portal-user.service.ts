@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm'
 import { db } from '../database/client'
+import { conflitto, nonTrovato } from '../utils/http-error'
 import { users, students, studentParents } from '../database/schema'
 import { annullaLinkAperti, inviaInvitoPassword, inviaInvitoPasswordAUtente, passwordSegnapostoHash } from '../utils/password-token'
 import { riepilogoSeraleAttivoGlobalmente } from './note-digest.service'
@@ -25,7 +26,7 @@ export async function getPortalAccess(studentId: string) {
   })
 
   if (!student) {
-    throw new Error('Studente non trovato')
+    throw nonTrovato('Studente non trovato')
   }
 
   const links = await db.query.studentParents.findMany({
@@ -87,7 +88,7 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
     where: eq(students.id, input.studentId),
     columns: { id: true },
   })
-  if (!studente) throw new Error('Studente non trovato')
+  if (!studente) throw nonTrovato('Studente non trovato')
 
   const existing = await db.query.users.findFirst({
     where: eq(users.email, input.email.toLowerCase()),
@@ -95,7 +96,7 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
 
   if (existing) {
     if (existing.role !== 'GENITORE') {
-      throw new Error('Questa email è usata da un account staff. Usa un\'altra email per il genitore.')
+      throw conflitto('Questa email è usata da un account staff. Usa un\'altra email per il genitore.')
     }
 
     // Già collegato a QUESTO alunno: niente da fare (gli altri figli non c'entrano)
@@ -107,7 +108,7 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
       columns: { id: true },
     })
     if (giaCollegato) {
-      throw new Error('Questo genitore è già collegato a questo alunno.')
+      throw conflitto('Questo genitore è già collegato a questo alunno.')
     }
 
     if (!force) {
@@ -132,7 +133,7 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
       })
     } catch (err: any) {
       // Rete di sicurezza sull'indice unico (studentId, parentUserId): due richieste in parallelo
-      if (isUniqueViolation(err, 'student_parents')) throw new Error('Questo genitore è già collegato a questo alunno.')
+      if (isUniqueViolation(err, 'student_parents')) throw conflitto('Questo genitore è già collegato a questo alunno.')
       throw err
     }
 
@@ -176,8 +177,8 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
     })
   } catch (err: any) {
     // Corsa fra due richieste con la stessa email: messaggio chiaro invece di un errore Postgres
-    if (isUniqueViolation(err, 'student_parents')) throw new Error('Questo genitore è già collegato a questo alunno.')
-    if (isUniqueViolation(err)) throw new Error('Questa email è già usata da un altro account.')
+    if (isUniqueViolation(err, 'student_parents')) throw conflitto('Questo genitore è già collegato a questo alunno.')
+    if (isUniqueViolation(err)) throw conflitto('Questa email è già usata da un altro account.')
     throw err
   }
 
@@ -216,7 +217,7 @@ export async function createStudentAccount(input: {
     where: eq(students.id, input.studentId),
     columns: { id: true, dataNascita: true },
   })
-  if (!studente) throw new Error('Studente non trovato')
+  if (!studente) throw nonTrovato('Studente non trovato')
 
   const consensoGenitore = input.consensoGenitore === true
   if (!consensoGenitore && eMinoreDi14(studente.dataNascita) === true) {
@@ -227,7 +228,7 @@ export async function createStudentAccount(input: {
     where: eq(users.email, input.email.toLowerCase()),
   })
   if (existing) {
-    throw new Error('Questa email è già usata da un altro account. Usa un\'email personale dello studente.')
+    throw conflitto('Questa email è già usata da un altro account. Usa un\'email personale dello studente.')
   }
 
   // Come per il genitore: password casuale che non conosce nessuno
@@ -282,7 +283,7 @@ export async function unlinkParent(studentId: string, parentUserId: string) {
         ))
         .returning({ id: studentParents.id })
 
-      if (!link) throw new Error('Collegamento genitore non trovato')
+      if (!link) throw nonTrovato('Collegamento genitore non trovato')
 
       // Restano altri figli collegati a questo genitore? Se sì l'account non si tocca.
       const altroFiglio = await tx.query.studentParents.findFirst({
@@ -296,7 +297,7 @@ export async function unlinkParent(studentId: string, parentUserId: string) {
       const deleted = await tx.delete(users)
         .where(and(eq(users.id, parentUserId), eq(users.role, 'GENITORE')))
         .returning({ id: users.id })
-      if (deleted.length === 0) throw new Error('Account portale non trovato')
+      if (deleted.length === 0) throw nonTrovato('Account portale non trovato')
 
       return { ok: true, scollegato: true as const, accountEliminato: true }
     })
@@ -315,7 +316,7 @@ export async function setStudentAccountActive(userId: string, active: boolean) {
     .set({ active, sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: new Date() })
     .where(and(eq(users.id, userId), eq(users.role, 'STUDENTE')))
     .returning()
-  if (!updated) throw new Error('Account studente non trovato')
+  if (!updated) throw nonTrovato('Account studente non trovato')
   return { ok: true, active: updated.active }
 }
 
@@ -365,7 +366,7 @@ export async function correggiEmailAccount(input: {
         .from(users)
         .where(eq(users.id, input.userId))
         .for('update')
-      if (!account) throw new Error('Account non trovato')
+      if (!account) throw nonTrovato('Account non trovato')
 
       // Da qui si correggono solo gli accessi delle famiglie. L'email dello staff
       // si cambia dalla scheda del tutor, dove c'è chi ha il diritto di farlo.
@@ -381,7 +382,7 @@ export async function correggiEmailAccount(input: {
           where: and(eq(students.id, input.studentId), eq(students.studentUserId, account.id)),
           columns: { id: true },
         })
-        if (!suo) throw new Error('Questo account non è collegato a questo alunno.')
+        if (!suo) throw nonTrovato('Questo account non è collegato a questo alunno.')
       } else {
         // Tutti i figli che questo genitore vede nel portale: servono subito per il
         // controllo, e dopo per allineare l'email su tutte le loro schede.
@@ -390,7 +391,7 @@ export async function correggiEmailAccount(input: {
           .from(studentParents)
           .where(eq(studentParents.parentUserId, account.id))
         idFigli = figli.map((f) => f.id)
-        if (!idFigli.includes(input.studentId)) throw new Error('Questo account non è collegato a questo alunno.')
+        if (!idFigli.includes(input.studentId)) throw nonTrovato('Questo account non è collegato a questo alunno.')
       }
 
       // Confronto con il valore salvato così com'è: se l'account aveva un'email con
@@ -402,7 +403,7 @@ export async function correggiEmailAccount(input: {
         where: and(eq(users.email, nuovaEmail), ne(users.id, account.id)),
         columns: { id: true },
       })
-      if (altro) throw new Error('Questa email è già usata da un altro account.')
+      if (altro) throw conflitto('Questa email è già usata da un altro account.')
 
       const adesso = new Date()
 
@@ -456,7 +457,7 @@ export async function correggiEmailAccount(input: {
   } catch (err: any) {
     // Rete di sicurezza sull'indice unico di users.email: un'altra richiesta ha
     // preso la stessa email tra il controllo e la scrittura.
-    if (isUniqueViolation(err)) throw new Error('Questa email è già usata da un altro account.')
+    if (isUniqueViolation(err)) throw conflitto('Questa email è già usata da un altro account.')
     throw err
   }
 

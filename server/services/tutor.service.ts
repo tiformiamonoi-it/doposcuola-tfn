@@ -1,5 +1,6 @@
 // server/services/tutor.service.ts
 import { db } from '../database/client'
+import { conflitto, nonTrovato } from '../utils/http-error'
 import {
   users, tutorProfiles, lessons,
   tutorPayments, tutorReimbursements, accountingEntries,
@@ -774,7 +775,7 @@ export async function payTutor(tutorId: string, data: PayTutorInput) {
       .limit(1)
 
     if (duplicate) {
-      throw new Error('Hai già registrato un pagamento identico pochi secondi fa. Controlla lo storico pagamenti prima di riprovare.')
+      throw conflitto('Hai già registrato un pagamento identico pochi secondi fa. Controlla lo storico pagamenti prima di riprovare.')
     }
 
     const [payment] = await tx.insert(tutorPayments).values({
@@ -995,7 +996,7 @@ export async function payReimbursement(reimbursementId: string, data: PayReimbur
       FOR UPDATE
     `)
     
-    if (!current) throw new Error('Rimborso non trovato')
+    if (!current) throw nonTrovato('Rimborso non trovato')
 
     // F3: somme e differenze in centesimi interi, arrotondate una volta sola quando
     // si riscrive la colonna o si scrive un messaggio.
@@ -1043,7 +1044,7 @@ export async function payReimbursement(reimbursementId: string, data: PayReimbur
 // ─────────────────────────────────────────────
 export async function deleteTutorPayment(id: string) {
   const [row] = await db.delete(tutorPayments).where(eq(tutorPayments.id, id)).returning()
-  if (!row) throw new Error('Compenso non trovato')
+  if (!row) throw nonTrovato('Compenso non trovato')
   return { ok: true }
 }
 
@@ -1062,7 +1063,7 @@ export async function listTutorPayments(tutorId: string) {
 // ─────────────────────────────────────────────
 export async function deleteReimbursement(id: string) {
   const [row] = await db.delete(tutorReimbursements).where(eq(tutorReimbursements.id, id)).returning()
-  if (!row) throw new Error('Rimborso non trovato')
+  if (!row) throw nonTrovato('Rimborso non trovato')
   return { ok: true }
 }
 

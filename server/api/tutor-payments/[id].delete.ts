@@ -13,6 +13,6 @@ export default defineEventHandler(async (event) => {
   try {
     return await deleteTutorPayment(id)
   } catch (err: any) {
-    throw toHttpError(err, err.message?.includes('non trovato') ? 404 : 400)
+    throw toHttpError(err)
   }
 })

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { getGuadagnoEffettivoMese } from '../../services/analytics.service'
-import { toHttpError } from '../../utils/http-error'
+import { ErroreDominio, toHttpError } from '../../utils/http-error'
 
 const QuerySchema = z.object({
   anno: z.coerce.number().int().min(2020).max(2100),
@@ -17,9 +17,8 @@ export default defineEventHandler(async (event) => {
   try {
     return await getGuadagnoEffettivoMese(result.data.anno, result.data.mese)
   } catch (err: any) {
-    if (err.message?.includes('non è ancora concluso')) {
-      throw toHttpError(err)
-    }
+    // Solo l'errore di dominio ("mese non concluso") arriva al client; gli altri escono come prima
+    if (err instanceof ErroreDominio) throw toHttpError(err)
     throw err
   }
 })

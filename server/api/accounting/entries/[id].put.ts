@@ -46,7 +46,6 @@ export default defineEventHandler(async (event) => {
   try {
     return await updateAccountingEntry(id, parsed.data)
   } catch (err: any) {
-    const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('automatico') ? 403 : 400
-    throw toHttpError(err, code)
+    throw toHttpError(err)
   }
 })

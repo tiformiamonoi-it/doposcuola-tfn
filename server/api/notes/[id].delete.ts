@@ -11,7 +11,6 @@ export default defineEventHandler(async (event) => {
     return await deleteNote(id, sessionUser)
   } catch (err: any) {
     if (err.statusCode) throw err
-    const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('permessi') ? 403 : 400
-    throw toHttpError(err, code)
+    throw toHttpError(err)
   }
 })

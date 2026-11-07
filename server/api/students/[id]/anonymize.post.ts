@@ -17,6 +17,6 @@ export default defineEventHandler(async (event) => {
     const esito = await anonymizeStudent(id)
     return { ok: true, ...esito }
   } catch (err: any) {
-    throw toHttpError(err, err.message?.includes('non trovato') ? 404 : 400)
+    throw toHttpError(err)
   }
 })

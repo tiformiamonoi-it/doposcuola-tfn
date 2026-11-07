@@ -23,6 +23,7 @@
 import { and, desc, eq, inArray, or } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { db } from '../database/client'
+import { nonTrovato } from '../utils/http-error'
 import { consensi, students, studentParents, users } from '../database/schema'
 import { creaNotifica } from './notifiche.service'
 import { eMinoreDi14 } from '#shared/eta'
@@ -196,7 +197,7 @@ export async function statoConsensi(studentId: string) {
       },
     },
   })
-  if (!studente) throw new Error('Studente non trovato')
+  if (!studente) throw nonTrovato('Studente non trovato')
 
   const genitori = await genitoriPortaleDi(studentId)
   const righe = await righeDi(studentId, genitori.map((g) => g.userId))

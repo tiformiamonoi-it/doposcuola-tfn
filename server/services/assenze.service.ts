@@ -28,6 +28,7 @@
 import { and, asc, desc, eq, gte, inArray, lte } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import { db } from '../database/client'
+import { nonTrovato } from '../utils/http-error'
 import { assenze, students } from '../database/schema'
 import { creaNotifica } from './notifiche.service'
 import { oggiRomeStr, oraRome } from '../utils/tutor-time-window'
@@ -276,7 +277,7 @@ export async function annullaAssenza(id: string, opzioni: AnnullaAssenzaOpzioni 
   // vederla non si racconta nemmeno che esiste.
   const ammessi = opzioni.studentIdsAmmessi
   if (!riga || (ammessi && !ammessi.includes(riga.studentId))) {
-    throw new Error('Assenza non trovata')
+    throw nonTrovato('Assenza non trovata')
   }
 
   if (opzioni.soloGiorniNonPassati && riga.data < oggiRomeStr()) {

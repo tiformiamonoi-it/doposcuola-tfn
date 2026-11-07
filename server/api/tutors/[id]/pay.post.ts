@@ -19,7 +19,6 @@ export default defineEventHandler(async (event) => {
     // await obbligatorio: senza, l'errore sfugge al catch e il client riceve un 500 muto
     return await payTutor(id, parsed.data)
   } catch (err: any) {
-    const code = err.message?.includes('identico') ? 409 : err.message?.includes('zero') ? 400 : 400
-    throw toHttpError(err, code)
+    throw toHttpError(err)
   }
 })

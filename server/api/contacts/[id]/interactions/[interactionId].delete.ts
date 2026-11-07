@@ -16,6 +16,6 @@ export default defineEventHandler(async (event) => {
     return await deleteInteraction(id, interactionId)
   } catch (err: any) {
     if (err.statusCode) throw err
-    throw toHttpError(err, err.message?.includes('non trovat') ? 404 : 400)
+    throw toHttpError(err)
   }
 })

@@ -12,6 +12,7 @@ import { and, eq, isNull, gt, ne, sql } from 'drizzle-orm'
 import { createHash, randomBytes } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { db, type Db } from '../database/client'
+import { nonTrovato } from './http-error'
 import { users, passwordTokens } from '../database/schema'
 import { sendEmail, emailInvitoPassword } from './email'
 import type { EsitoInvitoEmail } from '#shared/email'
@@ -281,7 +282,7 @@ export async function inviaInvitoPasswordAUtente(userId: string): Promise<EsitoI
     where: eq(users.id, userId),
     columns: { id: true, email: true, firstName: true, lastName: true },
   })
-  if (!user) throw new Error('Account non trovato')
+  if (!user) throw nonTrovato('Account non trovato')
 
   const invito = await inviaInvitoPassword(user)
   return { email: user.email, ...invito }

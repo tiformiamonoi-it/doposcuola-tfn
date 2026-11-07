@@ -1,6 +1,7 @@
 import { eq, desc, and, or, isNull, isNotNull, count } from 'drizzle-orm'
 import type { User } from '#auth-utils'
 import { db } from '../database/client'
+import { nonTrovato, vietato } from '../utils/http-error'
 import { studentNotes, students, users } from '../database/schema'
 import { creaNotifica, segnaLetteDellaPratica } from './notifiche.service'
 import type { CreateNoteInput, UpdateNoteInput } from '#shared/schemas/note.schema'
@@ -128,7 +129,7 @@ export async function getNoteById(id: string) {
       }
     }
   })
-  if (!note) throw new Error('Nota non trovata')
+  if (!note) throw nonTrovato('Nota non trovata')
   return note
 }
 
@@ -148,13 +149,13 @@ export async function createNote(data: CreateNoteInput, author: ChiAgisce) {
 // Approva una nota FAMIGLIA in attesa
 export async function approveNote(id: string, sessionUser: { id: string; role: string }) {
   if (!RUOLI_APPROVATORI.includes(sessionUser.role)) {
-    throw new Error('Non hai i permessi per approvare le note')
+    throw vietato('Non hai i permessi per approvare le note')
   }
   const [updated] = await db.update(studentNotes)
     .set({ approvataAt: new Date(), updatedAt: new Date() })
     .where(and(eq(studentNotes.id, id), isNull(studentNotes.approvataAt)))
     .returning()
-  if (!updated) throw new Error('Nota non trovata o già approvata')
+  if (!updated) throw nonTrovato('Nota non trovata o già approvata')
 
   // Approvata: gli avvisi ancora aperti su questa nota ("… da approvare") hanno
   // fatto il loro lavoro e si spengono, a nome di chi ha approvato. Se non ci si
@@ -181,7 +182,7 @@ function assertCanEditOrDelete(note: { authorId: string }, sessionUser: ChiAgisc
   const isAuthor = note.authorId === sessionUser.id
 
   if (!isAdminOrSuper && !isAuthor) {
-    throw new Error('Non hai i permessi per modificare o eliminare questa nota')
+    throw vietato('Non hai i permessi per modificare o eliminare questa nota')
   }
 }
 

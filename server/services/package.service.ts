@@ -1,4 +1,5 @@
 import { db } from '../database/client'
+import { conflitto, nonTrovato } from '../utils/http-error'
 import { accountingEntries, packages, packageRecharges, payments, students, lessonStudents, lessons, users, timeSlots } from '../database/schema'
 import { and, asc, count, desc, eq, getTableColumns } from 'drizzle-orm'
 import { oggiRomeStr, romeDateStr } from '../utils/tutor-time-window'
@@ -863,7 +864,7 @@ export async function getEstrattoContoLibretto(packageId: string): Promise<Estra
 
 export async function deletePackage(id: string) {
   const [pkg] = await db.select().from(packages).where(eq(packages.id, id)).limit(1)
-  if (!pkg) throw new Error('Pacchetto non trovato')
+  if (!pkg) throw nonTrovato('Pacchetto non trovato')
 
   const [rowPagamenti] = await db.select({ n: count() }).from(payments).where(eq(payments.packageId, id))
   const [rowLezioni]   = await db.select({ n: count() }).from(lessonStudents).where(eq(lessonStudents.packageId, id))
@@ -871,7 +872,7 @@ export async function deletePackage(id: string) {
   const numLezioni   = rowLezioni?.n ?? 0
 
   if (numPagamenti > 0 || numLezioni > 0) {
-    throw new Error(`Impossibile eliminare: il pacchetto ha ${numPagamenti} pagamento/i e ${numLezioni} lezione/i collegate.`)
+    throw conflitto(`Impossibile eliminare: il pacchetto ha ${numPagamenti} pagamento/i e ${numLezioni} lezione/i collegate.`)
   }
 
   await db.delete(packages).where(eq(packages.id, id))

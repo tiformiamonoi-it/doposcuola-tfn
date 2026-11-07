@@ -66,6 +66,6 @@ export default defineEventHandler(async (event) => {
     })
   } catch (err: any) {
     if (err.statusCode) throw err
-    throw toHttpError(err, err.message?.includes('non trovato') ? 404 : 400)
+    throw toHttpError(err)
   }
 })

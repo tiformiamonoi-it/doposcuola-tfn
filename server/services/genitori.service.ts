@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from 'drizzle-orm'
 import type { Column, SQL } from 'drizzle-orm'
 import { db } from '../database/client'
+import { nonTrovato } from '../utils/http-error'
 import { students, studentParents, users } from '../database/schema'
 import { normalizzaTelefono, sembraTelefono } from '#shared/phone'
 import { chiaviGenitore, genitoreRiconoscibile, leggiSerie } from '#shared/genitori'
@@ -455,7 +456,7 @@ export async function genitoriDelFratello(studentId: string): Promise<GenitoriDe
     db.select(COLONNE_SCHEDA).from(students).where(eq(students.id, studentId)).limit(1),
     caricaCollegamenti([studentId]),
   ])
-  if (!scheda) throw new Error('Studente non trovato')
+  if (!scheda) throw nonTrovato('Studente non trovato')
 
   const perSlot = (slot: Slot) => {
     const r = registrazione(scheda, slot)
@@ -519,7 +520,7 @@ export async function fratelliDi(studentId: string): Promise<Fratello[]> {
         ),
       )),
   ])
-  if (!io) throw new Error('Studente non trovato')
+  if (!io) throw nonTrovato('Studente non trovato')
 
   const mie = SLOT.map((slot) => ({ slot, chiavi: chiaviGenitore(leggiSerie(io, slot)) }))
   const unici = (valori: string[]) => [...new Set(valori.filter(Boolean))]

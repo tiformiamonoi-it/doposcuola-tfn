@@ -69,9 +69,6 @@ export default defineEventHandler(async (event) => {
     return await setStudentAccountActive(result.data.userId, result.data.active)
   } catch (err: any) {
     if (err.statusCode) throw err
-    const code = (err.message?.includes('non trovato') || err.message?.includes('non è collegato'))
-      ? 404
-      : err.message?.includes('già usata') ? 409 : 400
-    throw toHttpError(err, code)
+    throw toHttpError(err)
   }
 })

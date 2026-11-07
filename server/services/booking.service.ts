@@ -1,5 +1,6 @@
 import { eq, desc, or, and, inArray, isNull } from 'drizzle-orm'
 import { db } from '../database/client'
+import { nonTrovato } from '../utils/http-error'
 import { bookings, bookingSubjects, students, closureDates, systemConfigs, packages } from '../database/schema'
 import { computePackageStates } from './package.service'
 import { SUPPLEMENTO_SPECIALE } from '#shared/tariffe'
@@ -83,7 +84,7 @@ export async function valutaMaterieSpeciali(materie: string[], dateStr: string):
 export async function applicaSupplementoAlPacchetto(bookingId: string) {
   return await db.transaction(async (tx) => {
     const [booking] = await tx.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1)
-    if (!booking) throw new Error('Prenotazione non trovata')
+    if (!booking) throw nonTrovato('Prenotazione non trovata')
 
     const importo = parseFloat(booking.supplemento ?? '0')
     if (!importo) throw new Error('Questa prenotazione non ha un supplemento da applicare')
@@ -136,7 +137,7 @@ export async function applicaSupplementoAlPacchetto(bookingId: string) {
 export async function annullaSupplementoDalPacchetto(bookingId: string) {
   return await db.transaction(async (tx) => {
     const [booking] = await tx.select().from(bookings).where(eq(bookings.id, bookingId)).limit(1)
-    if (!booking) throw new Error('Prenotazione non trovata')
+    if (!booking) throw nonTrovato('Prenotazione non trovata')
     if (!booking.supplementoApplicatoAt || !booking.supplementoPackageId) {
       throw new Error('Il supplemento non è applicato a nessun pacchetto')
     }
@@ -230,7 +231,7 @@ export async function createBooking(input: CreateBookingInput, userId: string) {
   })
 
   if (!student) {
-    throw new Error('Studente non trovato')
+    throw nonTrovato('Studente non trovato')
   }
 
   const dateObj = new Date(input.dataDesiderata)
@@ -322,7 +323,7 @@ export async function updateBookingStatus(id: string, input: UpdateBookingStatus
   })
 
   if (!booking) {
-    throw new Error('Prenotazione non trovata')
+    throw nonTrovato('Prenotazione non trovata')
   }
 
   const [updated] = await db.update(bookings)

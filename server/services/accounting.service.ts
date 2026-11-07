@@ -1,4 +1,5 @@
 import { db } from '../database/client'
+import { nonTrovato, vietato } from '../utils/http-error'
 import { accountingEntries, payments, systemConfigs, users } from '../database/schema'
 import { and, eq, gte, inArray, isNull, lte, notInArray, or, sql } from 'drizzle-orm'
 import { getNeutralKeys } from '../utils/categorie'
@@ -966,7 +967,7 @@ export async function deleteAccountingEntry(
   motivo = 'Eliminazione manuale',
 ) {
   const [entry] = await db.select().from(accountingEntries).where(eq(accountingEntries.id, entryId)).limit(1)
-  if (!entry) throw new Error('Movimento non trovato')
+  if (!entry) throw nonTrovato('Movimento non trovato')
 
   // Bollo (F1) già versato con F24: non si tocca più. Toglierlo adesso lascerebbe
   // l'uscita dell'F24 a coprire un bollo che non esiste più, e i conti non tornerebbero.
@@ -1074,14 +1075,14 @@ export async function updateAccountingEntry(
   // vanno insieme, e un doppio clic legge lo stato lasciato dal primo, non quello vecchio.
   return await db.transaction(async (tx) => {
     const [entry] = await tx.select().from(accountingEntries).where(eq(accountingEntries.id, entryId)).for('update')
-    if (!entry) throw new Error('Movimento non trovato')
+    if (!entry) throw nonTrovato('Movimento non trovato')
 
     const hasContentChange = data.tipo !== undefined || data.importo !== undefined
       || data.descrizione !== undefined || data.categoria !== undefined
       || data.metodoPagamento !== undefined || data.data !== undefined
 
     if (isAutoEntry(entry) && hasContentChange) {
-      throw new Error('Questo movimento è automatico: modificalo dal pagamento di origine (oppure eliminalo).')
+      throw vietato('Questo movimento è automatico: modificalo dal pagamento di origine (oppure eliminalo).')
     }
 
     if (entry.linkedEntryId && hasContentChange) {
@@ -1111,7 +1112,7 @@ export async function updateAccountingEntry(
     }
 
     const [updated] = await tx.update(accountingEntries).set(changes as any).where(eq(accountingEntries.id, entryId)).returning()
-    if (!updated) throw new Error('Movimento non trovato')
+    if (!updated) throw nonTrovato('Movimento non trovato')
 
     // Marca da bollo (F1) dei movimenti manuali.
     let bollo: EsitoBollo = null

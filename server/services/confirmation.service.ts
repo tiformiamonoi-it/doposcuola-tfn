@@ -1,6 +1,7 @@
 import { and, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import { db } from '../database/client'
+import { nonTrovato } from '../utils/http-error'
 import { contacts, contactFigli, lessons, lessonStudents, packages, students, studentConfirmations, systemConfigs, users } from '../database/schema'
 import { oggiRomeStr } from '../utils/tutor-time-window'
 import { creaNotifica } from './notifiche.service'
@@ -377,7 +378,7 @@ export async function setRientro(
       .limit(1),
   ])
 
-  if (!studente) throw new Error('Alunno non trovato')
+  if (!studente) throw nonTrovato('Alunno non trovato')
 
   // La data della risposta: tornando a "Da sentire" si azzera; cambiando risposta
   // senza indicare una data vale oggi (giorno civile italiano).
@@ -524,7 +525,7 @@ export async function rispondiRientroDalPortale(input: {
     .where(eq(students.id, input.studentId))
     .limit(1)
 
-  if (!riga || !riga.active) throw new Error('Alunno non trovato')
+  if (!riga || !riga.active) throw nonTrovato('Alunno non trovato')
   if (!famigliaPuoRispondere(riga.stato, riga.ruoloAutore)) {
     throw new Error('La risposta l\'abbiamo già registrata noi: se è cambiato qualcosa, scrivici o chiamaci.')
   }

@@ -20,6 +20,6 @@ export default defineEventHandler(async (event) => {
   try {
     return await annullaAssenza(id)
   } catch (err: any) {
-    throw toHttpError(err, err?.message?.includes('non trovata') ? 404 : 400)
+    throw toHttpError(err)
   }
 })

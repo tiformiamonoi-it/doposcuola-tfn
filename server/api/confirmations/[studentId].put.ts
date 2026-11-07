@@ -27,6 +27,6 @@ export default defineEventHandler(async (event) => {
     return { data: await setRientro(studentId, anno, parsed.data, user.id) }
   } catch (err: any) {
     if (err.statusCode) throw err
-    throw toHttpError(err, err.message?.includes('non trovat') ? 404 : 400)
+    throw toHttpError(err)
   }
 })

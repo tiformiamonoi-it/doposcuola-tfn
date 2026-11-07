@@ -1,5 +1,6 @@
 import { PayReimbursementSchema } from '#shared/schemas/tutor.schema'
 import { payReimbursement } from '../../../../../services/tutor.service'
+import { ErroreDominio, toHttpError } from '../../../../../utils/http-error'
 
 export default defineEventHandler(async (event) => {
   // Pagare un rimborso muove soldi: come per l'eliminazione, solo ADMIN/SUPER_TUTOR
@@ -23,9 +24,8 @@ export default defineEventHandler(async (event) => {
   try {
     return await payReimbursement(rid, parsed.data)
   } catch (err: any) {
-    if (err.message === 'Rimborso non trovato') {
-      throw createError({ statusCode: 404, statusMessage: 'Rimborso non trovato' })
-    }
+    // Solo l'errore di dominio ("Rimborso non trovato", 404) arriva al client; gli altri escono come prima
+    if (err instanceof ErroreDominio) throw toHttpError(err)
     throw err
   }
 })

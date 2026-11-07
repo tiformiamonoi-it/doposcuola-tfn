@@ -66,11 +66,6 @@ export default defineEventHandler(async (event) => {
     }
   } catch (err: any) {
     if (err.statusCode) throw err
-    const code = err.message?.includes('non trovato')
-      ? 404
-      : (err.message?.includes('staff') || err.message?.includes('già collegato') || err.message?.includes('già usata'))
-          ? 409
-          : 400
-    throw toHttpError(err, code)
+    throw toHttpError(err)
   }
 })

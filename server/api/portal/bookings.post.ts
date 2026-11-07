@@ -90,7 +90,6 @@ export default defineEventHandler(async (event) => {
     return await createBooking(result.data, user.id)
   } catch (err: any) {
     if (err.statusCode) throw err
-    const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('Domenica') || err.message?.includes('chiuso') ? 400 : 400
-    throw toHttpError(err, code)
+    throw toHttpError(err)
   }
 })

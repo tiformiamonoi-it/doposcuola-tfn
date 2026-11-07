@@ -7,13 +7,14 @@
 // - anonymizeLostContacts → art. 5.1.e (limitazione della conservazione): pulizia
 //   automatica dei contatti "Persi" da oltre 12 mesi, lanciata dal cron giornaliero
 import { db } from '../database/client'
+import { nonTrovato } from '../utils/http-error'
 import { students, studentParents, studentNotes, bookings, users, packages, payments, packageRecharges, lessons, lessonStudents, contacts, contactInteractions, contactFigli, notifiche, assenze, studentConfirmations, consensi } from '../database/schema'
 import { and, eq, ne, or, like, inArray, isNull, lt, sql } from 'drizzle-orm'
 import { INIZIO_NOTA_CONVERSIONE } from '#shared/contatti'
 
 export async function anonymizeStudent(id: string) {
   const [student] = await db.select().from(students).where(eq(students.id, id)).limit(1)
-  if (!student) throw new Error('Studente non trovato')
+  if (!student) throw nonTrovato('Studente non trovato')
 
   return db.transaction(async (tx) => {
     // Note didattiche: eliminate (nessun obbligo di conservazione)
@@ -288,7 +289,7 @@ export async function anonymizeLostContacts(mesi = 12) {
 
 export async function exportStudentData(id: string) {
   const [student] = await db.select().from(students).where(eq(students.id, id)).limit(1)
-  if (!student) throw new Error('Studente non trovato')
+  if (!student) throw nonTrovato('Studente non trovato')
 
   const [pacchetti, prenotazioni, noteFamiglia, lezioni] = await Promise.all([
     db.select().from(packages).where(eq(packages.studentId, id)),

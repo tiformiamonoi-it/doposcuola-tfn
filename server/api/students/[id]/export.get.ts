@@ -18,6 +18,6 @@ export default defineEventHandler(async (event) => {
     setHeader(event, 'Content-Disposition', `attachment; filename="dati-studente-${id}.json"`)
     return dati
   } catch (err: any) {
-    throw toHttpError(err, err.message?.includes('non trovato') ? 404 : 400)
+    throw toHttpError(err)
   }
 })

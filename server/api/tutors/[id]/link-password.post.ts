@@ -36,6 +36,6 @@ export default defineEventHandler(async (event) => {
     return { ok: true, email, linkPassword, emailInviata, motivoEmail, dettaglioEmail }
   } catch (err: any) {
     if (err.statusCode) throw err
-    throw toHttpError(err, err.message?.includes('non trovato') ? 404 : 400)
+    throw toHttpError(err)
   }
 })

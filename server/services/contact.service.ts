@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq, ilike, inArray, isNotNull, isNull, lte, notI
 import type { SQL } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import { db } from '../database/client'
+import { nonTrovato } from '../utils/http-error'
 import { contacts, contactFigli, contactInteractions, students, users } from '../database/schema'
 import { nomeProprio } from '../utils/nomi'
 import { oggiRomeStr } from '../utils/tutor-time-window'
@@ -247,7 +248,7 @@ export async function getContact(id: string) {
       .orderBy(desc(contactInteractions.data)),
   ])
 
-  if (!riga) throw new Error('Contatto non trovato')
+  if (!riga) throw nonTrovato('Contatto non trovato')
 
   // Per i figli serve il contatto già letto (il ripiego parte dai suoi vecchi
   // campi): questa lettura viene dopo le altre due, non insieme
@@ -646,7 +647,7 @@ async function annotaConversione(
 
 export async function updateContact(id: string, data: UpdateContactInput, userId: string) {
   const [esistente] = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1)
-  if (!esistente) throw new Error('Contatto non trovato')
+  if (!esistente) throw nonTrovato('Contatto non trovato')
 
   // I figli non sono una colonna del contatto: si salvano a parte (salvaFigli)
   const { figli, ...campi } = data
@@ -755,20 +756,20 @@ export async function collegaFiglio(contactId: string, input: CollegaFiglioInput
     // una alla volta. Così la seconda vede il collegamento già fatto dalla prima
     // (giaCollegato) e non scrive una seconda riga di diario.
     const [contatto] = await tx.select().from(contacts).where(eq(contacts.id, contactId)).limit(1).for('update')
-    if (!contatto) throw new Error('Contatto non trovato')
+    if (!contatto) throw nonTrovato('Contatto non trovato')
     if (contatto.anonimizzatoAt) throw new Error('Questa scheda è stata svuotata dalla pulizia privacy: non si può più collegare')
     if (!eFamiglia(contatto)) throw new Error('Solo i possibili studenti del Doposcuola hanno figli da collegare')
 
     const [studente] = await tx.select({ id: students.id, firstName: students.firstName, lastName: students.lastName })
       .from(students).where(eq(students.id, input.studentId)).limit(1)
-    if (!studente) throw new Error('Studente non trovato')
+    if (!studente) throw nonTrovato('Studente non trovato')
 
     // Si ragiona sugli stessi figli che l'utente vede (ripiego compreso): figlioId
     // null è il figlio "di prima" di un contatto vecchio, che non ha ancora una riga
     const salvati = await righeSalvate(tx, contactId)
     const figlio = figliConRipiego(contatto, salvati.map(perRipiego))
       .find((f) => f.id === input.figlioId)
-    if (!figlio) throw new Error('Figlio non trovato in questo contatto')
+    if (!figlio) throw nonTrovato('Figlio non trovato in questo contatto')
     if (figlio.studentId && figlio.studentId !== input.studentId) {
       throw new Error('Questo figlio è già collegato a un altro alunno')
     }
@@ -949,7 +950,7 @@ export async function archiveContact(id: string) {
     .where(eq(contacts.id, id))
     .returning()
 
-  if (!aggiornato) throw new Error('Contatto non trovato')
+  if (!aggiornato) throw nonTrovato('Contatto non trovato')
   return aggiornato
 }
 
@@ -959,7 +960,7 @@ export async function restoreContact(id: string) {
     .where(eq(contacts.id, id))
     .returning()
 
-  if (!aggiornato) throw new Error('Contatto non trovato')
+  if (!aggiornato) throw nonTrovato('Contatto non trovato')
   return aggiornato
 }
 
@@ -970,7 +971,7 @@ export async function restoreContact(id: string) {
 export async function addInteraction(contactId: string, data: CreateInteractionInput, userId: string) {
   return await db.transaction(async (tx) => {
     const [contatto] = await tx.select().from(contacts).where(eq(contacts.id, contactId)).limit(1)
-    if (!contatto) throw new Error('Contatto non trovato')
+    if (!contatto) throw nonTrovato('Contatto non trovato')
 
     const quando = data.data ? new Date(data.data) : new Date()
 
@@ -1015,7 +1016,7 @@ export async function deleteInteraction(contactId: string, interactionId: string
       .where(and(eq(contactInteractions.id, interactionId), eq(contactInteractions.contactId, contactId)))
       .returning()
 
-    if (!eliminata) throw new Error('Interazione non trovata')
+    if (!eliminata) throw nonTrovato('Interazione non trovata')
 
     // "Ultimo contatto" ricalcolato dal diario rimasto, senza le righe «Convertito
     // in …»: non sono conversazioni (vedi eRigaDiConversione in shared/contatti.ts,

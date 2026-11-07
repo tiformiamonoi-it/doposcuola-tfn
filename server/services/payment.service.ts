@@ -1,4 +1,5 @@
 import { db } from '../database/client'
+import { nonTrovato, vietato } from '../utils/http-error'
 import { accountingEntries, packages, payments, students } from '../database/schema'
 import { and, count, desc, eq, sql } from 'drizzle-orm'
 import { computePackageStates } from './package.service'
@@ -254,7 +255,7 @@ export async function updatePayment(paymentId: string, data: UpdatePaymentInput)
 
     const [entry] = await tx.select().from(accountingEntries).where(eq(accountingEntries.paymentId, paymentId)).limit(1)
     if (entry && entry.fatturaEmessa) {
-      throw new Error('Impossibile modificare un pagamento con fattura già emessa')
+      throw vietato('Impossibile modificare un pagamento con fattura già emessa')
     }
 
     const [pkg] = await tx
@@ -395,11 +396,11 @@ export async function listPayments(query: PaymentQuery) {
 export async function deletePayment(paymentId: string) {
   return await db.transaction(async (tx) => {
     const [pay] = await tx.select().from(payments).where(eq(payments.id, paymentId)).limit(1)
-    if (!pay) throw new Error('Pagamento non trovato')
+    if (!pay) throw nonTrovato('Pagamento non trovato')
 
     const [entry] = await tx.select().from(accountingEntries).where(eq(accountingEntries.paymentId, paymentId)).limit(1)
     if (entry && entry.fatturaEmessa) {
-      throw new Error('Impossibile eliminare un pagamento con fattura già emessa')
+      throw vietato('Impossibile eliminare un pagamento con fattura già emessa')
     }
 
     // Marca da bollo (F1): le due righe del bollo non sono agganciate al pagamento

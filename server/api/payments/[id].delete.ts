@@ -13,8 +13,8 @@ export default defineEventHandler(async (event) => {
   if (!id) throw createError({ statusCode: 400, statusMessage: 'ID mancante' })
   try {
     return await deletePayment(id)
-  } catch (err: any) {
-    const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('fattura') ? 403 : 400
-    throw toHttpError(err, code)
+  } catch (err) {
+    // "fattura già emessa" è un vietato() nel service: 403 da qui come dalla contabilità
+    throw toHttpError(err)
   }
 })

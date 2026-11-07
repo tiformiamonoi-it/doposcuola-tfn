@@ -35,7 +35,6 @@ export default defineEventHandler(async (event) => {
     return { data: pkg }
   } catch (err: any) {
     if (err.statusCode) throw err
-    const code = err.message?.includes('non trovato') ? 404 : 400
-    throw toHttpError(err, code)
+    throw toHttpError(err)
   }
 })

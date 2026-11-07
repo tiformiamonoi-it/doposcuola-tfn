@@ -7,6 +7,7 @@
 // Le ricariche aumentano sia prezzo che ore, quindi la tariffa "blended" è stabile.
 import { and, eq, gte, lte, sql } from 'drizzle-orm'
 import { db } from '../database/client'
+import { ErroreDominio } from '../utils/http-error'
 import { lessons, lessonStudents, packages, students, users } from '../database/schema'
 import { getNetMargin } from './accounting.service'
 import { oggiRomeStr } from '../utils/tutor-time-window'
@@ -81,7 +82,7 @@ export async function getGuadagnoEffettivoMese(anno: number, mese: number) {
   const end = `${anno}-${String(mese).padStart(2, '0')}-${String(ultimoGiorno).padStart(2, '0')}`
 
   if (end >= oggiRomeStr()) {
-    throw new Error('Il mese non è ancora concluso: il guadagno effettivo si calcola solo a mese finito')
+    throw new ErroreDominio(400, 'Il mese non è ancora concluso: il guadagno effettivo si calcola solo a mese finito')
   }
 
   const [rows, tutorRows] = await Promise.all([

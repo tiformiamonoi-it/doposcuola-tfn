@@ -15,7 +15,6 @@ export default defineEventHandler(async (event) => {
   try {
     return await deletePackage(id)
   } catch (err: any) {
-    const code = err.message?.includes('non trovato') ? 404 : err.message?.includes('collegate') ? 409 : 400
-    throw toHttpError(err, code)
+    throw toHttpError(err)
   }
 })
