@@ -45,3 +45,6 @@ append-docs.mjs
 /*.md
 !/README.md
 manuale/
+# Strumenti locali: impostazioni del design e video di presentazione
+.impeccable/
+brag-output/
