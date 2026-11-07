@@ -2,7 +2,7 @@ import { db } from '../database/client'
 import { accountingEntries, payments, systemConfigs, users } from '../database/schema'
 import { and, eq, gte, inArray, isNull, lte, notInArray, or, sql } from 'drizzle-orm'
 import { getNeutralKeys } from '../utils/categorie'
-import { inCentesimi, inEuro } from '../utils/arrotondamenti'
+import { inCentesimi, inEuro } from '#shared/arrotondamenti'
 import { CAT, CATEGORIE_BOLLO, CATEGORIE_PROVENTI_DIVERSI, EMAILS_PROVENTI_DIVERSI } from '#shared/accounting-categories'
 import { conFattura, rimuoviSuffissoFattura } from '#shared/fattura'
 import { deletePayment } from './payment.service'
@@ -18,7 +18,7 @@ import { deleteTutorPayment, reduceReimbursementOnEntryDelete } from './tutor.se
 // centesimi interi) e si arrotonda UNA VOLTA SOLA, alla fine, su ciò che si mostra.
 // Mai arrotondare un numero che dovrà ancora essere sommato o sottratto: è così che
 // nascevano i centesimi impossibili nelle "Rimanenze di cassa".
-// La spiegazione completa, con il perché, sta in server/utils/arrotondamenti.ts.
+// La spiegazione completa, con il perché, sta in shared/arrotondamenti.ts.
 // ─────────────────────────────────────────────
 
 // ─────────────────────────────────────────────

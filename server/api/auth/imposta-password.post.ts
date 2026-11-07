@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event, { xForwardedFor: true }) ?? 'sconosciuto'
   // Un po' più largo del "password dimenticata": qui è normale sbagliare
   // (password troppo corta, le due non coincidono) e riprovare.
-  if (rateLimitExceeded(`imposta-password-post:${ip}`, 10, 10 * 60 * 1000)) {
+  if (await rateLimitExceeded(`imposta-password-post:${ip}`, 10, 10 * 60 * 1000)) {
     throw createError({ statusCode: 429, statusMessage: 'Troppi tentativi: riprova tra qualche minuto' })
   }
 

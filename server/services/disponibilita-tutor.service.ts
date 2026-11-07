@@ -16,13 +16,13 @@
 import { and, eq, isNull, or, sql } from 'drizzle-orm'
 import { db } from '../database/client'
 import { users, tutorProfiles, tutorAssenze } from '../database/schema'
+import { giornoSettimana } from '#shared/giorno-civile'
 
 export type RegolaFeriale = 'FORFAIT' | 'SEMPRE_DISPONIBILE' | 'A_SPUNTA'
 
-// Lunedì–venerdì. Il giorno della settimana si calcola in UTC dalla data 'AAAA-MM-GG',
-// come nel resto del gestionale: così il fuso del server non sposta mai il giorno.
+// Lunedì–venerdì, dal giorno civile 'AAAA-MM-GG' (shared/giorno-civile.ts).
 export function giornoFeriale(dateStr: string): boolean {
-  const g = new Date(`${dateStr}T00:00:00Z`).getUTCDay()
+  const g = giornoSettimana(dateStr)
   return g >= 1 && g <= 5
 }
 

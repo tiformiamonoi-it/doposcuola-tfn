@@ -134,6 +134,7 @@ async function ricaricaPacchetto() {
 const giaSaldato = computed(() => !!pacchettoCorrente.value?.stati?.includes('PAGATO'))
 
 import { METODI_PAGAMENTO_ITEMS, TIPI_PAGAMENTO_ITEMS } from '~/utils/contabilita'
+import { calcolaTipoPagamento, calcolaTipoPagamentoInModifica, tipoPagamentoCoerente } from '#shared/tipo-pagamento'
 const tipiPagamento = TIPI_PAGAMENTO_ITEMS
 const metodiPagamento = METODI_PAGAMENTO_ITEMS
 
@@ -150,37 +151,28 @@ const pagamento = reactive({
 
 const residuo = computed(() => parseFloat(pacchettoCorrente.value?.importoResiduo || '0'))
 
-function calcolaTipoPagamento(num: number) {
-  const isFull = num >= residuo.value - 0.01
+// Regola unica in shared/tipo-pagamento.ts (la stessa del server)
+function aggiornaTipoPagamento(num: number) {
   const giaPagato = parseFloat(pacchettoCorrente.value?.importoPagato || '0')
-  const hadSaldo = pacchettoCorrente.value?.stati?.includes('PAGATO') ||
-                   giaPagato >= parseFloat(pacchettoCorrente.value?.prezzoTotale || '0') ||
-                   storico.value.some(p => p.tipoPagamento === 'SALDO' || p.tipoPagamento === 'INTEGRAZIONE')
-
-  if (hadSaldo) {
-    pagamento.tipo = 'INTEGRAZIONE'
-  } else if (isFull) {
-    pagamento.tipo = 'SALDO'
-  } else if (giaPagato === 0) {
-    pagamento.tipo = 'ACCONTO'
-  } else {
-    pagamento.tipo = 'RATA'
-  }
+  pagamento.tipo = calcolaTipoPagamento({
+    importo: num,
+    residuo: residuo.value,
+    primoPagamento: giaPagato === 0,
+    giaSaldato: !!pacchettoCorrente.value?.stati?.includes('PAGATO') ||
+                giaPagato >= parseFloat(pacchettoCorrente.value?.prezzoTotale || '0') ||
+                storico.value.some(p => p.tipoPagamento === 'SALDO' || p.tipoPagamento === 'INTEGRAZIONE'),
+  })
 }
 
 watch(() => pagamento.importo, (newVal) => {
-  calcolaTipoPagamento(Number(newVal))
+  aggiornaTipoPagamento(Number(newVal))
 })
 
 const tipoPagamentoError = computed(() => {
-  const num = Number(pagamento.importo)
-  if (pagamento.tipo === 'SALDO' && num < residuo.value - 0.01) {
-    return 'Il saldo deve coprire l\'intero residuo.'
-  }
-  if (pagamento.tipo !== 'SALDO' && pagamento.tipo !== 'INTEGRAZIONE' && num >= residuo.value - 0.01) {
-    return 'L\'intero importo copre il residuo: seleziona Saldo.'
-  }
-  return undefined
+  if (tipoPagamentoCoerente(pagamento.tipo, Number(pagamento.importo), residuo.value)) return undefined
+  return pagamento.tipo === 'SALDO'
+    ? 'Il saldo deve coprire l\'intero residuo.'
+    : 'L\'intero importo copre il residuo: seleziona Saldo.'
 })
 
 // ─── Modifica inline di un pagamento esistente ───
@@ -202,41 +194,14 @@ const editResiduo = computed(() => {
   return parseFloat(pacchettoCorrente.value.importoResiduo) + parseFloat(originalPayment.importo)
 })
 
-function calcolaEditTipoPagamento(num: number) {
-  const isFull = num >= editResiduo.value - 0.01
-  const originalPayment = storico.value.find(p => p.id === editingId.value)
-  const isFirstPayment = !storico.value.some(p => p.id !== editingId.value && new Date(p.dataPagamento) <= new Date(originalPayment?.dataPagamento || new Date()))
-  
-  const hadSaldoBefore = storico.value.some(p => 
-    p.id !== editingId.value && 
-    (p.tipoPagamento === 'SALDO' || p.tipoPagamento === 'INTEGRAZIONE') &&
-    new Date(p.dataPagamento) <= new Date(originalPayment?.dataPagamento || new Date())
-  )
-
-  if (hadSaldoBefore) {
-    editForm.tipo = 'INTEGRAZIONE'
-  } else if (isFull) {
-    editForm.tipo = 'SALDO'
-  } else if (isFirstPayment) {
-    editForm.tipo = 'ACCONTO'
-  } else {
-    editForm.tipo = 'RATA'
-  }
-}
-
 watch(() => editForm.importo, (newVal) => {
-  calcolaEditTipoPagamento(Number(newVal))
+  if (!editingId.value) return
+  editForm.tipo = calcolaTipoPagamentoInModifica(storico.value, editingId.value, Number(newVal), editResiduo.value)
 })
 
 const editTipoError = computed(() => {
-  const num = Number(editForm.importo)
-  if (editForm.tipo === 'SALDO' && num < editResiduo.value - 0.01) {
-    return 'L\'importo non copre il residuo.'
-  }
-  if (editForm.tipo !== 'SALDO' && editForm.tipo !== 'INTEGRAZIONE' && num >= editResiduo.value - 0.01) {
-    return 'Scegli Saldo (copre il residuo).'
-  }
-  return undefined
+  if (tipoPagamentoCoerente(editForm.tipo, Number(editForm.importo), editResiduo.value)) return undefined
+  return editForm.tipo === 'SALDO' ? 'L\'importo non copre il residuo.' : 'Scegli Saldo (copre il residuo).'
 })
 
 // ─── Conferma (modifica/eliminazione) — niente alert/confirm nativi ───
@@ -312,7 +277,7 @@ async function caricaStorico() {
   try {
     const res = await $fetch('/api/payments', { query: { packageId: pacchettoCorrente.value.id, limit: 100 } }) as any
     storico.value = res?.data ?? []
-    calcolaTipoPagamento(Number(pagamento.importo))
+    aggiornaTipoPagamento(Number(pagamento.importo))
   } catch {
     storico.value = []
   }

@@ -1,5 +1,6 @@
 import { UpgradePackageSchema } from '#shared/schemas/package.schema'
 import { CAT } from '#shared/accounting-categories'
+import { calcolaTipoPagamento } from '#shared/tipo-pagamento'
 import { getPackageById } from '../../../services/package.service'
 import { registraBolloInTransazione, riferimentoBollo } from '../../../services/bollo.service'
 import { db } from '../../../database/client'
@@ -133,24 +134,18 @@ export default defineEventHandler(async (event) => {
       if (data.pagamentoIntegrazione && importoIntegrazione > 0) {
         const pag = data.pagamentoIntegrazione
 
-        let calcTipo = 'ACCONTO'
-        const isFull = nuovoImportoResiduo <= 0.01
-        const wasFullyPaid = existing.stati.includes('PAGATO') || importoPagato >= parseFloat(existing.prezzoTotale)
-
-        if (isFull) {
-          calcTipo = 'SALDO'
-        } else if (importoPagato === 0) {
-          calcTipo = 'ACCONTO'
-        } else if (wasFullyPaid) {
-          calcTipo = 'INTEGRAZIONE'
-        } else {
-          calcTipo = 'RATA'
-        }
+        // Regola condivisa coi moduli del gestionale (shared/tipo-pagamento.ts)
+        const calcTipo = calcolaTipoPagamento({
+          importo:        importoIntegrazione,
+          residuo:        data.nuovoPrezzoTotale - importoPagato,
+          primoPagamento: importoPagato === 0,
+          giaSaldato:     existing.stati.includes('PAGATO') || importoPagato >= parseFloat(existing.prezzoTotale),
+        })
 
         const [payment] = await tx.insert(payments).values({
           packageId: id as string,
           importo: String(pag.importo),
-          tipoPagamento: calcTipo as 'ACCONTO' | 'SALDO' | 'RATA' | 'INTEGRAZIONE',
+          tipoPagamento: calcTipo,
           metodoPagamento: pag.metodoPagamento as 'CONTANTI' | 'BONIFICO' | 'POS' | 'ASSEGNO',
           richiedeFattura: pag.richiedeFattura ?? false,
           dataPagamento: pag.dataPagamento ?? new Date(),

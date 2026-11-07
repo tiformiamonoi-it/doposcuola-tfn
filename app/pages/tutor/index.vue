@@ -100,7 +100,7 @@
             {{ t.numLezioniMese }} {{ t.numLezioniMese === 1 ? 'lezione' : 'lezioni' }} questo mese
           </span>
           <button
-            v-if="t.totaleDaLiquidare > 0.01"
+            v-if="restaDaPagare(t.totaleDaLiquidare)"
             type="button"
             class="ml-auto min-h-11 text-right"
             @click="apriDettaglioArretrati(t)"
@@ -184,7 +184,7 @@
 
         <template #daLiquidare-cell="{ row }">
           <button
-            v-if="row.original.totaleDaLiquidare > 0.01"
+            v-if="restaDaPagare(row.original.totaleDaLiquidare)"
             type="button"
             class="cursor-pointer text-left"
             @click="apriDettaglioArretrati(row.original)"
@@ -307,6 +307,8 @@
 <script setup lang="ts">
 import { inizialiDa, coloreAvatar } from '~/utils/avatar'
 import { meseDiOggi, mesePrecedente } from '#shared/compenso-tutor'
+// Ogni centesimo conta: 0,01 € da dare a un tutor è un debito che si vede
+import { restaDaPagare } from '#shared/arrotondamenti'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
 
 definePageMeta({ middleware: ['admin-or-super'] })
@@ -470,7 +472,7 @@ async function apriDettaglioArretrati(tutor: RigaTutor) {
   pendingArretratiDettaglio.value = true
   try {
     const comp = await $fetch<MeseCompenso[]>(`/api/tutors/${tutor.id}/compensation`)
-    mesiArretratiDettaglio.value = comp.filter(m => m.residuo > 0.01)
+    mesiArretratiDettaglio.value = comp.filter(m => restaDaPagare(m.residuo))
   } catch {
     toast.add({ title: 'Errore nel caricamento del dettaglio', color: 'error' })
     mesiArretratiDettaglio.value = []

@@ -352,6 +352,7 @@ import { ref, reactive, computed } from 'vue'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
 import { SUPPLEMENTO_SPECIALE } from '#shared/tariffe'
 import { MATERIE_DEFAULT } from '#shared/materie'
+import { isDomenica } from '#shared/giorno-civile'
 
 definePageMeta({
   layout: 'portal',
@@ -640,10 +641,8 @@ function toggleMateriaModifica(materia: string) {
 function validaDataModifica() {
   if (!modificaForm.dataDesiderata) return
   
-  const selectedDate = new Date(modificaForm.dataDesiderata)
-  
-  // 1. Controllo Domenica
-  if (selectedDate.getDay() === 0) {
+  // 1. Controllo Domenica (sul giorno scelto, indipendente dal fuso del browser)
+  if (isDomenica(modificaForm.dataDesiderata)) {
     toast.add({ title: 'Impossibile prenotare o spostare di Domenica', color: 'error' })
     modificaForm.dataDesiderata = ''
     return

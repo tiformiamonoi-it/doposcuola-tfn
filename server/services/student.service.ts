@@ -21,7 +21,8 @@ const SORT_COLUMNS = {
 function pacchettoAperto() {
   const inizioOggiRome = confiniGiornoOggiRome().start
   return or(
-    sql`${packages.importoResiduo}::numeric > 0.001`,
+    // numeric(10,2): il confronto è già al centesimo, esatto
+    sql`${packages.importoResiduo}::numeric > 0`,
     and(
       sql`${packages.oreResiduo}::numeric > 0`,
       or(isNull(packages.giorniResiduo), gt(packages.giorniResiduo, 0)),

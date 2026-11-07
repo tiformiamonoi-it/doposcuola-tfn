@@ -5,7 +5,7 @@ import { oggiRomeStr, romeDateStr } from '../utils/tutor-time-window'
 import { CAT } from '#shared/accounting-categories'
 import { serveBollo } from '#shared/bollo'
 import { calcolaDataScadenza } from '#shared/scadenza-pacchetto'
-import { inCentesimi, inEuro } from '../utils/arrotondamenti'
+import { inCentesimi, inEuro, restaDaPagare } from '#shared/arrotondamenti'
 import { registraBolloInTransazione, riferimentoBollo } from './bollo.service'
 import type { CreatePackageInput, PackageQuery, RechargePackageInput, UpdatePackageInput } from '#shared/schemas/package.schema'
 
@@ -50,9 +50,6 @@ type PackageStateInput = {
   sospeso?: boolean | null
 }
 
-// Tolleranza centesimi per confronti floating point (evita 0.1+0.2=0.300...04)
-const EPSILON = 0.001
-
 // Regola DA_RINNOVARE, scritta una volta sola: la usano lo stato del pacchetto e le
 // email di avviso (package-alerts.service.ts), così le due cose non si contraddicono.
 // Vale solo per un pacchetto ATTIVO (ore > 0 e non scaduto) con ore acquistate > 0.
@@ -81,7 +78,6 @@ export function computePackageStates(pkg: PackageStateInput): PackageStatus[] {
   if (pkg.sospeso) return ['SOSPESO']
 
   const oreResiduo    = parseFloat(pkg!.oreResiduo)
-  const importoResiduo = parseFloat(pkg.importoResiduo)
 
   // Confronti per GIORNO CIVILE ITALIANO ('YYYY-MM-DD'), mai per istante: la scadenza
   // è salvata come timestamptz (a mezzanotte UTC, o a mezzanotte italiana per i dati
@@ -115,7 +111,8 @@ export function computePackageStates(pkg: PackageStateInput): PackageStatus[] {
   if (rinnovo.oreQuasiFinite || rinnovo.inScadenza) stati.push('DA_RINNOVARE')
 
   // REGOLA 5 — DA_PAGARE / PAGATO (sempre uno dei due, mai entrambi)
-  if (importoResiduo > EPSILON) {
+  // Ogni centesimo conta: anche 0,01 € lasciato fa "Da pagare".
+  if (restaDaPagare(pkg.importoResiduo)) {
     stati.push('DA_PAGARE')
   } else {
     stati.push('PAGATO')
@@ -317,8 +314,12 @@ export async function createPackage(data: CreatePackageInput, opzioni?: OpzioniP
     //  - ORE / A_CONSUMO: usa quella inviata dal frontend (es. 15/06)
     let dataScadenza: Date | null = data.dataScadenza ?? null
     if (!dataScadenza && data.tipo === 'MENSILE') {
-      dataScadenza = new Date(data.dataInizio)
-      dataScadenza.setDate(dataScadenza.getDate() + 30)
+      // Regola condivisa col form (shared/scadenza-pacchetto.ts), sul giorno civile
+      // italiano: setDate() lavorava nel fuso del processo e a cavallo dell'ora
+      // legale poteva salvare il giorno prima. new Date('AAAA-MM-GG') = mezzanotte
+      // UTC, come si salvano già le date.
+      const scadenza = calcolaDataScadenza('MENSILE', romeDateStr(data.dataInizio))
+      if (scadenza) dataScadenza = new Date(scadenza)
     }
 
     // Calcola gli stati iniziali
@@ -671,7 +672,7 @@ export async function getPackageRecharges(packageId: string) {
 //    possono avere altro, e se un giorno la regola cambierà l'estratto conto resterà
 //    giusto senza che nessuno debba ricordarsi di venirlo a correggere qui.
 //
-// 2) le ore si sommano in CENTESIMI INTERI (regola F3, server/utils/arrotondamenti.ts).
+// 2) le ore si sommano in CENTESIMI INTERI (regola F3, shared/arrotondamenti.ts).
 //    Sono numeric(10,2) come gli euro e soffrono lo stesso difetto della virgola:
 //    sommate una per una in JavaScript produrrebbero saldi tipo 8,999999999996.
 // ─────────────────────────────────────────────

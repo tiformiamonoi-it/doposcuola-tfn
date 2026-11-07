@@ -80,6 +80,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { METODI_PAGAMENTO_ITEMS } from '~/utils/contabilita'
 import { TARIFFA_ORARIA_DEFAULT } from '#shared/tariffe'
+import { arrotonda } from '#shared/arrotondamenti'
 
 const props = defineProps<{ pacchetto: any | null }>()
 const emit = defineEmits<{ refresh: [] }>()
@@ -118,7 +119,8 @@ watch(isOpen, (val) => {
 // sconto o di arrotondare. Da quando lo si tocca a mano, smette di seguire le ore —
 // altrimenti la cifra scritta dalla segreteria sparirebbe al primo ritocco.
 const importoToccato = ref(false)
-const importoCalcolato = computed(() => Number((ricarica.ore * ricarica.tariffaOraria).toFixed(2)))
+// Regola unica del centesimo: 1,5 h × 12,35 € = 18,53 (toFixed dava 18,52)
+const importoCalcolato = computed(() => arrotonda(ricarica.ore * ricarica.tariffaOraria))
 
 watch(importoCalcolato, (nuovo) => {
   if (!importoToccato.value) ricarica.importo = nuovo

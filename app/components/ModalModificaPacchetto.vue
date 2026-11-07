@@ -100,6 +100,7 @@
 <script setup lang="ts">
 import { oggiISO } from '~/utils/format'
 import { METODI_PAGAMENTO_ITEMS } from '~/utils/contabilita'
+import { arrotonda } from '#shared/arrotondamenti'
 import { ref, reactive, watch, computed } from 'vue'
 
 const props = defineProps<{ pacchetto: any | null }>()
@@ -188,7 +189,8 @@ watch(() => form.nuoviGiorniAcquistati, (newGiorni, oldGiorni) => {
 const nuovoImportoDaPagare = computed(() => {
   if (!props.pacchetto) return 0
   const giaPagato = parseFloat(props.pacchetto.importoPagato) || 0
-  return Math.max(0, form.nuovoPrezzoTotale - giaPagato)
+  // Al centesimo: 100,10 − 100 fa 0,10 e non 0,0999…
+  return Math.max(0, arrotonda(form.nuovoPrezzoTotale - giaPagato))
 })
 
 // Validazione Prezzo

@@ -21,7 +21,7 @@ const ForgotPasswordSchema = z.object({
 // tempo. Chi non lo apre continua a entrare con la password di sempre.
 export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event, { xForwardedFor: true }) ?? 'sconosciuto'
-  if (rateLimitExceeded(`forgot:${ip}`)) {
+  if (await rateLimitExceeded(`forgot:${ip}`)) {
     throw createError({ statusCode: 429, statusMessage: 'Troppi tentativi: riprova tra qualche minuto' })
   }
 
@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
   // aggira cambiando IP, e senza questo la casella di una famiglia si potrebbe
   // inondare di email (e la quota Brevo esaurire). Vale per qualsiasi indirizzo,
   // registrato o no, quindi non rivela chi è iscritto.
-  if (rateLimitExceeded(`forgot-email:${email}`, 3, 60 * 60 * 1000)) {
+  if (await rateLimitExceeded(`forgot-email:${email}`, 3, 60 * 60 * 1000)) {
     throw createError({ statusCode: 429, statusMessage: 'Troppi tentativi per questo indirizzo: riprova tra un\'ora' })
   }
 

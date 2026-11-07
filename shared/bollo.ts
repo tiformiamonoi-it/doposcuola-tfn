@@ -12,6 +12,8 @@
 // ancora versato). Il debito esce di scena quando registri il versamento F24.
 // ─────────────────────────────────────────────
 
+import { copre } from './arrotondamenti'
+
 /** Sopra questa cifra (esclusa) la fattura richiede la marca da bollo. */
 export const SOGLIA_BOLLO = 77.47
 
@@ -25,7 +27,8 @@ export const IMPORTO_BOLLO = 2
  * scrive qui una volta sola, così i due non possono mai dire cose diverse.
  */
 export function serveBollo(importo: number | null | undefined, richiedeFattura: boolean): boolean {
-  return richiedeFattura === true && Number(importo ?? 0) > SOGLIA_BOLLO
+  // Al centesimo: 77,47 non lo richiede, 77,48 sì
+  return richiedeFattura === true && !copre(SOGLIA_BOLLO, importo)
 }
 
 /** "77,47 €" e "2,00 €" scritti all'italiana, per i testi dell'interfaccia. */

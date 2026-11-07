@@ -77,6 +77,7 @@
 <script setup lang="ts">
 import { startOfMonth, endOfMonth, addMonths, format, getDay, getDaysInMonth, setDate } from 'date-fns'
 import { it } from 'date-fns/locale'
+import { giornoSettimana, isDomenica } from '#shared/giorno-civile'
 
 definePageMeta({ middleware: ['staff-only'] })
 useHead({ title: 'Area Tutor — tiformiamonoi' })
@@ -127,7 +128,7 @@ const sempreDisponibile = computed(() => availData.value?.sempreDisponibile ?? f
 const assenze = computed(() => new Set<string>(availData.value?.assenze ?? []))
 
 function isFeriale(dateStr: string) {
-  const giorno = new Date(dateStr + 'T00:00:00Z').getUTCDay()
+  const giorno = giornoSettimana(dateStr)
   return giorno >= 1 && giorno <= 5
 }
 
@@ -161,7 +162,7 @@ const oggiServer = computed(() => availData.value?.oggi ?? '')
 const oggiBloccato = computed(() => availData.value?.oggiBloccato ?? false)
 
 function motivoBlocco(dateStr: string): string | null {
-  if (new Date(dateStr + 'T00:00:00Z').getUTCDay() === 0) return 'La domenica il centro è chiuso'
+  if (isDomenica(dateStr)) return 'La domenica il centro è chiuso'
   if (chiusure.value.has(dateStr)) return 'Giorno di chiusura'
   if (isFerialeForfait(dateStr)) return 'Sempre disponibile (fisso mensile)'
   if (oggiServer.value && dateStr < oggiServer.value) return 'Giorno passato'

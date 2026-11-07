@@ -4,6 +4,7 @@ import { tutorAvailabilities, closureDates, tutorAssenze } from '../../../databa
 import { eq, and } from 'drizzle-orm'
 import { oggiRomeStr, disponibilitaOggiAncoraAperta } from '../../../utils/tutor-time-window'
 import { regolaFerialeDelTutor } from '../../../services/disponibilita-tutor.service'
+import { giornoSettimana as giornoDellaSettimana } from '#shared/giorno-civile'
 
 const toggleSchema = z.object({
   date: z.string()
@@ -23,7 +24,7 @@ export default defineEventHandler(async (event) => {
   if (dateStr === oggi && !disponibilitaOggiAncoraAperta()) {
     throw createError({ statusCode: 403, statusMessage: 'La disponibilità di oggi si può modificare solo entro le 9:30' })
   }
-  const giornoSettimana = new Date(dateStr + 'T00:00:00Z').getUTCDay()
+  const giornoSettimana = giornoDellaSettimana(dateStr)
   if (giornoSettimana === 0) {
     throw createError({ statusCode: 403, statusMessage: 'La domenica il centro è chiuso' })
   }

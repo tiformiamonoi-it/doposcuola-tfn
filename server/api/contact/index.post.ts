@@ -9,7 +9,7 @@ import { upsertFromPublicRequest } from '../../services/contact.service'
 export default defineEventHandler(async (event) => {
   // Anti-spam: max 3 invii ogni 10 minuti per IP
   const ip = getRequestIP(event, { xForwardedFor: true }) ?? 'sconosciuto'
-  if (rateLimitExceeded(`contact:${ip}`)) {
+  if (await rateLimitExceeded(`contact:${ip}`)) {
     throw createError({ statusCode: 429, statusMessage: 'Troppi invii: riprova tra qualche minuto' })
   }
 

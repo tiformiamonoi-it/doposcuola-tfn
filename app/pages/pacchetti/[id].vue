@@ -278,6 +278,7 @@
 import { riassumiStati } from '~/utils/statiPacchetto'
 import { formatData } from '~/utils/format'
 import { METODI_PAGAMENTO_ITEMS, TIPI_PAGAMENTO_ITEMS } from '~/utils/contabilita'
+import { calcolaTipoPagamentoInModifica, tipoPagamentoCoerente } from '#shared/tipo-pagamento'
 
 definePageMeta({ middleware: ['admin-or-super'] })
 
@@ -462,24 +463,16 @@ const editResiduo = computed(() => {
   return parseFloat(pacchetto.value.importoResiduo) + parseFloat(originalPayment.importo)
 })
 
+// Stessa regola della finestra pagamenti e del server (shared/tipo-pagamento.ts)
 watch(() => editForm.value.importo, (newVal) => {
-  const num = Number(newVal)
-  if (num < editResiduo.value - 0.01 && editForm.value.tipoPagamento === 'SALDO') {
-    editForm.value.tipoPagamento = 'ACCONTO'
-  } else if (num >= editResiduo.value - 0.01 && editForm.value.tipoPagamento !== 'SALDO') {
-    editForm.value.tipoPagamento = 'SALDO'
-  }
+  if (!editingPaymentId.value) return
+  editForm.value.tipoPagamento = calcolaTipoPagamentoInModifica(pagamenti.value, editingPaymentId.value, Number(newVal), editResiduo.value)
 })
 
 const editTipoError = computed(() => {
-  const num = Number(editForm.value.importo)
-  if (editForm.value.tipoPagamento === 'SALDO' && num < editResiduo.value - 0.01) {
-    return 'L\'importo non copre il residuo.'
-  }
-  if (editForm.value.tipoPagamento !== 'SALDO' && num >= editResiduo.value - 0.01) {
-    return 'Scegli Saldo (copre il residuo).'
-  }
-  return undefined
+  const { tipoPagamento, importo } = editForm.value
+  if (tipoPagamentoCoerente(tipoPagamento, Number(importo), editResiduo.value)) return undefined
+  return tipoPagamento === 'SALDO' ? 'L\'importo non copre il residuo.' : 'Scegli Saldo (copre il residuo).'
 })
 
 function chiediSalvataggioPagamento() {

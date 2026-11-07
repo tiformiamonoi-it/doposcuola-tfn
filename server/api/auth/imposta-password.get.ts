@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
   const ip = getRequestIP(event, { xForwardedFor: true }) ?? 'sconosciuto'
   // Limite largo: la pagina si può ricaricare, il link si può riaprire.
   // Serve solo a fermare chi provasse token a raffica.
-  if (rateLimitExceeded(`imposta-password-get:${ip}`, 30, 10 * 60 * 1000)) {
+  if (await rateLimitExceeded(`imposta-password-get:${ip}`, 30, 10 * 60 * 1000)) {
     throw createError({ statusCode: 429, statusMessage: 'Troppi tentativi: riprova tra qualche minuto' })
   }
 

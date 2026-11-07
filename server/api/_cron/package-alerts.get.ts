@@ -1,5 +1,6 @@
 import { runPackageAlerts } from '../../services/package-alerts.service'
 import { anonymizeLostContacts } from '../../services/gdpr.service'
+import { pulisciRateLimitScaduti } from '../../utils/rate-limit'
 
 // GET /api/_cron/package-alerts — invocato ogni giorno da Vercel Cron (vercel.json).
 // Oltre agli avvisi sui pacchetti fa anche la pulizia privacy dei contatti "Persi"
@@ -19,5 +20,13 @@ export default defineEventHandler(async () => {
     console.error('Pulizia privacy dei contatti persi non riuscita:', err)
   }
 
-  return { ...avvisi, contattiAnonimizzati, puliziaRiuscita }
+  // Stessa regola per i contatori dei tentativi scaduti: si riprova domani.
+  let rateLimitCancellati = 0
+  try {
+    rateLimitCancellati = await pulisciRateLimitScaduti()
+  } catch (err) {
+    console.error('Pulizia dei contatori dei tentativi non riuscita:', err)
+  }
+
+  return { ...avvisi, contattiAnonimizzati, puliziaRiuscita, rateLimitCancellati }
 })

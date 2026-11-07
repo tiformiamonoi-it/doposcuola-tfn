@@ -18,20 +18,30 @@
 //     inCentesimi(), si sommano fra numeri interi (che in JavaScript sono esatti) e
 //     si torna agli euro con inEuro() solo alla fine.
 //
-// Cosa NON cambia: i numeri che la segreteria vede restano gli stessi. Cambia solo
-// che spariscono le code tipo −0,00000000004 che prima si trascinavano nei totali.
+// "OGNI CENTESIMO CONTA" (decisione del titolare): i confronti fra importi si fanno
+// SOLO con le funzioni qui sotto, sui centesimi, in modo esatto. Nessuna tolleranza:
+// 99,99 € pagati su 100 lasciano 0,01 € da pagare; 0,01 € da dare a un tutor è un debito.
+//
+// Vive in shared/ perché la stessa regola serve al server E al browser.
 // ─────────────────────────────────────────────
 
+type Importo = string | number | null | undefined
+
 /**
- * Da importo esatto del database (stringa 'numeric', o numero già a 2 decimali)
+ * Da importo (stringa 'numeric' del database o numero anche "sporco", es. 0.1+0.2)
  * a CENTESIMI INTERI. Gli interi in JavaScript non hanno il difetto della virgola:
  * sommarli e sottrarli è esatto fino a cifre enormi, ben oltre i 99.999.999,99 €
  * che la colonna può contenere.
  */
-export function inCentesimi(valore: string | number | null | undefined): number {
+export function inCentesimi(valore: Importo): number {
   const n = typeof valore === 'number' ? valore : parseFloat(valore ?? '0')
   if (!Number.isFinite(n)) return 0
-  return Math.round(n * 100)
+  // La virgola si sposta sul testo ('20.505e2' = 2050,5) e non con ×100
+  // (20,505 × 100 = 2050,4999…): così il mezzo centesimo va lontano dallo zero,
+  // come fa Postgres quando salva in numeric(10,2).
+  const testo = String(Math.abs(n))
+  const cent  = testo.includes('e') ? Math.abs(n) * 100 : Number(`${testo}e2`)
+  return Math.sign(n) * Math.round(cent) || 0   // `|| 0`: niente −0
 }
 
 /**
@@ -40,4 +50,19 @@ export function inCentesimi(valore: string | number | null | undefined): number 
  */
 export function inEuro(centesimi: number): number {
   return Number((centesimi / 100).toFixed(2))
+}
+
+/** Un importo arrotondato al centesimo (0.1 + 0.2 → 0.3). */
+export function arrotonda(valore: Importo): number {
+  return inEuro(inCentesimi(valore))
+}
+
+/** Resta almeno un centesimo da pagare (o da dare)? 0,01 € conta. */
+export function restaDaPagare(residuo: Importo): boolean {
+  return inCentesimi(residuo) > 0
+}
+
+/** L'importo copre il dovuto, centesimo per centesimo? 99,99 su 100 non copre. */
+export function copre(importo: Importo, dovuto: Importo): boolean {
+  return inCentesimi(importo) >= inCentesimi(dovuto)
 }

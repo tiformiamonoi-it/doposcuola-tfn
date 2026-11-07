@@ -373,11 +373,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { startOfMonth, endOfMonth, addMonths, subMonths, format, isSameDay, getDaysInMonth, setDate } from 'date-fns'
+import { startOfMonth, endOfMonth, addMonths, subMonths, format, isSameDay, getDaysInMonth, setDate, parseISO } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { corsiaTutor } from '~/utils/coloriTutor'
 import { coloreGiorno } from '~/utils/coloreGiorno'
 import { ricavoOrarioPacchetto } from '#shared/tariffe'
+import { isDomenica } from '#shared/giorno-civile'
 import ModalNuovaLezione from '~/components/calendario/ModalNuovaLezione.vue'
 import ModalLezioneRapida from '~/components/calendario/ModalLezioneRapida.vue'
 import ModalGestisciSlot from '~/components/calendario/ModalGestisciSlot.vue'
@@ -569,7 +570,9 @@ const giorniWithTutorRecap = computed(() => {
       ricavoGiorno += incasso - parseFloat(l.compensoTutor ?? '0')
     })
 
-    const dateObj = new Date(dateStr)
+    // parseISO legge 'AAAA-MM-GG' come mezzanotte LOCALE: le etichette (numero e nome
+    // del giorno) non slittano al giorno prima con un browser fuori dall'Italia.
+    const dateObj = parseISO(dateStr)
     return {
       dateStr,
       giornoNumero: format(dateObj, 'd'),
@@ -583,7 +586,7 @@ const giorniWithTutorRecap = computed(() => {
       lezioniBase: lezioniGiorno,
       // Chi ha avvisato che oggi non viene (voce G1)
       assenze: assenzePerGiorno.value.get(dateStr) ?? [],
-      isDomenica: dateObj.getDay() === 0,
+      isDomenica: isDomenica(dateStr),
       isChiusura: dateChiusure.value.includes(dateStr),
       tema: coloreGiorno(dateStr)
     }

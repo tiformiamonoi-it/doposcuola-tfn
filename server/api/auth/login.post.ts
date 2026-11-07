@@ -16,7 +16,7 @@ const loginSchema = z.object({
 export default defineEventHandler(async (event) => {
   // Anti brute-force: max 10 tentativi ogni 10 minuti per IP
   const ip = getRequestIP(event, { xForwardedFor: true }) ?? 'sconosciuto'
-  if (rateLimitExceeded(`login:${ip}`, 10)) {
+  if (await rateLimitExceeded(`login:${ip}`, 10)) {
     throw createError({ statusCode: 429, message: 'Troppi tentativi: riprova tra qualche minuto' })
   }
 

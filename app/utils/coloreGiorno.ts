@@ -11,6 +11,7 @@
  *  - ring   : bordo della targhetta
  *  - wash   : inizio sfumatura per l'alone leggero nell'intestazione (usare con `bg-gradient-to-r ... to-transparent`)
  */
+import { giornoSettimana } from '#shared/giorno-civile'
 
 const GIORNI = {
   0: { accent: 'border-l-slate-300',  tile: 'bg-gradient-to-br from-slate-50 to-slate-100',   text: 'text-slate-600',  ring: 'ring-slate-200',  wash: 'from-slate-50/60' },
@@ -25,6 +26,6 @@ const GIORNI = {
 export type TemaGiorno = (typeof GIORNI)[keyof typeof GIORNI]
 
 export function coloreGiorno(dateStr: string): TemaGiorno {
-  const d = new Date(dateStr).getDay() as keyof typeof GIORNI
+  const d = giornoSettimana(dateStr) as keyof typeof GIORNI
   return GIORNI[d] ?? GIORNI[0]
 }

@@ -372,6 +372,7 @@
 
 <script setup lang="ts">
 import { oggiISO, formatImporto as fmt } from '~/utils/format'
+import { giornoSettimana } from '#shared/giorno-civile'
 
 definePageMeta({ middleware: ['admin-or-super'] })
 useHead({ title: 'Dashboard — tiformiamonoi.it' })
@@ -425,7 +426,7 @@ const range = computed(() => {
   }
   if (preset.value === 'settimana') {
     // Lunedì-domenica della settimana scorsa
-    const dow = new Date(oggi + 'T00:00:00Z').getUTCDay() // 0 = domenica
+    const dow = giornoSettimana(oggi) // 0 = domenica
     const lunediQuesta = shiftISO(oggi, -((dow + 6) % 7))
     return { start: shiftISO(lunediQuesta, -7), end: shiftISO(lunediQuesta, -1) }
   }

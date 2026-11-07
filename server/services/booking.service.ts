@@ -3,6 +3,7 @@ import { db } from '../database/client'
 import { bookings, bookingSubjects, students, closureDates, systemConfigs, packages } from '../database/schema'
 import { computePackageStates } from './package.service'
 import { SUPPLEMENTO_SPECIALE } from '#shared/tariffe'
+import { isDomenica } from '#shared/giorno-civile'
 import type { CreateBookingInput, UpdateBookingStatusInput } from '#shared/schemas/booking.schema'
 
 // ─────────────────────────────────────────────
@@ -233,14 +234,16 @@ export async function createBooking(input: CreateBookingInput, userId: string) {
   }
 
   const dateObj = new Date(input.dataDesiderata)
-  
-  // 1. Controllo Domenica (0 = Domenica)
-  if (dateObj.getDay() === 0) {
+  // Il giorno civile della prenotazione è la data UTC dell'istante inviato (il portale
+  // manda 'AAAA-MM-GGT12:00:00Z'): lo stesso giorno per domenica, chiusure e salvataggio.
+  const targetDateStr = dateObj.toISOString().split('T')[0]
+
+  // 1. Controllo Domenica
+  if (isDomenica(targetDateStr!)) {
     throw new Error('Impossibile prenotare di Domenica')
   }
 
   // 2. Controllo Chiusure (colonna date 'YYYY-MM-DD': confronto diretto, niente fusi)
-  const targetDateStr = dateObj.toISOString().split('T')[0]
   const isClosed = await db.query.closureDates.findFirst({
     where: eq(closureDates.date, targetDateStr!)
   })

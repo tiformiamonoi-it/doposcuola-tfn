@@ -41,3 +41,18 @@ export function giornoSuccessivo(giorno: string): string {
 export function annoBisestile(anno: number): boolean {
   return (anno % 4 === 0 && anno % 100 !== 0) || anno % 400 === 0
 }
+
+// Giorno della settimana (0 = domenica … 6 = sabato) di un giorno civile 'AAAA-MM-GG'.
+// Calcolato in UTC dalle cifre della stringa: né il fuso del server (UTC su Vercel)
+// né quello del browser possono spostarlo. Prima ogni pagina lo faceva a modo suo
+// (getDay() in ora locale, getUTCDay() su mezzanotte UTC) e due copie potevano
+// dare giorni diversi per la stessa data.
+export function giornoSettimana(giorno: string): number {
+  const [anno = NaN, mese = NaN, g = NaN] = giorno.slice(0, 10).split('-').map(Number)
+  return new Date(Date.UTC(anno, mese - 1, g)).getUTCDay()
+}
+
+// La domenica il centro è chiuso: regola unica per server e browser.
+export function isDomenica(giorno: string): boolean {
+  return giornoSettimana(giorno) === 0
+}

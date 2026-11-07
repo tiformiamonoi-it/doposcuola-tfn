@@ -954,6 +954,7 @@ import ConfirmDialog from '~/components/ConfirmDialog.vue'
 import { SUPPLEMENTO_SPECIALE, TARIFFE_DEFAULT } from '#shared/tariffe'
 import { MATERIE_SUPERIORI, materieDaAggiungere } from '#shared/materie'
 import { annoScolasticoDa, inizioAnnoProposto } from '#shared/rientri'
+import { isDomenica } from '#shared/giorno-civile'
 import {
   ETICHETTA_TIPO_EMAIL, INTERRUTTORE_EMAIL_GENERALE, INTERRUTTORI_EMAIL, interruttoreAcceso,
   type MotivoEmail, type TipoEmail,
@@ -1451,8 +1452,8 @@ const blankSpeciali = computed(() => {
 const giorniMeseSpeciali = computed(() => {
   const tot = getDaysInMonth(meseSpeciali.value)
   return Array.from({ length: tot }, (_, i) => {
-    const d = setDate(meseSpeciali.value, i + 1)
-    return { numero: i + 1, dateStr: format(d, 'yyyy-MM-dd'), domenica: getDay(d) === 0 }
+    const dateStr = format(setDate(meseSpeciali.value, i + 1), 'yyyy-MM-dd')
+    return { numero: i + 1, dateStr, domenica: isDomenica(dateStr) }
   })
 })
 

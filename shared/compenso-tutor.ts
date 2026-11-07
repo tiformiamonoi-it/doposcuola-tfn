@@ -95,6 +95,17 @@ export function mesePrecedente(mese: MeseCivile): MeseCivile {
 }
 
 /**
+ * Il mese `n` mesi prima di `mese` (n negativo = dopo): mesiPrima('2026-12', 11) → '2026-01'.
+ * Sui numeri anno/mese, mai con una Date: le finestre dei compensi partono dal mese
+ * civile italiano, non dall'orologio del server (UTC), che la prima ora del giorno 1
+ * è ancora nel mese prima.
+ */
+export function mesiPrima(mese: MeseCivile, n: number): MeseCivile {
+  const tot = Number(mese.slice(0, 4)) * 12 + Number(mese.slice(5, 7)) - 1 - n
+  return `${Math.floor(tot / 12)}-${String((tot % 12) + 1).padStart(2, '0')}`
+}
+
+/**
  * L'importo del fisso, se c'è ed è un numero sensato. Altrimenti null.
  * Un tutor segnato FORFAIT ma senza importo (o con 0) non è davvero a fisso: si
  * continua a pagarlo a ore, com'è sempre stato.

@@ -5,6 +5,7 @@
 
 import { STATI_RIENTRO, colorStatoRientro } from '#shared/rientri'
 import type { StatoRientro } from '#shared/rientri'
+import { giornoSettimana } from '#shared/giorno-civile'
 // La parola-segnaposto "nessun filtro" e il tipo dei colori sono già definiti
 // per i Contatti: si riusano, così i due elenchi si comportano allo stesso modo.
 import { NESSUN_FILTRO } from './contatti'
@@ -121,8 +122,7 @@ export function formatGiornoEsteso(giorno: string | null | undefined): string {
   if (!giorno) return ''
   const [anno, mese, gg] = giorno.split('-').map(Number)
   if (!anno || !mese || !gg) return giorno
-  const d = new Date(Date.UTC(anno, mese - 1, gg))
-  const settimana = GIORNI_SETTIMANA[d.getUTCDay()] ?? ''
+  const settimana = GIORNI_SETTIMANA[giornoSettimana(giorno)] ?? ''
   const nomeMese = MESI_ESTESI[mese - 1] ?? ''
   return `${settimana} ${gg} ${nomeMese}`.trim()
 }

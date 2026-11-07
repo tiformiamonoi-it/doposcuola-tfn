@@ -4,7 +4,7 @@ import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { CAT, CATEGORIE_BOLLO } from '#shared/accounting-categories'
 import { IMPORTO_BOLLO, serveBollo } from '#shared/bollo'
 import { rimuoviSuffissoFattura } from '#shared/fattura'
-import { inCentesimi, inEuro } from '../utils/arrotondamenti'
+import { inCentesimi, inEuro } from '#shared/arrotondamenti'
 
 // ─────────────────────────────────────────────
 // LA MARCA DA BOLLO (F1)

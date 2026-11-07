@@ -6,6 +6,7 @@ import { getPortalStudentIds } from '../../../utils/portal'
 import { valutaMaterieSpeciali } from '../../../services/booking.service'
 import { toHttpError } from '../../../utils/http-error'
 import { oggiRomeStr, oraRomeAlmeno } from '../../../utils/tutor-time-window'
+import { isDomenica } from '#shared/giorno-civile'
 
 // PUT /api/portal/bookings/[id] — genitore o studente collegato
 export default defineEventHandler(async (event) => {
@@ -70,8 +71,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Non puoi spostare la prenotazione al passato' })
   }
 
-  // 3. Verifica Domenica per la nuova data
-  if (newDate.getDay() === 0) {
+  // 3. Verifica Domenica per la nuova data (stesso giorno civile usato per le chiusure)
+  if (isDomenica(newStr!)) {
     throw createError({ statusCode: 400, statusMessage: 'Impossibile spostare la lezione di Domenica' })
   }
 

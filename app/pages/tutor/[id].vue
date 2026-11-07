@@ -62,7 +62,7 @@
 
         <!-- Alert arretrati -->
         <UAlert
-          v-if="arretratiTotali > 0.01"
+          v-if="restaDaPagare(arretratiTotali)"
           color="error"
           variant="soft"
           icon="i-heroicons-exclamation-triangle"
@@ -243,7 +243,7 @@
                     <span>€ {{ row.original.pagato.toFixed(2) }}</span>
                   </template>
                   <template #residuo-cell="{ row }">
-                    <span :class="row.original.residuo > 0.01 ? 'text-error-600 font-medium' : 'text-slate-400'">
+                    <span :class="restaDaPagare(row.original.residuo) ? 'text-error-600 font-medium' : 'text-slate-400'">
                       € {{ row.original.residuo.toFixed(2) }}
                     </span>
                   </template>
@@ -315,7 +315,7 @@
                   <div class="text-xs text-slate-500 mt-0.5">Totale rimborsato</div>
                 </UCard>
                 <UCard>
-                  <div class="text-xl font-bold" :class="rimborsiDaPagare > 0 ? 'text-warning-600' : 'text-slate-900'">
+                  <div class="text-xl font-bold" :class="restaDaPagare(rimborsiDaPagare) ? 'text-warning-600' : 'text-slate-900'">
                     € {{ rimborsiDaPagare.toFixed(2) }}
                   </div>
                   <div class="text-xs text-slate-500 mt-0.5">Da rimborsare</div>
@@ -337,8 +337,8 @@
                   <template #importo-cell="{ row }">€ {{ parseFloat(row.original.importo).toFixed(2) }}</template>
                   <template #importoPagato-cell="{ row }">€ {{ parseFloat(row.original.importoPagato).toFixed(2) }}</template>
                   <template #residuoReimb-cell="{ row }">
-                    <span :class="(parseFloat(row.original.importo) - parseFloat(row.original.importoPagato)) > 0.01 ? 'text-error-600' : 'text-slate-400'">
-                      € {{ (parseFloat(row.original.importo) - parseFloat(row.original.importoPagato)).toFixed(2) }}
+                    <span :class="!copre(row.original.importoPagato, row.original.importo) ? 'text-error-600' : 'text-slate-400'">
+                      € {{ residuoRimborso(row.original).toFixed(2) }}
                     </span>
                   </template>
                   <template #stato-cell="{ row }">
@@ -656,7 +656,7 @@
         <UForm :state="datiPagaRimborso" class="space-y-4" @submit="confermaPagaRimborso">
           <div v-if="rimborsoSelezionato" class="text-sm text-slate-600 bg-slate-50 rounded-lg p-3">
             {{ rimborsoSelezionato.descrizione }} —
-            residuo: € {{ (parseFloat(rimborsoSelezionato.importo) - parseFloat(rimborsoSelezionato.importoPagato)).toFixed(2) }}
+            residuo: € {{ residuoRimborso(rimborsoSelezionato).toFixed(2) }}
           </div>
           <UFormField name="importoPagamento" label="Importo pagato (€)">
             <UInput v-model="datiPagaRimborso.importoPagamento" type="number" step="0.01" class="w-full" />
@@ -692,6 +692,8 @@ import type { EsitoInvitoEmail } from '#shared/email'
 // La regola del fisso mensile sta scritta una volta sola, e il modulo usa la stessa
 // del server: così il mese proposto qui e quello controllato là non possono divergere.
 import { etichettaMese, meseDiGiorno, meseDiOggi, meseFineFisso, meseInizioFisso, mesePrecedente } from '#shared/compenso-tutor'
+// Ogni centesimo conta: 0,01 € da dare a un tutor è un debito che si vede
+import { copre, inCentesimi, inEuro, restaDaPagare } from '#shared/arrotondamenti'
 import { oggiISO } from '~/utils/format'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
 import { METODI_PAGAMENTO_ITEMS, coloreStatoPagamento, coloreStatoRimborso } from '~/utils/contabilita'
@@ -918,24 +920,32 @@ const { data: stats } = useLazyFetch<StatisticheTutor | null>(`/api/tutors/${id}
 })
 
 // ─── Computed KPI ──────────────────────────────
+// Somme di importi in centesimi interi (regola unica, shared/arrotondamenti.ts):
+// sommare decimali in JavaScript lascia code come 99,98999…
+function sommaEuro<T>(righe: T[], importo: (r: T) => number | string): number {
+  return inEuro(righe.reduce((s, r) => s + inCentesimi(importo(r)), 0))
+}
+// Quanto resta da dare su un rimborso, al centesimo
+function residuoRimborso(r: { importo: string, importoPagato: string }): number {
+  return inEuro(Math.max(0, inCentesimi(r.importo) - inCentesimi(r.importoPagato)))
+}
 const arretratiTotali = computed(() =>
-  (compensation.value ?? []).reduce((s: number, m) => s + (m.residuo > 0.01 && !m.isMeseCorrente ? m.residuo : 0), 0)
+  sommaEuro((compensation.value ?? []).filter(m => restaDaPagare(m.residuo) && !m.isMeseCorrente), m => m.residuo)
 )
 const mesiArretrati = computed(() =>
-  (compensation.value ?? []).filter(m => m.residuo > 0.01 && !m.isMeseCorrente).length
+  (compensation.value ?? []).filter(m => restaDaPagare(m.residuo) && !m.isMeseCorrente).length
 )
 const totaleCompensoPagato = computed(() =>
-  (compensation.value ?? []).reduce((s: number, m) => s + m.pagato, 0)
+  sommaEuro(compensation.value ?? [], m => m.pagato)
 )
 const compensoMeseCorrente = computed(() =>
   (compensation.value ?? []).find(m => m.isMeseCorrente)?.residuo ?? 0
 )
 const totaleRimborsato = computed(() =>
-  (reimbursements.value ?? []).reduce((s: number, r) => s + parseFloat(r.importoPagato), 0)
+  sommaEuro(reimbursements.value ?? [], r => r.importoPagato)
 )
 const rimborsiDaPagare = computed(() =>
-  (reimbursements.value ?? []).reduce((s: number, r) =>
-    s + Math.max(0, parseFloat(r.importo) - parseFloat(r.importoPagato)), 0)
+  sommaEuro(reimbursements.value ?? [], residuoRimborso)
 )
 
 // ─── Tab ──────────────────────────────────────
@@ -1089,7 +1099,7 @@ const mesiFissoNonLiquidatiPersi = computed<CompensoMese[]>(() => {
   if (!t || datiModifica.modalitaPagamento !== 'FORFAIT' || !nuovoDal) return []
   const riparte = t.modalitaPagamento !== 'FORFAIT' || nuovoDal !== meseDiGiorno(t.forfaitDal ?? '')
   if (!riparte) return []
-  return (compensation.value ?? []).filter(m => m.forfaitApplicato && m.residuo > 0.01 && m.mese < nuovoDal)
+  return (compensation.value ?? []).filter(m => m.forfaitApplicato && restaDaPagare(m.residuo) && m.mese < nuovoDal)
 })
 
 async function salvaTutor() {
@@ -1312,8 +1322,7 @@ const datiPagaRimborso = reactive({ importoPagamento: '', metodo: 'BONIFICO', no
 
 function apriPagaRimborso(r: RimborsoTutor) {
   rimborsoSelezionato.value = r
-  const residuo = parseFloat(r.importo) - parseFloat(r.importoPagato)
-  datiPagaRimborso.importoPagamento = residuo.toFixed(2)
+  datiPagaRimborso.importoPagamento = residuoRimborso(r).toFixed(2)
   datiPagaRimborso.metodo = 'BONIFICO'
   datiPagaRimborso.note = ''
   modalPagaRimborsoAperto.value = true

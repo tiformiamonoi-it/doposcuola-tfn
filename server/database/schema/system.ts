@@ -1,4 +1,4 @@
-import { pgTable, text, varchar, timestamp, date, index } from 'drizzle-orm/pg-core'
+import { pgTable, text, varchar, timestamp, date, index, integer } from 'drizzle-orm/pg-core'
 import { cuid, contactRequestStatusEnum, notificaTipoEnum } from './common'
 import { users } from './users'
 import type { TipoEmail, MotivoEmail, EsitoRegistroEmail } from '../../../shared/email'
@@ -103,4 +103,15 @@ export const contactRequests = pgTable('contact_requests', {
   status:    contactRequestStatusEnum('status').notNull().default('PENDING'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// Contatori dei tentativi sugli endpoint pubblici (login, recupero password, contatti).
+// Stanno nel database perché su Vercel ogni istanza ha la sua memoria: solo qui il
+// limite vale per tutte. La chiave può contenere un'email; nient'altro di personale.
+// Le righe scadute le cancella il cron giornaliero (vedi utils/rate-limit.ts).
+export const rateLimits = pgTable('rate_limits', {
+  key:         text('key').primaryKey(),
+  count:       integer('count').notNull(),
+  windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
+  expiresAt:   timestamp('expires_at', { withTimezone: true }).notNull(),
 })

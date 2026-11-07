@@ -2,6 +2,7 @@ import { db } from '../database/client'
 import { accountingEntries, packages, payments, students } from '../database/schema'
 import { and, count, desc, eq, sql } from 'drizzle-orm'
 import { computePackageStates } from './package.service'
+import { copre } from '#shared/arrotondamenti'
 import { conFattura, rimuoviSuffissoFattura } from '#shared/fattura'
 import { CAT } from '#shared/accounting-categories'
 import { notaBolloPagamento, registraBolloInTransazione, riferimentoBollo, togliBolloInTransazione, type EsitoBollo } from './bollo.service'
@@ -47,9 +48,9 @@ export async function createPayment(data: CreatePaymentInput) {
       throw new Error('Impossibile aggiungere un pagamento a un pacchetto SOSPESO')
     }
 
-    // Verifica che il pagamento non superi l'importo residuo
+    // Verifica che il pagamento non superi l'importo residuo (al centesimo, senza tolleranza)
     const residuo = parseFloat(pkg.importoResiduo)
-    if (data.importo > residuo + 0.01) {
+    if (!copre(residuo, data.importo)) {
       throw new Error(
         `Il pagamento (€ ${data.importo.toFixed(2)}) supera l'importo residuo del pacchetto (€ ${residuo.toFixed(2)})`
       )
@@ -275,7 +276,8 @@ export async function updatePayment(paymentId: string, data: UpdatePaymentInput)
     const nuovoImportoPagato = parseFloat(pkg.importoPagato) - parseFloat(pay.importo) + data.importo
     const nuovoResiduo       = parseFloat(pkg.prezzoTotale) - nuovoImportoPagato
 
-    if (nuovoResiduo < -0.01) {
+    // Al centesimo: anche 0,01 € oltre il prezzo è troppo
+    if (!copre(pkg.prezzoTotale, nuovoImportoPagato)) {
       throw new Error(`Questo importo supera il prezzo totale del pacchetto (€ ${parseFloat(pkg.prezzoTotale).toFixed(2)})`)
     }
 

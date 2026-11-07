@@ -38,34 +38,24 @@ type LessonType = 'SINGOLA' | 'GRUPPO' | 'MAXI'
 // (stessa fonte usata dalle anteprime frontend — niente divergenze UI/server)
 const DEFAULT_TARIFFE: Record<LessonType, number> = TARIFFE_DEFAULT
 
-// Cache in-memory con TTL 60 secondi (il valore cambia raramente)
-let tariffeCache: Record<LessonType, number> | null = null
-let tariffeCacheExpiry = 0
-const CACHE_TTL_MS = 60_000
-
+// Letta dal database a ogni operazione, senza cache in memoria: su Vercel ogni istanza
+// avrebbe la sua copia e dopo un cambio in Impostazioni alcune lezioni si sarebbero
+// calcolate coi valori vecchi. Chi lavora su molte lezioni (ricalcolo, anteprima) la
+// legge UNA volta all'inizio e la passa giù.
 async function getTariffeTutor(): Promise<Record<LessonType, number>> {
-  const now = Date.now()
-  if (tariffeCache && tariffeCacheExpiry > now) {
-    return tariffeCache
-  }
   try {
     const rows = await db.select({ value: systemConfigs.value }).from(systemConfigs).where(eq(systemConfigs.key, 'tariffe_tutor')).limit(1)
     const raw = rows[0]?.value
-    if (raw) {
-      const parsed = JSON.parse(raw) as Record<string, number>
-      tariffeCache = {
-        SINGOLA: parsed.SINGOLA ?? DEFAULT_TARIFFE.SINGOLA,
-        GRUPPO:  parsed.GRUPPO  ?? DEFAULT_TARIFFE.GRUPPO,
-        MAXI:    parsed.MAXI    ?? DEFAULT_TARIFFE.MAXI,
-      }
-    } else {
-      tariffeCache = { ...DEFAULT_TARIFFE }
+    if (!raw) return { ...DEFAULT_TARIFFE }
+    const parsed = JSON.parse(raw) as Record<string, number>
+    return {
+      SINGOLA: parsed.SINGOLA ?? DEFAULT_TARIFFE.SINGOLA,
+      GRUPPO:  parsed.GRUPPO  ?? DEFAULT_TARIFFE.GRUPPO,
+      MAXI:    parsed.MAXI    ?? DEFAULT_TARIFFE.MAXI,
     }
   } catch {
-    tariffeCache = { ...DEFAULT_TARIFFE }
+    return { ...DEFAULT_TARIFFE }
   }
-  tariffeCacheExpiry = now + CACHE_TTL_MS
-  return tariffeCache
 }
 
 // Il compenso si calcola in tariffe-speciali.service.ts (calcolaCompensoLezione): una
@@ -91,20 +81,15 @@ function compensoDaRicalcolare(
 }
 
 // Interruttore "Maxi gruppo attivo" (system_configs → maxi_gruppo_attivo): acceso salvo
-// un "false" esplicito, come prima che esistesse. Stessa cache di 60 s delle tariffe.
+// un "false" esplicito, come prima che esistesse. Letto dal database come le tariffe.
 // La regola del tipo sta in shared/tariffe.ts (determinaTipoLezione), usata anche dalle anteprime.
-let maxiCache: { valore: boolean; scade: number } | null = null
-
 async function getMaxiAttivo(): Promise<boolean> {
-  const now = Date.now()
-  if (maxiCache && maxiCache.scade > now) return maxiCache.valore
-  let valore = true
   try {
     const rows = await db.select({ value: systemConfigs.value }).from(systemConfigs).where(eq(systemConfigs.key, 'maxi_gruppo_attivo')).limit(1)
-    valore = (rows[0]?.value ?? '').trim().toLowerCase() !== 'false'
-  } catch { /* config illeggibile → acceso */ }
-  maxiCache = { valore, scade: now + CACHE_TTL_MS }
-  return valore
+    return (rows[0]?.value ?? '').trim().toLowerCase() !== 'false'
+  } catch {
+    return true // config illeggibile → acceso
+  }
 }
 
 // Eccezione "stesso giorno" per i pacchetti MENSILI: se i giorni sono finiti ma la

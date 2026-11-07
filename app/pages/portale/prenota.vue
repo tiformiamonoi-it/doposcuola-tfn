@@ -255,6 +255,7 @@
 import { ref, reactive, computed, watchEffect, onMounted } from 'vue'
 import { SUPPLEMENTO_SPECIALE } from '#shared/tariffe'
 import { MATERIE_DEFAULT } from '#shared/materie'
+import { isDomenica } from '#shared/giorno-civile'
 import { formatImporto } from '~/utils/format'
 
 definePageMeta({
@@ -396,14 +397,13 @@ function getItalyNow() {
 
 function isDayDisabled(day: number) {
   const dateStr = getDateString(day)
-  const d = new Date(dateStr)
-  
+
   // 1. Passato
   const itNow = getItalyNow()
   if (dateStr < itNow.todayStr) return true
   
-  // 2. Domenica
-  if (d.getDay() === 0) return true
+  // 2. Domenica (dal giorno civile della casella, non dal fuso del browser)
+  if (isDomenica(dateStr)) return true
   
   // 3. Chiusure (c.date è già 'YYYY-MM-DD': confronto diretto)
   if (closures.value.some((c: any) => c.date === dateStr)) return true

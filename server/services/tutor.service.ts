@@ -4,14 +4,14 @@ import {
   users, tutorProfiles, lessons,
   tutorPayments, tutorReimbursements, accountingEntries,
 } from '../database/schema'
-import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, ilike, inArray, lt, or, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { annullaLinkAperti, inviaInvitoPassword } from '../utils/password-token'
-import { inCentesimi, inEuro } from '../utils/arrotondamenti'
+import { inCentesimi, inEuro, restaDaPagare } from '#shared/arrotondamenti'
 import { nomeProprio } from '../utils/nomi'
 import { CAT } from '#shared/accounting-categories'
 import {
-  dovutoDelMese, etichettaMese, fissoDelMese, meseDiOggi, mesePrecedente, mesiDovutiAFisso,
+  dovutoDelMese, etichettaMese, fissoDelMese, meseDiOggi, mesePrecedente, mesiDovutiAFisso, mesiPrima,
   primoGiornoDelMese, type ProfiloCompensoTutor,
 } from '#shared/compenso-tutor'
 import type {
@@ -24,11 +24,6 @@ import type {
 // (1 agosto 00:00 Europe/Rome → '2025-07-31'), falsando i confronti su lessons.data.
 function ymd(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-// Chiave mese 'YYYY-MM' dal fuso locale, stessa ragione di ymd().
-function ym(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 // ─────────────────────────────────────────────
@@ -143,18 +138,15 @@ export function sqlMesiCompenso(daMese: string, aMese: string, meseCorrente: str
 // 4 query parallele per evitare N+1
 // ─────────────────────────────────────────────
 export async function listTutors(query: TutorQuery) {
-  const now = new Date()
-  const meseStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const meseEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
-  // Confini del mese come stringhe 'YYYY-MM-DD' per la colonna lessons.data (giorno civile)
-  const meseStartStr = ymd(meseStart)
-  const meseEndStr   = ymd(meseEnd)
-  const pastStart = new Date(now.getFullYear() - 1, now.getMonth() + 1, 1)
-  const pastEnd   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)
-  // Il mese di oggi in Italia: è la partenza di riserva del fisso per i profili che
-  // non hanno una data di partenza (mai all'indietro) ed è il mese che l'elenco
-  // mostra nella colonna "Lez. mese".
-  const meseOggi  = meseDiOggi()
+  // Finestre dal mese civile ITALIANO (come il riepilogo debiti), mai da new Date()
+  // del server: alle 00:30 del 1° in Italia, su Vercel (UTC) è ancora il mese prima.
+  const meseOggi     = meseDiOggi()
+  const meseStartStr = primoGiornoDelMese(meseOggi)
+  const meseDopoStr  = primoGiornoDelMese(mesiPrima(meseOggi, -1))
+  // Arretrati: gli 11 mesi prima di quello in corso
+  const pastDa       = mesiPrima(meseOggi, 11)
+  // meseOggi è anche la partenza di riserva del fisso per i profili che non hanno
+  // una data di partenza (mai all'indietro) ed è il mese della colonna "Lez. mese".
 
   // Caratteri jolly di ILIKE neutralizzati (come in student.service): "%" cerca "%"
   const cerca = query.search ? `%${query.search.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : undefined
@@ -200,7 +192,7 @@ export async function listTutors(query: TutorQuery) {
       compenso:   sql<string>`COALESCE(SUM(${lessons.compensoTutor}::numeric), 0)::text`,
     })
     .from(lessons)
-    .where(and(gte(lessons.data, meseStartStr), lte(lessons.data, meseEndStr)))
+    .where(and(gte(lessons.data, meseStartStr), lt(lessons.data, meseDopoStr)))
     .groupBy(lessons.tutorId),
 
     // 3. Somma pagamenti mese corrente per tutorId (+ flag Pro Bono: mese liquidato a titolo gratuito)
@@ -210,7 +202,8 @@ export async function listTutors(query: TutorQuery) {
       proBono: sql<boolean>`BOOL_OR(${tutorPayments.status} = 'PRO_BONO')`,
     })
     .from(tutorPayments)
-    .where(and(gte(tutorPayments.mese, meseStart), lte(tutorPayments.mese, meseEnd)))
+    // Confronto con ::date come nel riepilogo debiti, così i due conti vedono gli stessi pagamenti
+    .where(sql`${tutorPayments.mese} >= ${meseStartStr}::date AND ${tutorPayments.mese} < ${meseDopoStr}::date`)
     .groupBy(tutorPayments.tutorId),
 
     // 4. Arretrati: mesi passati con compenso > pagato.
@@ -220,14 +213,14 @@ export async function listTutors(query: TutorQuery) {
     //    restano a ore. Prima qui il fisso non veniva proprio guardato, ed elenco e
     //    scheda dello stesso tutor mostravano due numeri diversi.
     db.execute(sql`
-      WITH ${sqlMesiCompenso(ym(pastStart), ym(pastEnd), meseOggi)},
+      WITH ${sqlMesiCompenso(pastDa, mesePrecedente(meseOggi), meseOggi)},
       monthly_payments AS (
         SELECT tutor_id,
                DATE_TRUNC('month', mese)::date AS mese,
                COALESCE(SUM(importo::numeric), 0) AS pagato,
                BOOL_OR(status = 'PRO_BONO') AS pro_bono
         FROM tutor_payments
-        WHERE mese >= ${pastStart.toISOString()} AND mese <= ${pastEnd.toISOString()}
+        WHERE mese >= ${primoGiornoDelMese(pastDa)}::date AND mese < ${meseStartStr}::date
         GROUP BY tutor_id, DATE_TRUNC('month', mese)::date
       )
       SELECT mc.tutor_id AS tutor_id,
@@ -252,7 +245,7 @@ export async function listTutors(query: TutorQuery) {
   let countLiquidati  = 0
 
   // F3 — gli importi da liquidare si contano in CENTESIMI INTERI (vedi
-  // server/utils/arrotondamenti.ts) e si arrotondano una volta sola alla fine.
+  // shared/arrotondamenti.ts) e si arrotondano una volta sola alla fine.
   // ⚠️ L'arrotondamento PER DIFETTO all'euro del compenso resta esattamente com'è:
   // è una regola voluta, non un errore di calcolo. Quello che cambia è solo che i
   // totali non si trascinano più dietro code di centesimi che non esistono.
@@ -281,11 +274,11 @@ export async function listTutors(query: TutorQuery) {
 
     // Totale unico "Da liquidare": mese corrente + tutti i mesi arretrati insieme.
     const totaleDaLiquidareCent = compensoResiduoCent + totaleArretratiCent
-    // "più di un centesimo": la stessa soglia di prima, letta in centesimi.
-    const mesiDaLiquidare       = mesiArretrati + (compensoResiduoCent > 1 ? 1 : 0)
+    // Ogni centesimo conta: anche 0,01 € ancora da dare è un mese da liquidare.
+    const mesiDaLiquidare       = mesiArretrati + (compensoResiduoCent > 0 ? 1 : 0)
 
     if (tutor.active) tutoriAttivi++
-    if (totaleDaLiquidareCent > 1) { daLiquidare++; totaleDovutoCent += totaleDaLiquidareCent }
+    if (totaleDaLiquidareCent > 0) { daLiquidare++; totaleDovutoCent += totaleDaLiquidareCent }
     if (compensoCalcolato > 0) { sumLiquidazioni += compensoCalcolato; countLiquidati++ }
 
     return {
@@ -301,7 +294,7 @@ export async function listTutors(query: TutorQuery) {
   })
 
   const filtered = query.daLiquidare === 'true'
-    ? tutors.filter(t => t.totaleDaLiquidare > 0.01)   // "più di un centesimo", come prima
+    ? tutors.filter(t => restaDaPagare(t.totaleDaLiquidare))   // anche un solo centesimo
     : tutors
 
   return {
@@ -622,8 +615,11 @@ function chiusuraFisso(
 // Storico ultimi N mesi con stato pagamento
 // ─────────────────────────────────────────────
 export async function getMonthlyCompensation(tutorId: string, months = 12) {
-  const now       = new Date()
-  const pastStart = new Date(now.getFullYear(), now.getMonth() - months + 1, 1)
+  // Finestra dal mese civile ITALIANO (come elenco tutor e riepilogo debiti):
+  // il mese in corso e i `months - 1` prima. Mai new Date() del server (UTC).
+  const nowKey    = meseDiOggi()
+  const meseDa    = mesiPrima(nowKey, months - 1)
+  const primoDa   = primoGiornoDelMese(meseDa)
 
   const [lessonRows, paymentRows] = await Promise.all([
     db.execute(sql`
@@ -633,7 +629,7 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
              COUNT(*) FILTER (WHERE compenso_forzato IS NOT NULL)::text AS num_forzate,
              COALESCE(SUM(compenso_tutor::numeric), 0)::text AS compenso_grezzo
       FROM lessons
-      WHERE tutor_id = ${tutorId} AND data >= ${ymd(pastStart)}
+      WHERE tutor_id = ${tutorId} AND data >= ${primoDa}
       GROUP BY DATE_TRUNC('month', data)
       ORDER BY 1 DESC
     `),
@@ -641,7 +637,7 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
       .from(tutorPayments)
       .where(and(
         eq(tutorPayments.tutorId, tutorId),
-        gte(tutorPayments.mese, pastStart),
+        sql`${tutorPayments.mese} >= ${primoDa}::date`,
       ))
       .orderBy(desc(tutorPayments.mese)),
   ])
@@ -671,15 +667,15 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
   // versamenti da 33,33 € fanno esattamente 99,99 € e non 99,98999999999999.
   const payByMonth = new Map<string, { totaleCent: number; proBono: boolean }>()
   for (const p of paymentRows) {
-    const key = ym(new Date(p.mese))
+    // Mese del pagamento letto in UTC, come DATE_TRUNC nelle query SQL dell'elenco
+    // e del riepilogo (database in UTC): non dal fuso del computer che fa girare il server
+    const key = new Date(p.mese).toISOString().slice(0, 7)
     const cur = payByMonth.get(key) ?? { totaleCent: 0, proBono: false }
     payByMonth.set(key, {
       totaleCent: cur.totaleCent + inCentesimi(p.importo),
       proBono:    cur.proBono || p.status === 'PRO_BONO',
     })
   }
-
-  const nowKey = meseDiOggi()
 
   // I mesi da mostrare: quelli con lezioni, più — per un tutor a fisso — TUTTI i mesi
   // dalla partenza del fisso a oggi, anche quelli in cui non ha fatto niente.
@@ -693,7 +689,7 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
       compensoGrezzo: parseFloat(row.compenso_grezzo),
     })
   }
-  for (const meseFisso of mesiDovutiAFisso(profilo, ym(pastStart), nowKey, nowKey)) {
+  for (const meseFisso of mesiDovutiAFisso(profilo, meseDa, nowKey, nowKey)) {
     if (!mesiConLezioni.has(meseFisso)) {
       mesiConLezioni.set(meseFisso, { numLezioni: 0, numForzate: 0, compensoGrezzo: 0 })
     }
@@ -722,14 +718,14 @@ export async function getMonthlyCompensation(tutorId: string, months = 12) {
     const residuoCent           = pay?.proBono ? 0 : Math.max(0, inCentesimi(dovuto.importo) - pagatoCent)
     const isMeseCorrente        = meseKey === nowKey
 
-    // Stesse soglie di prima, lette in centesimi: "un centesimo" invece di "0,01".
+    // Soglie esatte al centesimo, senza tolleranza: 0,01 € mancante non è PAGATO.
     let stato: string
     if (pay?.proBono)                              stato = 'PRO_BONO'
     // Fisso del mese in corso: "in maturazione" finché non è pagato per intero
     // (chi lo anticipa lo vede PAGATO).
-    else if (dovuto.inMaturazione)                 stato = pagatoCent > 0 && pagatoCent >= inCentesimi(compensoCalcolato) - 1 ? 'PAGATO' : 'IN_MATURAZIONE'
-    else if (residuoCent <= 1 && pagatoCent > 0)   stato = 'PAGATO'
-    else if (pagatoCent > 1 && residuoCent > 1)    stato = 'PARZIALE'
+    else if (dovuto.inMaturazione)                 stato = pagatoCent > 0 && pagatoCent >= inCentesimi(compensoCalcolato) ? 'PAGATO' : 'IN_MATURAZIONE'
+    else if (residuoCent === 0 && pagatoCent > 0)  stato = 'PAGATO'
+    else if (pagatoCent > 0 && residuoCent > 0)    stato = 'PARZIALE'
     else                                           stato = 'DA_PAGARE'
 
     return {
@@ -1008,12 +1004,12 @@ export async function payReimbursement(reimbursementId: string, data: PayReimbur
     const nuovoPagamentoCent = inCentesimi(data.importoPagamento)
     const nuovoPagatoCent    = giaPagatoCent + nuovoPagamentoCent
 
-    // Check against overpayment ("un centesimo di tolleranza", come prima)
-    if (nuovoPagatoCent > importoTotaleCent + 1) {
+    // Niente pagamenti oltre il dovuto, nemmeno di un centesimo
+    if (nuovoPagatoCent > importoTotaleCent) {
       throw new Error(`Il pagamento (€${inEuro(nuovoPagamentoCent).toFixed(2)}) eccede l'importo totale rimborsabile (€${inEuro(importoTotaleCent - giaPagatoCent).toFixed(2)} rimanenti)`)
     }
 
-    const nuovoStato: 'PARZIALE' | 'PAGATO' = nuovoPagatoCent >= importoTotaleCent - 1 ? 'PAGATO' : 'PARZIALE'
+    const nuovoStato: 'PARZIALE' | 'PAGATO' = nuovoPagatoCent >= importoTotaleCent ? 'PAGATO' : 'PARZIALE'
 
     const [updated] = await tx.update(tutorReimbursements)
       .set({
@@ -1085,7 +1081,7 @@ export async function reduceReimbursementOnEntryDelete(reimbursementId: string, 
     const nuovoPagatoCent = Math.max(0, inCentesimi(r.importoPagato) - inCentesimi(importoEntry))
     const totaleCent      = inCentesimi(r.importo)
     const stato: 'DA_PAGARE' | 'PARZIALE' | 'PAGATO' =
-      nuovoPagatoCent <= 1 ? 'DA_PAGARE' : (nuovoPagatoCent >= totaleCent - 1 ? 'PAGATO' : 'PARZIALE')
+      nuovoPagatoCent === 0 ? 'DA_PAGARE' : (nuovoPagatoCent >= totaleCent ? 'PAGATO' : 'PARZIALE')
     await tx.update(tutorReimbursements)
       .set({ importoPagato: inEuro(nuovoPagatoCent).toFixed(2), stato, updatedAt: new Date() })
       .where(eq(tutorReimbursements.id, reimbursementId))
