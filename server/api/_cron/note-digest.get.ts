@@ -25,10 +25,9 @@ import { oraRome } from '../../utils/tutor-time-window'
 // Per provarlo a mano fuori orario c'è ?forza=1 (serve comunque la parola d'ordine):
 // senza, una prova fatta alle 10 del mattino sembrerebbe "non funziona".
 //
-// Il path /api/_* è pubblico nella auth-guard, quindi qui serve una protezione
-// propria: Vercel invia automaticamente "Authorization: Bearer $CRON_SECRET" alle
-// invocazioni cron. In sviluppo il controllo è disattivato, così la si può provare
-// dal browser senza inventarsi header.
+// Il segreto CRON_SECRET lo controlla la auth-guard per tutto /api/_cron/ (in
+// sviluppo no, così la si può provare dal browser senza inventarsi header).
+//
 // Le due ore italiane in cui puo' cadere l'unica chiamata delle 18:00 UTC: le 20
 // con l'ora legale, le 19 con quella solare. Si accettano tutte e due, altrimenti
 // d'inverno la guardia bloccherebbe l'unica occasione e il riepilogo non partirebbe
@@ -37,14 +36,6 @@ import { oraRome } from '../../utils/tutor-time-window'
 const ORE_INVIO_AMMESSE = [19, 20]
 
 export default defineEventHandler(async (event) => {
-  if (!import.meta.dev) {
-    const secret = process.env.CRON_SECRET
-    const auth = getHeader(event, 'authorization')
-    if (!secret || auth !== `Bearer ${secret}`) {
-      throw createError({ statusCode: 401, statusMessage: 'Non autorizzato' })
-    }
-  }
-
   const { ora } = oraRome()
   const forzato = getQuery(event).forza === '1'
 

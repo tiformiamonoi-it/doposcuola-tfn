@@ -98,7 +98,7 @@ const DEFAULT_ROLES: Role[] = STAFF
 // una futura route /api/_qualcosa non deve nascere pubblica per convenzione di nome).
 // - /api/_auth/     → sessione nuxt-auth-utils
 // - /api/_nuxt_icon → icone @nuxt/icon (servono anche sulla pagina /login)
-// - /api/_cron/     → job schedulati, self-protetti con CRON_SECRET
+// - /api/_cron/     → job schedulati, senza sessione: il CRON_SECRET lo controlla la auth-guard
 const INTERNAL_PUBLIC_PREFIXES = ['/api/_auth/', '/api/_nuxt_icon', '/api/_cron/']
 
 export function isPublicApi(rawPath: string): boolean {

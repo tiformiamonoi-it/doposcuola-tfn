@@ -55,14 +55,19 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // Verifica pacchetto attivo (l'array PostgreSQL "stati" si filtra in JS)
-  const studentPackages = await db.select({ stati: packages.stati })
+  // Serve un pacchetto con ORE ancora da usare, non chiuso e non sospeso.
+  // La SCADENZA invece non blocca (decisione della segreteria: la lezione si fa
+  // prenotare comunque). Prima si guardava lo stato salvato ATTIVO, che sparisce
+  // alla scadenza solo quando il pacchetto viene riscritto: la stessa famiglia
+  // veniva bloccata o no a seconda che il pacchetto fosse stato toccato di recente.
+  const studentPackages = await db.select({ stati: packages.stati, oreResiduo: packages.oreResiduo, sospeso: packages.sospeso })
     .from(packages)
     .where(eq(packages.studentId, result.data.studentId))
-    
-  const hasActive = studentPackages.some(p => p.stati && p.stati.includes('ATTIVO'))
-  if (!hasActive) {
-    throw createError({ statusCode: 403, statusMessage: 'Nessun pacchetto ATTIVO trovato per questo studente' })
+
+  const haOre = studentPackages.some(p =>
+    !p.sospeso && !(p.stati ?? []).includes('CHIUSO') && parseFloat(p.oreResiduo) > 0)
+  if (!haOre) {
+    throw createError({ statusCode: 403, statusMessage: 'Nessun pacchetto con ore disponibili trovato per questo studente' })
   }
 
   // Verifica se esiste già una prenotazione per questo studente in questa data

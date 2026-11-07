@@ -19,7 +19,7 @@
 import { eq } from 'drizzle-orm'
 import { db } from '../database/client'
 import { students, studentParents, users } from '../database/schema'
-import { TERMS_VERSION, PRIVACY_STUDENTE_VERSION } from '#shared/legal'
+import { terminiAccettati } from '#shared/legal'
 import { dichiarazioniMinoriMancanti } from '../services/consensi.service'
 import { salvaSessioneUtente } from './session'
 
@@ -64,12 +64,7 @@ export async function apriSessioneAccesso(
     linkedStudentIds = linked.map((s) => s.id)
   }
 
-  // GENITORE: termini + privacy; STUDENTE: privacy studente
-  const termsAccepted = user.role === 'GENITORE'
-    ? user.termsAcceptedVersion === TERMS_VERSION
-    : user.role === 'STUDENTE'
-      ? user.termsAcceptedVersion === PRIVACY_STUDENTE_VERSION
-      : true
+  const termsAccepted = terminiAccettati(user.role, user.termsAcceptedVersion)
 
   // I figli sotto i 14 anni per cui manca ancora l'autorizzazione del genitore
   // (blocco 5). Si calcola qui, all'ingresso, e viaggia dentro la sessione: la

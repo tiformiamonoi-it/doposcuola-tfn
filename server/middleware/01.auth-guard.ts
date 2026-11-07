@@ -1,7 +1,20 @@
 import { eq } from 'drizzle-orm'
 import { db } from '../database/client'
 import { users } from '../database/schema'
+import { timingSafeEqual } from 'node:crypto'
 import { isPublicApi, allowedRolesFor } from '../utils/auth-policy'
+import { terminiAccettati } from '#shared/legal'
+
+// "Authorization: Bearer $CRON_SECRET" è quello che Vercel manda ai suoi cron.
+// Confronto a tempo costante: la durata della risposta non deve dire quanti
+// caratteri del segreto sono giusti.
+function cronAutorizzato(auth: string | undefined): boolean {
+  const secret = process.env.CRON_SECRET
+  if (!secret || !auth) return false
+  const atteso = Buffer.from(`Bearer ${secret}`)
+  const ricevuto = Buffer.from(auth)
+  return atteso.length === ricevuto.length && timingSafeEqual(atteso, ricevuto)
+}
 
 // Guardia globale: ogni route /api/** richiede login + ruolo ammesso.
 // Eccezioni: login e endpoint di sessione (PUBLIC_API_PREFIXES).
@@ -10,6 +23,17 @@ export default defineEventHandler(async (event) => {
 
   // Solo le API sono protette qui (le pagine hanno i middleware Nuxt lato client)
   if (!path.startsWith('/api/')) return
+
+  // I CRON non hanno una sessione (li chiama Vercel, non una persona) ma non sono
+  // pubblici: il segreto si controlla QUI, una volta per tutti i file di
+  // /api/_cron/, anche quelli che si aggiungeranno. Prima ogni cron aveva la sua
+  // copia del controllo, e uno nuovo senza la copia sarebbe nato aperto a chiunque.
+  if (path.startsWith('/api/_cron/')) {
+    if (!import.meta.dev && !cronAutorizzato(getHeader(event, 'authorization'))) {
+      throw createError({ statusCode: 401, statusMessage: 'Non autorizzato' })
+    }
+    return
+  }
 
   // Endpoint pubblici (login, sessione)
   if (isPublicApi(path)) return
@@ -29,6 +53,7 @@ export default defineEventHandler(async (event) => {
       role:               users.role,
       sessionVersion:     users.sessionVersion,
       mustChangePassword: users.mustChangePassword,
+      termsAcceptedVersion: users.termsAcceptedVersion,
     })
     .from(users)
     .where(eq(users.id, user.id))
@@ -54,7 +79,9 @@ export default defineEventHandler(async (event) => {
   }
 
   // Genitore/studente che non ha ancora accettato i documenti legali: API del portale bloccate
-  if (['GENITORE', 'STUDENTE'].includes(account.role) && user.termsAccepted === false && path.startsWith('/api/portal')) {
+  // La versione accettata si legge dal DATABASE: il "sì" scritto nel cookie al login
+  // resterebbe valido fino a 30 giorni anche dopo l'uscita di termini nuovi.
+  if (path.startsWith('/api/portal') && !terminiAccettati(account.role, account.termsAcceptedVersion)) {
     throw createError({ statusCode: 403, statusMessage: 'Accettazione dei documenti richiesta' })
   }
 })

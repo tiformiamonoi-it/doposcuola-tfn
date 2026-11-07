@@ -21,6 +21,18 @@
 export const TERMS_VERSION = '2026-08-v4'
 export const PRIVACY_STUDENTE_VERSION = 'studente-2026-08-v3'
 
+/**
+ * Ha accettato la versione IN VIGORE dei documenti che lo riguardano?
+ * GENITORE: termini + privacy; STUDENTE: privacy studente; staff: niente da accettare.
+ * La usano il login e la guardia delle API: alzando una versione qui sopra, chi
+ * è già collegato viene fermato subito, non al login successivo.
+ */
+export function terminiAccettati(role: string, versioneAccettata: string | null | undefined): boolean {
+  if (role === 'GENITORE') return versioneAccettata === TERMS_VERSION
+  if (role === 'STUDENTE') return versioneAccettata === PRIVACY_STUDENTE_VERSION
+  return true
+}
+
 // ─────────────────────────────────────────────
 // I CONSENSI DELLA FAMIGLIA (blocco 5, settembre 2026)
 //
