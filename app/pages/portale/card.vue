@@ -2,7 +2,7 @@
   <div>
     <PortaleTestata titolo="Card studente" sovrapposta>
       <!-- Un figlio per volta: bottoni veri, quello scelto è "premuto" -->
-      <div v-if="cards.length > 1" role="group" aria-label="Scegli il figlio" class="p-1 bg-pf-blu-tasto rounded-[14px] grid gap-1" :style="{ gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))` }">
+      <div v-if="cards.length > 1" role="group" :aria-label="perGenitore ? 'Scegli la card' : 'Scegli il figlio'" class="p-1 bg-pf-blu-tasto rounded-[14px] grid gap-1" :style="{ gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))` }">
         <button
           v-for="c in cards"
           :key="c.id"
@@ -35,7 +35,7 @@
         <div class="relative flex justify-between items-start gap-3">
           <div class="flex flex-col gap-0.5">
             <span class="font-heading font-bold text-[17px]">tiformiamonoi.it</span>
-            <span class="text-xs text-pf-su-blu">Card studente · convenzioni</span>
+            <span class="text-xs text-pf-su-blu">{{ scelta.tipo === 'GENITORE' ? 'Card genitore' : 'Card studente' }} · convenzioni</span>
           </div>
           <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-white" :class="scelta.attiva ? 'text-pf-verde' : 'text-pf-rosso'">
             {{ scelta.attiva ? 'Attiva' : scelta.motivo === 'DISATTIVATA' ? 'Disattivata' : 'Sospesa' }}
@@ -43,7 +43,7 @@
         </div>
         <div class="relative flex flex-col gap-1">
           <span class="font-heading font-bold text-[22px]">{{ scelta.firstName }} {{ scelta.lastName }}</span>
-          <span class="text-[13px] text-pf-su-blu">{{ [scelta.classe, scelta.scuola].filter(Boolean).join(' · ') }}</span>
+          <span class="text-[13px] text-pf-su-blu">{{ scelta.tipo === 'GENITORE' ? 'Genitore' : [scelta.classe, scelta.scuola].filter(Boolean).join(' · ') }}</span>
         </div>
         <div v-if="scelta.attiva" class="relative flex flex-col gap-0.5">
           <span class="text-[11px] text-pf-su-blu uppercase tracking-wider">Valida fino al</span>
@@ -94,7 +94,7 @@
       <section v-else aria-labelledby="t-cosa" class="mx-5 mt-4 bg-white rounded-3xl p-5 flex flex-col items-center gap-2.5 text-center pf-ombra">
         <img src="/portale/portafoglio.webp" alt="" class="size-[84px] object-contain" />
         <h2 id="t-cosa" class="font-heading font-bold text-[19px]">{{ titoloSospesa }}</h2>
-        <p class="text-sm leading-5 text-pf-grigio-scuro">{{ testoCardSospesa(scelta.motivo, perGenitore) }}</p>
+        <p class="text-sm leading-5 text-pf-grigio-scuro">{{ scelta.tipo === 'GENITORE' ? TESTO_CARD_GENITORE_SOSPESA : testoCardSospesa(scelta.motivo, perGenitore) }}</p>
         <PortaleBottone v-if="mostraPaga" to="/portale/pagamenti" blocco grande class="mt-1.5">Paga il mensile</PortaleBottone>
         <a
           v-if="whatsapp"
@@ -137,14 +137,23 @@ type Card = {
   inMargine: boolean
   // Solo per il genitore: allo studente il server non lo manda (privacy economica)
   motivo?: MotivoCard | null
+  // Solo sulla card del genitore (/api/portal/card-genitore): quelle dei figli non l'hanno
+  tipo?: 'GENITORE'
 }
+
+// La card del genitore segue le card dei figli (calcolaStatoCardGenitore) e non ha un motivo
+const TESTO_CARD_GENITORE_SOSPESA = 'La tua card si riattiva quando almeno uno dei tuoi figli ha la card attiva.'
 
 const route = useRoute()
 const { user } = useUserSession()
 const perGenitore = computed(() => user.value?.role === 'GENITORE')
 
-const { data, pending } = useLazyFetch<Card[]>('/api/portal/card')
-const cards = computed(() => data.value ?? [])
+const { data, pending: pendingFigli } = useLazyFetch<Card[]>('/api/portal/card')
+// La card del GENITORE va per prima, poi i figli. È solo la sua (il server legge la sessione):
+// quella dell'altro genitore non arriva mai, e allo studente la pagina non la chiede nemmeno.
+const { data: cardGenitore, pending: pendingGenitore } = useLazyFetch<Card | null>('/api/portal/card-genitore', { immediate: perGenitore.value })
+const pending = computed(() => pendingFigli.value || (perGenitore.value && pendingGenitore.value))
+const cards = computed(() => [...(perGenitore.value && cardGenitore.value ? [cardGenitore.value] : []), ...(data.value ?? [])])
 // Dalla Home si arriva con ?alunno=<id> per aprire subito la card di quel figlio
 const sceltaId = ref(String(route.query.alunno ?? ''))
 const scelta = computed(() => cards.value.find((c) => c.id === sceltaId.value) ?? cards.value[0])
@@ -157,7 +166,7 @@ const mostraPaga = computed(() => perGenitore.value && pagamenti.value?.attivi =
   && ['DA_SALDARE', 'SCADUTO'].includes(scelta.value?.motivo ?? ''))
 
 const titoloSospesa = computed(() => {
-  if (!perGenitore.value) return 'Card sospesa'
+  if (!perGenitore.value || scelta.value?.tipo === 'GENITORE') return 'Card sospesa'
   switch (scelta.value?.motivo) {
     case 'DISATTIVATA':      return 'Card disattivata dalla segreteria'
     case 'DA_SALDARE':       return 'Salda e la card si riattiva'

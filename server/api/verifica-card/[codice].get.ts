@@ -6,7 +6,8 @@ import { normalizzaCodiceCard } from '#shared/card-studente'
 // telefono del negoziante che inquadra il QR, senza account.
 //
 // PRIVACY (regolamento della card, art. 6):
-// - esce solo valida sì/no, nome, iniziale del cognome, "valida fino al" e l'ora del controllo;
+// - esce solo valida sì/no, nome, iniziale del cognome, "valida fino al" e l'ora del controllo,
+//   più se la card è di uno studente o di un genitore (tipo);
 // - codice inesistente e card sospesa danno la STESSA risposta, senza motivo: da fuori
 //   non si capisce se un codice esiste, né perché una card non vale;
 // - non si registra chi controlla né quando: nessun log, nessuna riga nel database.

@@ -23,7 +23,7 @@
           <p class="text-[15px] text-pf-grigio-scuro">Puoi applicare lo sconto della convenzione.</p>
           <dl class="mt-2.5 w-full px-4 py-1.5 rounded-[20px] bg-pf-fondo flex flex-col divide-y divide-pf-bordo text-sm">
             <div class="flex justify-between gap-3 py-3">
-              <dt class="text-pf-grigio">Studente</dt>
+              <dt class="text-pf-grigio">{{ esito.tipo === 'GENITORE' ? 'Genitore' : 'Studente' }}</dt>
               <dd class="font-semibold">{{ esito.nome }} {{ esito.inizialeCognome }}.</dd>
             </div>
             <div v-if="esito.validaFino" class="flex justify-between gap-3 py-3">
@@ -70,7 +70,7 @@ useHead({ title: 'Verifica Card studente — tiformiamonoi', meta: [{ name: 'rob
 const route = useRoute()
 
 type Esito =
-  | { valida: true; nome: string; inizialeCognome: string; validaFino: string | null; controllatoAlle: string }
+  | { valida: true; tipo: 'STUDENTE' | 'GENITORE'; nome: string; inizialeCognome: string; validaFino: string | null; controllatoAlle: string }
   | { valida: false; controllatoAlle: string }
 
 // Solo dal browser (server: false): così ogni apertura è un controllo nuovo, fatto
