@@ -106,3 +106,32 @@
 .scrollbar-nascosta::-webkit-scrollbar {
   display: none;              /* Chrome, Safari, browser dei telefoni */
 }
+
+/* Bottoni che si "schiacciano": mentre il dito o il mouse preme, il bottone rimpicciolisce
+   un poco, così si sente il clic anche dove il colore cambia appena (o su telefono, dove
+   l'hover non c'è). Vale per i UButton (data-slot="base" su <button> o <a>) e per i
+   <button> scritti a mano; restano fuori le schede e le righe cliccabili (text-left,
+   inset-0), i campi con un ruolo (select, checkbox, interruttori) e le linguette di UTabs.
+   L'elenco delle transizioni tiene quelle dei colori di Nuxt UI e aggiunge scale. */
+:is(button:not([data-slot], [role], .text-left, .inset-0), :is(a, button)[data-slot='base']:not([role])) {
+  -webkit-tap-highlight-color: transparent;
+  transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, opacity, box-shadow, translate, scale;
+  transition-duration: var(--tw-duration, 100ms);
+  transition-timing-function: var(--tw-ease, ease-out);
+
+  &:active:not(:disabled, [aria-disabled='true']) {
+    scale: 0.97;
+    /* Chi ha chiesto meno movimento sul telefono o sul computer: niente scala, il bottone si schiarisce */
+    @media (prefers-reduced-motion: reduce) {
+      scale: none;
+      opacity: 0.7;
+    }
+  }
+}
+
+/* Link, righe e schede cliccabili (quelli lasciati fuori qui sopra): mentre si preme
+   si schiariscono un attimo, senza rimpicciolire. Fuori le voci dei menu a tendina e le
+   linguette: chiudere il menu o cambiare linguetta si vede già. */
+:is(a[href]:not([data-slot='base'], [data-slot='item'], [role]), button:is(.text-left, .inset-0):not([data-slot], [role])):active:not(:disabled, [aria-disabled='true']) {
+  opacity: 0.7;
+}
