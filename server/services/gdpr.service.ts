@@ -11,6 +11,7 @@ import { nonTrovato } from '../utils/http-error'
 import { students, studentParents, studentNotes, bookings, users, packages, payments, packageRecharges, lessons, lessonStudents, contacts, contactInteractions, contactFigli, notifiche, assenze, studentConfirmations, consensi } from '../database/schema'
 import { and, eq, ne, or, like, inArray, isNull, lt, sql } from 'drizzle-orm'
 import { INIZIO_NOTA_CONVERSIONE } from '#shared/contatti'
+import { generaCodiceCard } from '#shared/card-studente'
 
 export async function anonymizeStudent(id: string) {
   const [student] = await db.select().from(students).where(eq(students.id, id)).limit(1)
@@ -97,6 +98,8 @@ export async function anonymizeStudent(id: string) {
       note: null, bisogniSpeciali: null,
       active: false,
       abilitatoPrenotazioneOnline: false,
+      // Il codice della card legava il QR a questa persona: uno nuovo, mai stato mostrato
+      codiceCard: generaCodiceCard(),
       updatedAt: new Date(),
     }).where(eq(students.id, id))
 

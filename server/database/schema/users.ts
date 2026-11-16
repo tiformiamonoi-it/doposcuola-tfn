@@ -45,6 +45,9 @@ export const users = pgTable('users', {
   novitaVista: varchar('novita_vista', { length: 20 }),
   // Portale famiglia: ultima visita alla pagina Note (per il badge "note non lette")
   noteLastSeenAt: timestamp('note_last_seen_at', { withTimezone: true }),
+  // Portale famiglia: "notifiche viste fino a" (blocco 3). Tutto ciò che è più vecchio
+  // conta come letto; "Segna tutte come lette" la sposta ad adesso. Vuoto = nessuna vista.
+  notificheVisteAt: timestamp('notifiche_viste_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

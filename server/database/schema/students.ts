@@ -1,5 +1,6 @@
 import { pgTable, text, varchar, boolean, timestamp, date, uniqueIndex, index } from 'drizzle-orm/pg-core'
 import { cuid } from './common'
+import { generaCodiceCard } from '../../../shared/card-studente'
 import { users } from './users'
 
 export const students = pgTable('students', {
@@ -86,6 +87,12 @@ export const students = pgTable('students', {
   // (system_configs.riepilogo_serale_attivo): se quello è spento, l'email non parte
   // per nessuno e questa colonna non conta. Vedi note-digest.service.ts.
   riepilogoSeraleAttivo: boolean('riepilogo_serale_attivo').notNull().default(true),
+
+  // CARD STUDENTE: il codice scritto sotto il QR (es. K7QF-29XM). Casuale e non in fila,
+  // vedi shared/card-studente.ts. Unico: è la chiave con cui il negozio verifica la card.
+  // Il valore lo dà l'applicazione alla creazione; gli alunni già in archivio l'hanno
+  // ricevuto dalla migrazione 0039. "Cambia codice" in segreteria lo sostituisce.
+  codiceCard: varchar('codice_card', { length: 9 }).notNull().unique().$defaultFn(generaCodiceCard),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

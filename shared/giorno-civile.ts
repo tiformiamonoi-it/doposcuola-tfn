@@ -31,9 +31,16 @@ export function oggiISO(): string {
 // per colpa dell'ora legale (il 30 marzo dura 23 ore, il 26 ottobre ne dura 25 —
 // sommare 24 ore a un orario sbaglierebbe proprio in quei due giorni).
 export function giornoSuccessivo(giorno: string): string {
+  return aggiungiGiorni(giorno, 1)
+}
+
+// N giorni dopo (o prima, con N negativo), stessa aritmetica in UTC di giornoSuccessivo.
+// Serve alla card studente: "scadenza + 15 giorni" deve dare il 15 dicembre anche
+// quando in mezzo c'è il cambio dell'ora.
+export function aggiungiGiorni(giorno: string, n: number): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(giorno)
   if (!m) return giorno
-  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + 1))
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + n))
   return d.toISOString().slice(0, 10)
 }
 

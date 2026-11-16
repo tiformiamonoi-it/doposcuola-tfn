@@ -93,7 +93,7 @@ export const CONSENSO_MARKETING_TESTO = `Acconsento a ricevere da tiformiamonoi.
 
 export const TERMINI_TESTO = `TERMINI E CONDIZIONI DEL SERVIZIO
 tiformiamonoi — Doposcuola e ripetizioni
-Ultimo aggiornamento: agosto 2026
+Ultimo aggiornamento: 16 novembre 2026
 
 1. CHI SIAMO
 Il servizio è erogato da tiformiamonoi.it di Alessandro Barone, P.IVA IT02856610817, con sede in Via Anchise 10 — 91100 Trapani (TP), email info@tiformiamonoi.it, telefono +39 357 400 2510 (di seguito "il Centro").
@@ -103,7 +103,7 @@ Il Centro offre attività di doposcuola, supporto allo studio e ripetizioni per 
 
 3. ACCOUNT DI ACCESSO
 3.1 L'account del portale è personale. Le credenziali non vanno condivise con terzi; ogni attività svolta tramite l'account si presume compiuta dal suo titolare.
-3.2 L'account dello studente, se attivato, consente esclusivamente la prenotazione delle lezioni ed è attivato dal Centro previa autorizzazione del genitore (o di chi esercita la responsabilità genitoriale) per gli studenti minorenni.
+3.2 L'account dello studente, se attivato, consente esclusivamente la prenotazione delle lezioni e l'uso della Card studente, ed è attivato dal Centro previa autorizzazione del genitore (o di chi esercita la responsabilità genitoriale) per gli studenti minorenni.
 3.3 Il Centro può sospendere o disattivare un account in caso di uso improprio.
 3.4 Il portale mostra alla famiglia lo stato del pacchetto (attivo, scaduto, esaurito, sospeso). Il dettaglio delle ore o dei giorni ancora disponibili è consultabile richiedendolo alla segreteria, che lo comunica al genitore o allo studente maggiorenne.
 
@@ -165,7 +165,7 @@ Il trattamento dei dati personali è descritto nell'Informativa privacy; l'uso d
 export const PRIVACY_TESTO = `INFORMATIVA SUL TRATTAMENTO DEI DATI PERSONALI
 ai sensi degli artt. 13 e 14 del Regolamento (UE) 2016/679 ("GDPR")
 tiformiamonoi — Doposcuola e ripetizioni
-Ultimo aggiornamento: agosto 2026
+Ultimo aggiornamento: 16 novembre 2026
 
 1. TITOLARE DEL TRATTAMENTO
 tiformiamonoi.it di Alessandro Barone, P.IVA IT02856610817, Via Anchise 10 — 91100 Trapani (TP). Email di contatto: info@tiformiamonoi.it.
@@ -182,7 +182,7 @@ Origine dei dati (art. 14 GDPR): i dati dello studente sono forniti dal genitore
 
 3. FINALITÀ E BASI GIURIDICHE
 a) Erogazione del servizio di doposcuola/ripetizioni e gestione del rapporto contrattuale (art. 6.1.b GDPR — esecuzione del contratto);
-b) Gestione del portale online, delle prenotazioni e delle comunicazioni di servizio via email (art. 6.1.b GDPR);
+b) Gestione del portale online, delle prenotazioni, della Card studente e delle comunicazioni di servizio via email (art. 6.1.b GDPR);
 c) Adempimenti fiscali, contabili e di legge (art. 6.1.c GDPR — obbligo legale);
 d) Trattamento di eventuali dati su bisogni educativi particolari (art. 9.2.a GDPR — consenso esplicito);
 e) Difesa di diritti in sede giudiziaria (art. 6.1.f GDPR — legittimo interesse);
@@ -201,6 +201,7 @@ Responsabili del trattamento attualmente utilizzati:
 - Brevo (Sendinblue SAS, Francia — UE) — invio delle email di servizio (credenziali, avvisi sui pacchetti) e, a chi ha prestato il consenso di cui al §3 lettera f), delle comunicazioni promozionali;
 - i gestori delle piattaforme social sulle quali il Centro pubblica le immagini, limitatamente alle immagini per cui è stato prestato il consenso di cui al §3 lettera g).
 L'elenco aggiornato dei responsabili può essere richiesto in qualsiasi momento a info@tiformiamonoi.it.
+Card studente: quando un negozio convenzionato inquadra il codice QR della Card, vede soltanto il nome dello studente, l'iniziale del cognome, la data fino a cui la Card è valida e l'ora del controllo. Non vede la scuola, la classe, i contatti né dati economici, e non gli viene mai indicato il motivo per cui una Card non è valida. Il Centro non registra quale negozio effettua il controllo, non tiene alcun registro degli acquisti e non usa la Card per inviare pubblicità o per profilare chi la usa; la Card non dipende dal consenso di cui al §3 lettera f). Le regole d'uso sono nel Regolamento della Card studente, consultabile nel portale.
 
 6. TRASFERIMENTI EXTRA-UE
 I server che ospitano i dati sono situati nell'Unione Europea. Supabase, Inc. e Vercel, Inc. sono società statunitensi: un accesso ai dati dagli Stati Uniti, ad esempio per attività di assistenza tecnica, non è escluso. Tali trattamenti sono coperti dalle garanzie previste dagli artt. 44 e ss. GDPR, ossia dalle Clausole Contrattuali Standard approvate dalla Commissione Europea e, ove i fornitori vi abbiano aderito, dalla decisione di adeguatezza EU-U.S. Data Privacy Framework. Copia delle garanzie può essere richiesta a info@tiformiamonoi.it.
@@ -217,7 +218,7 @@ Ai sensi degli artt. 15-22 GDPR è possibile esercitare i diritti di accesso, re
 10. PROCESSI DECISIONALI AUTOMATIZZATI E INTELLIGENZA ARTIFICIALE
 Non sono presenti processi decisionali automatizzati né attività di profilazione ai sensi dell'art. 22 GDPR.
 Il gestionale e il portale non utilizzano sistemi di intelligenza artificiale ai sensi del Regolamento (UE) 2024/1689 ("AI Act"): l'abbinamento tra studente e tutor, la valutazione del percorso didattico e la redazione delle note sono attività svolte da persone del Centro. I dati delle famiglie e degli studenti non sono usati per addestrare modelli di intelligenza artificiale, né propri né di terzi, e non sono ceduti a soggetti che li utilizzino a tale scopo.
-Il sistema svolge solo conteggi e invii automatici programmati dal Centro: calcolo delle ore residue, email di avviso quando un pacchetto sta per esaurirsi o per scadere, promemoria di servizio. Non sono sistemi di intelligenza artificiale e non producono effetti giuridici né incidono in modo significativo sulla persona.
+Il sistema svolge solo conteggi e invii automatici programmati dal Centro: calcolo delle ore residue, calcolo della validità della Card studente secondo le regole fisse del suo Regolamento, email di avviso quando un pacchetto sta per esaurirsi o per scadere, promemoria di servizio. Non sono sistemi di intelligenza artificiale e non producono effetti giuridici né incidono in modo significativo sulla persona.
 Se in futuro venissero introdotti strumenti di intelligenza artificiale, le famiglie ne saranno informate preventivamente, il loro uso sarà indicato in modo trasparente e sarà sempre garantita la supervisione di una persona del Centro. Il Centro non impiega sistemi di IA "ad alto rischio" in ambito educativo ai sensi dell'Allegato III, punto 3, dell'AI Act (ammissione, valutazione degli apprendimenti, monitoraggio durante le prove).
 
 11. AGGIORNAMENTI DELL'INFORMATIVA
@@ -235,7 +236,7 @@ QUALI DATI USIAMO
 - Lo stato del tuo pacchetto (se è attivo, scaduto o finito)
 
 PER FARE COSA
-- Farti accedere al portale e farti prenotare le lezioni
+- Farti accedere al portale, farti prenotare le lezioni e mostrarti la tua Card studente
 - Organizzare le lezioni con i tutor
 - Nient'altro: non usiamo i tuoi dati per pubblicità e non li diamo ad altri
 
@@ -243,7 +244,10 @@ NESSUN ROBOT DECIDE PER TE
 Non usiamo intelligenza artificiale. Il tutor che ti segue, i giudizi sul tuo percorso e le note che ti riguardano li scelgono e li scrivono le persone del centro, non un programma. I tuoi dati non vengono usati per "allenare" nessuna intelligenza artificiale. Se un giorno dovessimo usare strumenti di questo tipo, te lo diremmo prima e ci sarebbe comunque sempre una persona a controllare.
 
 COSA VEDONO I TUOI GENITORI
-Il tuo account serve solo a prenotare. I tuoi genitori, dal loro account, vedono le tue prenotazioni, le lezioni svolte e le comunicazioni del centro: è un loro diritto e serve a organizzare al meglio il tuo percorso.
+Il tuo account serve a prenotare e a mostrare la tua Card studente. I tuoi genitori, dal loro account, vedono le tue prenotazioni, le lezioni svolte e le comunicazioni del centro: è un loro diritto e serve a organizzare al meglio il tuo percorso.
+
+LA TUA CARD STUDENTE
+Quando mostri il QR della Card in un negozio convenzionato, il negozio vede solo il tuo nome, l'iniziale del cognome, fino a quando la Card è valida e l'ora del controllo. Non registriamo dove la usi né cosa compri, e non la usiamo per pubblicità.
 
 SE HAI MENO DI 14 ANNI
 La legge italiana dice che sotto i 14 anni serve l'autorizzazione dei genitori per usare servizi online: per questo il tuo account è stato attivato con il loro consenso.
@@ -276,3 +280,60 @@ Puoi cancellare o bloccare i cookie in qualsiasi momento dalle impostazioni del 
 TITOLARE
 tiformiamonoi.it di Alessandro Barone — info@tiformiamonoi.it.
 Per i dettagli sul trattamento dei dati personali consulta l'Informativa privacy.`
+
+// ─────────────────────────────────────────────
+// REGOLAMENTO DELLA CARD STUDENTE (16/11/2026)
+//
+// Da LEGGERE, non da accettare: niente versione e niente spunta (decisione del
+// titolare; vedi la sintesi legale in docs/PIANO-AZIONE-portale-famiglie-backend.md).
+// Valgono le condizioni generali conoscibili con normale diligenza (art. 1341, primo
+// comma, c.c.) e il testo non contiene clausole vessatorie: la sospensione segue
+// regole fisse, le stesse scritte in shared/card-studente.ts. Se cambia la regola lì,
+// va cambiato anche l'art. 2 qui, e viceversa.
+// ─────────────────────────────────────────────
+export const REGOLAMENTO_CARD_TESTO = `REGOLAMENTO DELLA CARD STUDENTE
+tiformiamonoi — Doposcuola e ripetizioni
+Versione del 16 novembre 2026
+
+La Card studente è offerta da tiformiamonoi.it di Alessandro Barone, P.IVA IT02856610817, con sede in Via Anchise 10, 91100 Trapani (TP), email info@tiformiamonoi.it, telefono +39 357 400 2510 (di seguito "il Centro").
+
+1. CHE COS'È
+1.1 La Card studente è una tessera digitale che permette agli studenti del Centro di ottenere gli sconti offerti dai negozi e dalle attività convenzionate.
+1.2 La Card è gratuita. Non è un mezzo di pagamento, non ha valore in denaro, non accumula punti e non si può convertire in denaro o in lezioni.
+1.3 La Card è personale: vale solo per lo studente a cui è intestata e non si può cedere ad altri.
+
+2. CHI LA RICEVE E QUANTO DURA
+2.1 La Card si attiva da sola per ogni studente iscritto con un pacchetto di lezioni. Non serve chiederla né compilare moduli.
+2.2 Pacchetti mensili. La Card resta valida fino a 15 giorni dopo la scadenza del pacchetto. Esempio: se il pacchetto scade il 30 novembre, la Card è valida fino al 15 dicembre. I 15 giorni servono a dare alla famiglia il tempo di rinnovare o di saldare.
+2.3 Pacchetti a ore e a consumo. La Card si attiva con il primo pagamento, anche solo un acconto, e resta valida finché nel pacchetto ci sono ore. Quando le ore finiscono, resta valida per altri 15 giorni dall'ultima lezione svolta, e comunque non oltre 15 giorni dopo la scadenza del pacchetto.
+2.4 Pacchetti da saldare. Se un pacchetto è scaduto da più di 15 giorni e non è stato ancora saldato, la Card risulta sospesa, anche quando lo studente ha già un pacchetto nuovo. Se i pacchetti da saldare sono più di uno, conta il più vecchio.
+2.5 La data fino a cui la Card è valida è sempre scritta sulla Card, nel portale. Qualche giorno prima che la Card si sospenda, la famiglia riceve un avviso nel portale.
+2.6 Passato quel termine, la Card risulta sospesa. Quando la segreteria registra il rinnovo o il pagamento, la Card torna attiva da sola, con lo stesso codice.
+
+3. COME SI USA
+3.1 La Card si trova nel portale delle famiglie, alla voce "Card". La vede il genitore e, se ha un account, anche lo studente.
+3.2 Alla cassa del negozio convenzionato basta mostrare il codice QR della Card. Il negozio lo inquadra con il proprio telefono e vede subito se la Card è valida.
+3.3 Il negozio controlla sempre lo stato aggiornato della Card: una foto o uno screenshot del QR non rende valida una Card sospesa.
+3.4 Il negozio può chiedere un documento per controllare che chi mostra la Card sia lo studente a cui è intestata.
+
+4. LE CONVENZIONI
+4.1 L'elenco aggiornato dei negozi convenzionati, con lo sconto offerto, l'indirizzo e la durata della convenzione, si trova nel portale, alla voce "Convenzioni". Valgono le convenzioni elencate lì nel giorno dell'acquisto.
+4.2 Ogni sconto è offerto dal negozio, che ne stabilisce il contenuto, i prodotti esclusi e la durata. Una convenzione può finire o cambiare per decisione del negozio: il Centro aggiorna l'elenco nel portale appena ne è informato.
+4.3 L'acquisto è un contratto tra la famiglia e il negozio. Per i prodotti acquistati valgono le garanzie di legge verso il negozio. Se uno sconto non viene applicato come indicato nel portale, la famiglia può segnalarlo al Centro, che interviene presso il negozio.
+
+5. SMARRIMENTO O USO DA PARTE DI ALTRI
+5.1 Se il telefono con l'accesso al portale viene perso, o se il codice della Card è finito in mano ad altri, la famiglia può avvisare la segreteria. Il Centro genera un codice nuovo: quello vecchio smette subito di funzionare, la Card resta attiva con il codice nuovo.
+
+6. PRIVACY
+6.1 Quando il negozio inquadra il QR, vede soltanto: il nome dello studente, l'iniziale del cognome, la data fino a cui la Card è valida e l'ora del controllo. Non vede la scuola, la classe, i contatti né altri dati.
+6.2 Il Centro non registra in quali negozi viene usata la Card né che cosa viene acquistato, e non usa la Card per inviare pubblicità. La Card non dipende dal consenso alle comunicazioni promozionali.
+6.3 Il codice della Card è casuale e non contiene dati personali. Il resto è descritto nell'Informativa privacy, consultabile nel portale.
+
+7. MODIFICHE AL REGOLAMENTO
+7.1 Il Centro può aggiornare questo regolamento. Le modifiche sono comunicate nel portale almeno 15 giorni prima di entrare in vigore, salvo quelle a favore delle famiglie, che valgono subito.
+7.2 La famiglia è sempre libera di non usare la Card: non usarla non comporta nessun costo e non cambia il servizio delle lezioni.
+
+8. CONTATTI E RECLAMI
+8.1 Per domande sulla Card: info@tiformiamonoi.it, telefono +39 357 400 2510, o in segreteria in Via Anchise 10, Trapani.
+8.2 Per i reclami valgono le modalità dell'art. 12 dei Termini e condizioni del servizio.
+8.3 Il regolamento è regolato dalla legge italiana.`

@@ -12,8 +12,10 @@ export default defineNuxtRouteMiddleware((to) => {
   // '/imposta-password' è pubblica ma va lasciata passare anche a chi è già
   // collegato: capita che un genitore apra il link dal telefono dove ha ancora
   // la sessione aperta, e il gate lo rimbalzerebbe altrove.
-  const whitelist = ['/login', '/cambio-password', '/imposta-password', '/portale/accetta-termini', '/termini', '/privacy', '/privacy-studente', '/cookie', '/prenota']
-  if (whitelist.includes(to.path)) return
+  // Il regolamento della card è un documento da leggere come gli altri; la pagina del
+  // negozio (/verifica/<codice>) è pubblica e chi la apre non va mai dirottato altrove.
+  const whitelist = ['/login', '/cambio-password', '/imposta-password', '/portale/accetta-termini', '/termini', '/privacy', '/privacy-studente', '/cookie', '/prenota', '/regolamento-card']
+  if (whitelist.includes(to.path) || to.path.startsWith('/verifica/')) return
 
   if (user.value.mustChangePassword) {
     return navigateTo('/cambio-password')

@@ -117,6 +117,8 @@ const allNavItems = computed(() => [
   // menù. Sulla striscia in fondo al telefono la parola è lunga: il `truncate`
   // qui sotto le impedisce di sfondare la casella su uno schermo stretto.
   { icon: 'i-heroicons-document-text', label: 'Comunicazioni', route: '/portale/note', always: true },
+  // La card studente la vedono genitore e studente (regolamento, art. 3.1)
+  { icon: 'i-heroicons-identification', label: 'Card',  route: '/portale/card',     always: true },
   { icon: 'i-heroicons-tag',           label: 'Sconti',  route: '/portale/sconti',   always: true },
   { icon: 'i-heroicons-user',          label: 'Profilo', route: '/portale/profilo',  always: true },
 ])

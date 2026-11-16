@@ -90,7 +90,6 @@
         <p v-if="isEditMode" class="text-amber-600 font-medium bg-amber-50 px-3 py-1.5 rounded-md mt-2">
           Hai già una lezione per questa data. Procedendo potrai modificarla.
         </p>
-        <p v-else>La segreteria assegnerà l'orario esatto.</p>
       </div>
 
       <template #footer>

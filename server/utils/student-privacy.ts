@@ -18,6 +18,9 @@ const CAMPI_GENITORE_RISERVATI = [
   'parentCap', 'parentCF', 'parentPIva',
   'parent2Email', 'parent2Phone', 'parent2Indirizzo', 'parent2Citta',
   'parent2Cap', 'parent2CF', 'parent2PIva', 'parent2DataNascita',
+  // Non è un dato del genitore, ma è la chiave della card studente: chi lo conosce può
+  // farla verificare a nome dell'alunno. Al tutor non serve per fare lezione.
+  'codiceCard',
 ] as const
 
 export function sanitizeStudentForTutor<T extends Record<string, any>>(student: T): T {

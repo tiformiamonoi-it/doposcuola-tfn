@@ -122,6 +122,17 @@
                   <div class="font-medium text-slate-700">{{ studente.parentName }}</div>
                 </div>
               </div>
+              <!-- Codice della card studente: "Cambia codice" se la card è persa o girata ad altri -->
+              <div class="flex items-center gap-3">
+                <UIcon name="i-heroicons-identification" class="w-4 h-4 text-slate-400" />
+                <div class="flex-1">
+                  <div class="text-xs text-slate-500">Codice card studente</div>
+                  <div class="font-medium font-mono tracking-wider text-slate-700">{{ studente.codiceCard }}</div>
+                </div>
+                <UButton size="xs" variant="ghost" icon="i-heroicons-arrow-path" :loading="cambiandoCodice" @click="cambiaCodiceCard">
+                  Cambia codice
+                </UButton>
+              </div>
             </div>
           </UCard>
 
@@ -1414,6 +1425,7 @@ type AnagraficaStudente = {
   bisogniSpeciali: string | null
   studentUserId: string | null
   abilitatoPrenotazioneOnline: boolean
+  codiceCard: string
   createdAt: string
   updatedAt: string
 }
@@ -1475,6 +1487,29 @@ async function disattivaStudente() {
         toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile disattivare', color: 'error' })
       } finally {
         disattivando.value = false
+      }
+    }
+  )
+}
+
+// ─── Card studente: "Cambia codice" ───
+// Il vecchio codice (e il QR già mostrato o fotografato) smette di valere subito;
+// la card resta attiva o sospesa com'era, perché lo stato dipende dai pacchetti.
+const cambiandoCodice = ref(false)
+
+function cambiaCodiceCard() {
+  chiediConferma(
+    { title: 'Cambiare il codice della card?', description: 'Il codice attuale e il suo QR smettono subito di funzionare. La famiglia vedrà il codice nuovo nel portale.', confirmLabel: 'Cambia codice', confirmColor: 'warning' },
+    async () => {
+      cambiandoCodice.value = true
+      try {
+        await $fetch(`/api/students/${id}/codice-card`, { method: 'POST' })
+        toast.add({ title: 'Codice della card cambiato', color: 'success', icon: 'i-heroicons-check-circle' })
+        refresh()
+      } catch (err: any) {
+        toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile cambiare il codice', color: 'error' })
+      } finally {
+        cambiandoCodice.value = false
       }
     }
   )

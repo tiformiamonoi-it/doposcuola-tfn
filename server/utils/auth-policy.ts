@@ -26,6 +26,10 @@ export const PUBLIC_API_PREFIXES = [
   '/api/auth/imposta-password',
   '/api/_auth/session', // gestito da nuxt-auth-utils
   '/api/contact',       // endpoint pubblico del form
+  // Verifica della card studente: la apre il telefono del negozio che inquadra il QR,
+  // senza account. Apre solo /api/verifica-card/<codice> (stesso confronto per percorso
+  // intero di sopra); limite di tentativi e privacy sono nell'handler.
+  '/api/verifica-card',
 ]
 
 // Regole ordinate: la PRIMA che matcha decide i ruoli ammessi.

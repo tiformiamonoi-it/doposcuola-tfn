@@ -178,8 +178,12 @@
           <span>Privacy Policy</span>
           <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
         </NuxtLink>
-        <NuxtLink v-if="!isStudente" to="/termini" class="flex items-center justify-between py-2 text-slate-600 hover:text-indigo-600 transition-colors">
+        <NuxtLink v-if="!isStudente" to="/termini" class="flex items-center justify-between py-2 border-b border-slate-100 text-slate-600 hover:text-indigo-600 transition-colors">
           <span>Termini e Condizioni</span>
+          <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
+        </NuxtLink>
+        <NuxtLink to="/regolamento-card" class="flex items-center justify-between py-2 text-slate-600 hover:text-indigo-600 transition-colors">
+          <span>Regolamento della Card studente</span>
           <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
         </NuxtLink>
       </div>
