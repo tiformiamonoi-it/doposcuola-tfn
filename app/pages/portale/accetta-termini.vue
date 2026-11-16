@@ -32,7 +32,7 @@
       <!-- Il regolamento della card si legge, non si accetta (piano, sintesi legale) -->
       <NuxtLink v-if="!isStudente && serveTermini" to="/regolamento-card" class="bg-white rounded-[22px] px-4 min-h-14 flex items-center gap-3 pf-ombra hover:text-pf-blu">
         <img src="/portale/tessera.webp" alt="" class="size-9 object-contain" />
-        <span class="flex-1 font-semibold text-[15px]">Regolamento della card studente</span>
+        <span class="flex-1 font-semibold text-[15px]">Regolamento della card</span>
         <UIcon name="i-heroicons-chevron-right" class="size-5 text-pf-grigio" aria-hidden="true" />
       </NuxtLink>
 

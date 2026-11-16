@@ -143,7 +143,7 @@
             <UIcon name="i-heroicons-chevron-right" class="size-5 text-pf-grigio" aria-hidden="true" />
           </NuxtLink>
           <NuxtLink to="/regolamento-card" class="min-h-12 flex items-center gap-3 text-[15px] hover:text-pf-blu">
-            <span class="flex-1">Regolamento della card studente</span>
+            <span class="flex-1">Regolamento della card</span>
             <UIcon name="i-heroicons-chevron-right" class="size-5 text-pf-grigio" aria-hidden="true" />
           </NuxtLink>
         </div>

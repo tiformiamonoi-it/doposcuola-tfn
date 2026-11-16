@@ -1,6 +1,7 @@
 <template>
   <div>
-    <PortaleTestata titolo="Card studente" sovrapposta>
+    <!-- Al genitore titolo neutro: in cima c'è la sua card, poi quelle dei figli -->
+    <PortaleTestata :titolo="perGenitore ? 'Card' : 'Card studente'" sovrapposta>
       <!-- Un figlio per volta: bottoni veri, quello scelto è "premuto" -->
       <div v-if="cards.length > 1" role="group" :aria-label="perGenitore ? 'Scegli la card' : 'Scegli il figlio'" class="p-1 bg-pf-blu-tasto rounded-[14px] grid gap-1" :style="{ gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))` }">
         <button
@@ -106,7 +107,7 @@
       </section>
 
       <NuxtLink to="/regolamento-card" class="mx-5 mt-4 min-h-11 flex items-center justify-between text-sm text-pf-grigio-scuro hover:text-pf-blu">
-        <span>Regolamento della card studente</span>
+        <span>Regolamento della card</span>
         <UIcon name="i-heroicons-chevron-right" class="size-4" aria-hidden="true" />
       </NuxtLink>
     </div>
