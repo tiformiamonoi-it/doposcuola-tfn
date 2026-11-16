@@ -1,19 +1,22 @@
 <template>
-  <div v-if="mostra" class="mb-4 bg-tfn-50 border border-tfn-200 rounded-xl p-3 flex items-center gap-3">
-    <img src="/favicon.svg" alt="" class="w-10 h-10 flex-shrink-0" />
-    <div class="flex-1 min-w-0">
-      <p class="text-sm font-medium text-slate-900">Installa l'app sul telefono</p>
-      <p v-if="isIos" class="text-xs text-slate-500 mt-0.5">
-        Tocca <UIcon name="i-heroicons-arrow-up-on-square" class="w-3.5 h-3.5 inline align-text-bottom" /> Condividi,
+  <!-- Solo nella Home del portale famiglie (lo staff non lo usa): grafica v6 -->
+  <section v-if="mostra" aria-labelledby="t-installa" class="bg-white rounded-[22px] p-4 flex gap-3 items-start pf-ombra">
+    <img src="/favicon.svg" alt="" class="size-11 shrink-0" />
+    <div class="flex-1 min-w-0 flex flex-col gap-1">
+      <h2 id="t-installa" class="font-heading font-bold text-base">Installa l'app sul telefono</h2>
+      <p v-if="isIos" class="text-[13px] leading-[18px] text-pf-grigio">
+        Tocca <UIcon name="i-heroicons-arrow-up-on-square" class="size-4 inline align-text-bottom" aria-hidden="true" /> Condividi,
         poi «Aggiungi alla schermata Home»
       </p>
-      <p v-else class="text-xs text-slate-500 mt-0.5">Icona sulla Home, si apre come una vera app</p>
+      <template v-else>
+        <p class="text-[13px] leading-[18px] text-pf-grigio">Icona sulla Home, si apre come una vera app</p>
+        <PortaleBottone piccolo class="self-start mt-2" @click="installa">Installa</PortaleBottone>
+      </template>
     </div>
-    <UButton v-if="!isIos" size="xs" @click="installa">Installa</UButton>
-    <button @click="chiudi" class="p-1 text-slate-400 hover:text-slate-600" title="Chiudi">
-      <UIcon name="i-heroicons-x-mark" class="w-4 h-4" />
+    <button type="button" aria-label="Chiudi l'invito a installare l'app" class="size-11 -m-2 shrink-0 rounded-full flex items-center justify-center text-pf-grigio-scuro hover:bg-pf-fondo" @click="chiudi">
+      <UIcon name="i-heroicons-x-mark" class="size-5" aria-hidden="true" />
     </button>
-  </div>
+  </section>
 </template>
 
 <script setup lang="ts">

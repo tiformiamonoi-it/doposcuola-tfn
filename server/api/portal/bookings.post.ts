@@ -87,7 +87,9 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    return await createBooking(result.data, user.id)
+    // Alla famiglia torna solo l'id: niente importi del supplemento né altri dati della riga
+    const { id } = await createBooking(result.data, user.id)
+    return { id }
   } catch (err: any) {
     if (err.statusCode) throw err
     throw toHttpError(err)

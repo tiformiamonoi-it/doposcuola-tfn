@@ -1,81 +1,81 @@
 <template>
   <!-- Compare solo se la segreteria ha acceso la domanda nella pagina Rientri
        e se c'è almeno un figlio attivo: altrimenti il server risponde vuoto. -->
-  <section v-if="figli.length" class="space-y-4" aria-labelledby="titolo-domanda-rientro">
-    <h2 id="titolo-domanda-rientro" class="text-lg font-bold text-slate-800 flex items-center gap-2">
-      <UIcon name="i-heroicons-calendar-days" class="w-5 h-5 text-tfn-500" />
-      Il nuovo anno scolastico
-    </h2>
+  <section v-if="figli.length" class="flex flex-col gap-3" aria-labelledby="titolo-domanda-rientro">
+    <div class="flex items-center gap-2">
+      <img src="/portale/calendario.webp" alt="" class="size-[30px] object-contain" loading="lazy" />
+      <h2 id="titolo-domanda-rientro" class="font-heading font-bold text-lg">Il nuovo anno scolastico</h2>
+    </div>
 
-    <UCard
+    <div
       v-for="f in figli"
       :key="f.studentId"
-      class="border border-tfn-100 rounded-xl"
+      class="bg-white rounded-[22px] p-4 flex flex-col gap-4 pf-ombra"
     >
-      <div class="space-y-4">
-        <h3 :id="`domanda-rientro-${f.studentId}`" class="font-semibold text-slate-800">
-          {{ f.firstName }} torna da noi quest'anno ({{ anno }})?
-        </h3>
+      <h3 :id="`domanda-rientro-${f.studentId}`" class="font-heading font-bold text-base">
+        {{ f.firstName }} torna da noi quest'anno ({{ anno }})?
+      </h3>
 
-        <!-- La risposta l'ha segnata la segreteria: si legge soltanto -->
-        <p v-if="!f.puoRispondere" class="text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2">
-          Abbiamo registrato: {{ fraseRegistrata(f) }}.
-          Se è cambiato qualcosa, scrivici o chiamaci.
-        </p>
+      <!-- La risposta l'ha segnata la segreteria: si legge soltanto -->
+      <p v-if="!f.puoRispondere" class="text-sm leading-5 text-pf-grigio-scuro bg-pf-fondo rounded-xl px-3.5 py-3">
+        Abbiamo registrato: {{ fraseRegistrata(f) }}.
+        Se è cambiato qualcosa, scrivici o chiamaci.
+      </p>
 
-        <template v-else>
-          <!-- Tre bottoni veri: quello scelto è annunciato come "premuto" e ha la
-               spunta, così la scelta non si capisce solo dal colore -->
-          <div
-            role="group"
-            :aria-labelledby="`domanda-rientro-${f.studentId}`"
-            class="grid grid-cols-1 sm:grid-cols-3 gap-2"
+      <template v-else>
+        <!-- Tre bottoni veri: quello scelto è annunciato come "premuto" e ha la
+             spunta, così la scelta non si capisce solo dal colore -->
+        <div
+          role="group"
+          :aria-labelledby="`domanda-rientro-${f.studentId}`"
+          class="grid grid-cols-1 sm:grid-cols-3 gap-2"
+        >
+          <button
+            v-for="s in SCELTE"
+            :key="s.value"
+            type="button"
+            :aria-pressed="scelte[f.studentId] === s.value"
+            class="min-h-12 px-4 rounded-2xl bg-white flex items-center justify-center gap-2 text-[15px] transition-colors"
+            :class="scelte[f.studentId] === s.value ? 'border-2 border-pf-blu text-pf-blu font-bold' : 'border border-pf-bordo text-pf-grigio-scuro font-semibold hover:border-pf-blu'"
+            @click="() => { scelte[f.studentId] = s.value }"
           >
-            <UButton
-              v-for="s in SCELTE"
-              :key="s.value"
-              block
-              size="lg"
-              :color="scelte[f.studentId] === s.value ? 'primary' : 'neutral'"
-              :variant="scelte[f.studentId] === s.value ? 'solid' : 'outline'"
-              :icon="scelte[f.studentId] === s.value ? 'i-heroicons-check' : undefined"
-              :aria-pressed="scelte[f.studentId] === s.value"
-              @click="() => { scelte[f.studentId] = s.value }"
-            >
-              {{ s.label }}
-            </UButton>
-          </div>
+            <span v-if="scelte[f.studentId] === s.value" class="size-5 shrink-0 rounded-full bg-pf-blu text-white flex items-center justify-center" aria-hidden="true">
+              <UIcon name="i-heroicons-check" class="size-3" />
+            </span>
+            {{ s.label }}
+          </button>
+        </div>
 
-          <UFormField label="Vuoi aggiungere qualcosa? (facoltativo)" :name="`nota-rientro-${f.studentId}`">
-            <UTextarea
-              v-model="note[f.studentId]"
-              :rows="2"
-              :maxlength="500"
-              class="w-full"
-              placeholder="Es. preferiamo i pomeriggi del martedì"
-            />
-          </UFormField>
+        <div class="flex flex-col gap-1.5">
+          <label :for="`nota-rientro-${f.studentId}`" class="text-sm font-semibold text-pf-grigio-scuro">
+            Vuoi aggiungere qualcosa? <span class="font-normal text-pf-grigio">(facoltativo)</span>
+          </label>
+          <textarea
+            :id="`nota-rientro-${f.studentId}`"
+            v-model="note[f.studentId]"
+            rows="2"
+            maxlength="500"
+            placeholder="Es. preferiamo i pomeriggi del martedì"
+            class="w-full px-3.5 py-3 rounded-2xl border border-pf-bordo bg-white text-base text-pf-testo resize-none"
+          />
+        </div>
 
-          <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-            <UButton
-              color="primary"
-              size="lg"
-              class="justify-center"
-              :loading="inInvio === f.studentId"
-              :disabled="!daInviare(f)"
-              @click="() => invia(f)"
-            >
-              {{ f.stato === 'DA_SENTIRE' ? 'Invia la risposta' : 'Aggiorna la risposta' }}
-            </UButton>
-            <!-- role="status": chi usa un lettore di schermo sente il "grazie" -->
-            <p v-if="f.stato !== 'DA_SENTIRE'" role="status" class="text-sm text-slate-600">
-              Grazie! Abbiamo ricevuto la risposta «{{ etichetta(f.stato) }}»<template v-if="f.dataRisposta"> il {{ formatGiorno(f.dataRisposta) }}</template>.
-              Se cambia qualcosa puoi aggiornarla qui.
-            </p>
-          </div>
-        </template>
-      </div>
-    </UCard>
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+          <PortaleBottone
+            :loading="inInvio === f.studentId"
+            :disabled="!daInviare(f)"
+            @click="() => invia(f)"
+          >
+            {{ f.stato === 'DA_SENTIRE' ? 'Invia la risposta' : 'Aggiorna la risposta' }}
+          </PortaleBottone>
+          <!-- role="status": chi usa un lettore di schermo sente il "grazie" -->
+          <p v-if="f.stato !== 'DA_SENTIRE'" role="status" class="text-[13px] leading-[18px] text-pf-grigio">
+            Grazie! Abbiamo ricevuto la risposta «{{ etichetta(f.stato) }}»<template v-if="f.dataRisposta"> il {{ formatGiorno(f.dataRisposta) }}</template>.
+            Se cambia qualcosa puoi aggiornarla qui.
+          </p>
+        </div>
+      </template>
+    </div>
   </section>
 </template>
 
