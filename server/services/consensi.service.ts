@@ -376,34 +376,36 @@ export async function dichiarazioniMinoriMancanti(studentIds: string[]) {
  * comunicazioni promozionali, che sono sue e non del figlio.
  */
 export async function statoConsensiFamiglia(parentUserId: string, studentIds: string[]) {
-  const figli = studentIds.length === 0 ? [] : await db.query.students.findMany({
-    where: inArray(students.id, studentIds),
-    columns: { id: true, firstName: true, lastName: true, dataNascita: true },
-  })
-
-  // Una lettura sola per tutti i figli, più quella del marketing di chi è entrato
-  const righe = studentIds.length === 0
-    ? []
-    : await db.select({
-      tipo: consensi.tipo, studentId: consensi.studentId, userId: consensi.userId,
+  // Tre letture indipendenti: partono insieme. Una dopo l'altra costavano tre viaggi
+  // fino al database invece di uno (il riquadro dei consensi è nella Home del genitore).
+  const [figli, righe, [righeMarketing]] = await Promise.all([
+    studentIds.length === 0 ? [] : db.query.students.findMany({
+      where: inArray(students.id, studentIds),
+      columns: { id: true, firstName: true, lastName: true, dataNascita: true },
+    }),
+    // Una lettura sola per tutti i figli, più quella del marketing di chi è entrato
+    studentIds.length === 0
+      ? []
+      : db.select({
+        tipo: consensi.tipo, studentId: consensi.studentId, userId: consensi.userId,
+        valore: consensi.valore, testoVersione: consensi.testoVersione,
+        origine: consensi.origine, note: consensi.note, createdAt: consensi.createdAt,
+      })
+        .from(consensi)
+        .where(and(
+          inArray(consensi.studentId, studentIds),
+          inArray(consensi.tipo, ['MINORE_14', 'IMMAGINI']),
+        ))
+        .orderBy(desc(consensi.createdAt)),
+    db.select({
       valore: consensi.valore, testoVersione: consensi.testoVersione,
-      origine: consensi.origine, note: consensi.note, createdAt: consensi.createdAt,
+      origine: consensi.origine, createdAt: consensi.createdAt,
     })
       .from(consensi)
-      .where(and(
-        inArray(consensi.studentId, studentIds),
-        inArray(consensi.tipo, ['MINORE_14', 'IMMAGINI']),
-      ))
+      .where(and(eq(consensi.tipo, 'MARKETING'), eq(consensi.userId, parentUserId)))
       .orderBy(desc(consensi.createdAt))
-
-  const [righeMarketing] = await db.select({
-    valore: consensi.valore, testoVersione: consensi.testoVersione,
-    origine: consensi.origine, createdAt: consensi.createdAt,
-  })
-    .from(consensi)
-    .where(and(eq(consensi.tipo, 'MARKETING'), eq(consensi.userId, parentUserId)))
-    .orderBy(desc(consensi.createdAt))
-    .limit(1)
+      .limit(1),
+  ])
 
   // Nel portale non serve dire CHI ha toccato l'interruttore: lo sa, è lui.
   const voce = (tipo: ConsensoTipo, r?: { valore: boolean; createdAt: Date; origine: string; testoVersione: string | null }) =>
