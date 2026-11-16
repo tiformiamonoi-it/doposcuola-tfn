@@ -37,7 +37,7 @@
           <p class="text-xs text-slate-500 mt-1">
             Consigliata orizzontale, 1200 × 800 pixel. Va bene anche una locandina verticale: si vede intera.
           </p>
-          <p class="text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
+          <p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
             Se nella foto si riconoscono degli alunni, usala solo con quelli che hanno dato il consenso foto e video.
           </p>
           <div v-if="immagine" class="mt-2 flex items-start gap-2">
