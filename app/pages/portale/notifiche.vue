@@ -5,7 +5,7 @@
         <button
           type="button"
           class="min-h-11 px-1 text-sm font-semibold text-white disabled:opacity-60 hover:underline underline-offset-2"
-          :disabled="nuove === 0 || segnando"
+          :disabled="!voci.some((v) => v.nuova) || segnando"
           @click="segnaTutteLette"
         >
           Segna tutte come lette
@@ -109,9 +109,8 @@ const filtri = computed(() => [
 const filtro = ref('TUTTE')
 
 // Stessa chiave del layout: una lettura sola, e "segna come lette" aggiorna anche la campanella
-const { data, pending, refresh } = useLazyFetch<{ voci: Voce[]; nuove: number }>('/api/portal/notifiche', { server: false, key: 'portale-notifiche-menu' })
+const { data, pending, status, refresh } = useLazyFetch<{ voci: Voce[]; nuove: number }>('/api/portal/notifiche', { server: false, key: 'portale-notifiche-menu' })
 const voci = computed(() => data.value?.voci ?? [])
-const nuove = computed(() => data.value?.nuove ?? 0)
 const visibili = computed(() => (filtro.value === 'TUTTE' ? voci.value : voci.value.filter((v) => v.categoria === filtro.value)))
 
 const { data: studentsData } = useLazyFetch<{ firstName: string }[]>('/api/portal/students')
@@ -157,9 +156,21 @@ function illustrazione(id: string) {
   return '/portale/megafono.webp'
 }
 
-// Il pallino della campanella (layouts/portal.vue) legge lo stesso numero
-const nuoveNelMenu = useState<number>('portal-notifiche-nuove', () => 0)
-watchEffect(() => { if (data.value) nuoveNelMenu.value = data.value.nuove })
+// APRIRE LA PAGINA = AVER VISTO TUTTO. Si aspetta la lettura di QUESTA apertura (la
+// pagina la rifà sempre al mount), così le voci nuove arrivano ancora col pallino e restano
+// evidenziate per tutta la visita; poi "viste fino a" va ad adesso e il numero condiviso si
+// azzera: il layout lo passa subito alla campanella. Alla prossima apertura non sono più nuove.
+const smetti = watch(status, async (s) => {
+  if (s !== 'success' || !data.value) return
+  smetti()
+  if (!data.value.nuove) return
+  try {
+    await $fetch('/api/portal/notifiche-lette', { method: 'POST' })
+    if (data.value) data.value = { ...data.value, nuove: 0 }
+  } catch {
+    // Non riuscito: il numero resta com'è e ci si riprova alla prossima apertura
+  }
+})
 
 // Le comunicazioni della segreteria qui si leggono per intero: aprire la pagina le segna
 // lette (la segreteria vede quante famiglie le hanno lette), come faceva Comunicazioni.

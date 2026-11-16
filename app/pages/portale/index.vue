@@ -158,6 +158,7 @@
           :key="v.id"
           :to="v.link ?? '/portale/notifiche'"
           class="bg-white rounded-[22px] p-4 flex flex-col gap-1.5 text-pf-testo pf-ombra hover:bg-pf-fondo transition-colors"
+          @click="segnaVista(v)"
         >
           <span class="flex items-center gap-2">
             <PortaleStato v-if="v.nuova" tono="rosso">Nuova</PortaleStato>
@@ -287,6 +288,14 @@ const cardDaSegnalare = computed(() => (cardData.value ?? []).filter((c) =>
 const ultimeDallaSegreteria = computed(() => (notificheData.value?.voci ?? [])
   .filter((v) => v.id.startsWith('nota:') || v.id.startsWith('comunicazione:'))
   .slice(0, 2))
+// Toccare una voce la conta come vista: "viste fino a" arriva alla sua data (mai indietro).
+// Poi si rilegge la chiave condivisa, così la campanella si aggiorna anche se la pagina di
+// arrivo (Note, Convenzioni...) le notifiche non le legge.
+function segnaVista(v: Voce) {
+  if (!v.nuova) return
+  $fetch('/api/portal/notifiche-lette', { method: 'POST', body: { fino: v.data } })
+    .then(() => refreshNuxtData('portale-notifiche-menu'), () => {})
+}
 const quando = (iso: string) => new Date(iso).toLocaleDateString('it-IT', { timeZone: 'Europe/Rome', day: 'numeric', month: 'long' })
 
 // Le ultime arrivate per prime: il server le ordina dalla più vecchia

@@ -27,8 +27,8 @@
 const route = useRoute()
 const senzaMenu = computed(() => route.meta.senzaMenu === true)
 
-// Il pallino della campanella: le notifiche nuove. La pagina Notifiche lo aggiorna
-// (useState) quando si segna tutto come letto. Una lettura sola, condivisa dalle pagine.
+// Il pallino della campanella: le notifiche nuove. Una lettura sola, condivisa dalle pagine
+// (stessa chiave): quando la pagina Notifiche o la Home la cambiano, il numero segue da qui.
 const notificheNuove = useState<number>('portal-notifiche-nuove', () => 0)
 const { data: notificheRes } = useLazyFetch<{ nuove: number }>('/api/portal/notifiche', { server: false, key: 'portale-notifiche-menu' })
 watchEffect(() => { if (notificheRes.value) notificheNuove.value = notificheRes.value.nuove })
