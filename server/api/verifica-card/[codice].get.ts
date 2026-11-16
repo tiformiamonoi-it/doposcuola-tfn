@@ -7,7 +7,7 @@ import { normalizzaCodiceCard } from '#shared/card-studente'
 //
 // PRIVACY (regolamento della card, art. 6):
 // - esce solo valida sì/no, nome, iniziale del cognome, "valida fino al" e l'ora del controllo,
-//   più se la card è di uno studente o di un genitore (tipo);
+//   più se la card è di uno studente, di un genitore o di un tutor (tipo);
 // - codice inesistente e card sospesa danno la STESSA risposta, senza motivo: da fuori
 //   non si capisce se un codice esiste, né perché una card non vale;
 // - non si registra chi controlla né quando: nessun log, nessuna riga nel database.

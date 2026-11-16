@@ -1,192 +1,157 @@
 <template>
-  <div class="grid grid-cols-1 lg:grid-cols-10 gap-6">
-
-    <!-- ═══ Colonna sinistra (70%) — Calendario ═══ -->
-    <div class="lg:col-span-7 space-y-6">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 class="text-xl font-semibold text-slate-900">Il mio Calendario</h2>
-          <p class="text-sm text-slate-500 mt-0.5">Le tue lezioni — registra quelle di oggi entro le 20:00</p>
+  <div>
+    <PortaleTestata :campanella="false">
+      <template #titolo>
+        <div class="flex flex-col gap-1.5">
+          <h1 class="font-heading font-bold text-[27px] leading-tight">Il mio calendario</h1>
+          <p class="text-sm leading-5 text-pf-su-blu">Le tue lezioni. Registra quelle di oggi entro le 20:00.</p>
         </div>
-        <div class="flex gap-2">
-          <UButton to="/area-tutor" icon="i-heroicons-check-circle" variant="soft" size="sm">Disponibilità</UButton>
-          <UButton to="/area-tutor/cronologia" icon="i-heroicons-document-text" variant="soft" size="sm">Cronologia Note</UButton>
-          <UButton to="/stampe/tutor-lezioni" icon="i-heroicons-printer" variant="soft" size="sm">Stampa</UButton>
-        </div>
-
-        <div class="flex items-center bg-white rounded-xl ring-1 ring-slate-200 shadow-sm p-1">
-          <UButton color="neutral" variant="ghost" icon="i-heroicons-chevron-left" @click="previousMonth" />
-          <div class="flex flex-col items-center min-w-[140px] px-2">
-            <span class="text-sm font-semibold text-slate-800 capitalize">{{ nomeMeseAnno }}</span>
-            <UButton size="xs" variant="link" color="primary" @click="goToToday" :padded="false" class="mt-0.5">Torna a Oggi</UButton>
-          </div>
-          <UButton color="neutral" variant="ghost" icon="i-heroicons-chevron-right" @click="nextMonth" />
-        </div>
+      </template>
+      <!-- Il mese: indietro, avanti e "Torna a oggi" -->
+      <div class="flex items-center justify-between gap-2 p-1 bg-pf-blu-tasto rounded-[14px]">
+        <button type="button" aria-label="Mese precedente" class="size-11 rounded-[11px] flex items-center justify-center hover:bg-pf-blu-scuro" @click="previousMonth">
+          <UIcon name="i-heroicons-chevron-left" class="size-5" aria-hidden="true" />
+        </button>
+        <span class="flex flex-col items-center">
+          <span class="font-semibold text-[15px] capitalize" aria-live="polite">{{ nomeMeseAnno }}</span>
+          <button type="button" class="min-h-8 px-2 text-xs font-semibold text-pf-su-blu underline underline-offset-2 hover:text-white" @click="goToToday">Torna a oggi</button>
+        </span>
+        <button type="button" aria-label="Mese successivo" class="size-11 rounded-[11px] flex items-center justify-center hover:bg-pf-blu-scuro" @click="nextMonth">
+          <UIcon name="i-heroicons-chevron-right" class="size-5" aria-hidden="true" />
+        </button>
       </div>
+    </PortaleTestata>
 
-      <!-- Loading -->
-      <div v-if="pending" class="py-12 flex justify-center bg-white rounded-2xl border border-slate-200">
-        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 text-slate-300 animate-spin" />
-      </div>
+    <!-- Loading -->
+    <div v-if="pending" class="mx-5 mt-5 flex flex-col gap-3" aria-busy="true">
+      <USkeleton v-for="i in 3" :key="i" class="h-20 w-full rounded-[22px]" />
+    </div>
 
-      <!-- Lista giorni -->
-      <div v-else-if="giorniVisibili.length > 0" class="space-y-5">
-        <div
-          v-for="giorno in giorniVisibili"
-          :key="giorno.dateStr"
-          class="bg-white rounded-2xl ring-1 ring-slate-200 shadow-md overflow-hidden transition-all duration-200 border-l-4"
-          :class="isToday(giorno.dateStr) ? 'ring-2 ring-primary-500 shadow-lg border-l-primary-500' : 'border-l-transparent'"
+    <!-- Lista giorni: oggi in cima ed espanso -->
+    <div v-else-if="giorniVisibili.length > 0" class="mx-5 mt-5 flex flex-col gap-3">
+      <section
+        v-for="giorno in giorniVisibili"
+        :key="giorno.dateStr"
+        :aria-label="`${giorno.giornoNomeLungo} ${giorno.giornoNumero}${isToday(giorno.dateStr) ? ', oggi' : ''}`"
+        class="bg-white rounded-[22px] overflow-hidden pf-ombra"
+        :class="isToday(giorno.dateStr) ? 'ring-2 ring-pf-blu' : ''"
+      >
+        <button
+          type="button"
+          class="w-full min-h-[72px] p-3.5 flex items-center gap-3.5 text-left hover:bg-pf-fondo transition-colors"
+          :aria-expanded="isDayExpanded(giorno.dateStr)"
+          :aria-controls="`giorno-${giorno.dateStr}`"
+          @click="toggleDay(giorno.dateStr)"
         >
-          <div
-            class="flex flex-col sm:flex-row sm:items-center justify-between p-4 cursor-pointer transition-colors gap-4"
-            :class="isToday(giorno.dateStr) ? 'bg-primary-50/40' : 'hover:bg-slate-50'"
-            @click="toggleDay(giorno.dateStr)"
+          <span
+            class="size-14 shrink-0 rounded-2xl flex flex-col items-center justify-center"
+            :class="isToday(giorno.dateStr) ? 'bg-pf-blu text-white' : 'bg-pf-celeste text-pf-blu-scuro'"
           >
-            <div class="flex items-center gap-4">
-              <div
-                class="w-14 h-14 rounded-xl flex flex-col items-center justify-center flex-shrink-0 ring-1"
-                :class="isToday(giorno.dateStr) ? 'bg-primary-100 text-primary-700 ring-primary-300' : 'bg-sky-50 text-sky-700 ring-sky-200'"
-              >
-                <span class="text-xl font-bold leading-none">{{ giorno.giornoNumero }}</span>
-                <span class="text-[10px] font-semibold uppercase tracking-wider mt-1">{{ giorno.giornoNomeCorto }}</span>
-              </div>
-              <div class="min-w-0">
-                <div class="flex items-center gap-2">
-                  <p class="text-base font-semibold text-slate-900 capitalize">{{ giorno.giornoNomeLungo }}</p>
-                  <UBadge v-if="isToday(giorno.dateStr)" color="primary" variant="subtle" size="xs" class="uppercase tracking-wide">Oggi</UBadge>
-                </div>
-                <div class="flex items-center gap-3 text-xs text-slate-500 mt-1">
-                  <span class="flex items-center gap-1"><UIcon name="i-heroicons-academic-cap" class="w-3.5 h-3.5" /> <strong class="text-slate-700">{{ giorno.numeroLezioni }}</strong> lezioni</span>
-                  <span class="flex items-center gap-1"><UIcon name="i-heroicons-users" class="w-3.5 h-3.5" /> <strong class="text-slate-700">{{ giorno.numeroStudenti }}</strong> studenti</span>
-                </div>
-              </div>
-            </div>
-            <UButton color="neutral" variant="ghost" :icon="isDayExpanded(giorno.dateStr) ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="pointer-events-none" />
+            <span class="text-xl font-bold leading-none">{{ giorno.giornoNumero }}</span>
+            <span class="text-[10px] font-semibold uppercase tracking-wider mt-1">{{ giorno.giornoNomeCorto }}</span>
+          </span>
+          <span class="flex-1 min-w-0 flex flex-col gap-1">
+            <span class="flex items-center gap-2">
+              <span class="font-semibold text-base capitalize">{{ giorno.giornoNomeLungo }}</span>
+              <span v-if="isToday(giorno.dateStr)" class="text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-pf-giallo text-pf-giallo-testo">Oggi</span>
+            </span>
+            <span class="text-[13px] text-pf-grigio-scuro">
+              <strong class="text-pf-testo">{{ giorno.numeroLezioni }}</strong> lezioni · <strong class="text-pf-testo">{{ giorno.numeroStudenti }}</strong> studenti
+            </span>
+          </span>
+          <UIcon :name="isDayExpanded(giorno.dateStr) ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="size-5 shrink-0 text-pf-grigio" aria-hidden="true" />
+        </button>
+
+        <div v-if="isDayExpanded(giorno.dateStr)" :id="`giorno-${giorno.dateStr}`" class="border-t border-pf-bordo">
+          <div v-if="giorno.numeroLezioni === 0" class="p-6 text-center flex flex-col items-center gap-3">
+            <img src="/portale/calendario.webp" alt="" class="size-14 object-contain" />
+            <p class="font-semibold text-[15px]">
+              {{ isToday(giorno.dateStr) ? 'Nessuna lezione ancora registrata per oggi' : 'Nessuna lezione in questo giorno' }}
+            </p>
+            <PortaleBottone v-if="isToday(giorno.dateStr) && entroOrario" @click="openLezioneRapida(giorno.dateStr)">
+              <UIcon name="i-heroicons-plus" class="size-5" aria-hidden="true" />
+              Registra una lezione
+            </PortaleBottone>
+            <p v-else-if="isToday(giorno.dateStr)" class="text-sm text-pf-crema-testo bg-pf-crema rounded-xl px-3 py-2">
+              Sono passate le 20:00: non puoi più registrare lezioni per oggi.
+            </p>
           </div>
 
-          <div v-if="isDayExpanded(giorno.dateStr)" class="border-t border-slate-100">
-            <div v-if="giorno.numeroLezioni === 0" class="p-10 text-center flex flex-col items-center bg-slate-50/30">
-              <div class="w-14 h-14 rounded-2xl bg-primary-50 text-primary-500 flex items-center justify-center mb-3">
-                <UIcon name="i-heroicons-sparkles" class="w-7 h-7" />
-              </div>
-              <h4 class="text-base font-semibold text-slate-700">
-                {{ isToday(giorno.dateStr) ? 'Nessuna lezione ancora registrata per oggi' : 'Nessuna lezione in questo giorno' }}
-              </h4>
-              <UButton
-                v-if="isToday(giorno.dateStr) && entroOrario"
-                color="primary" icon="i-heroicons-plus" class="mt-5"
-                @click="openLezioneRapida(giorno.dateStr)"
-              >
-                Registra una lezione
-              </UButton>
-              <p v-else-if="isToday(giorno.dateStr)" class="text-sm text-amber-600 mt-3">
-                Sono passate le 20:00: non puoi più registrare lezioni per oggi.
-              </p>
+          <div v-else>
+            <div class="px-4 py-3 flex items-center justify-between gap-3">
+              <h3 class="text-sm font-semibold">Griglia oraria</h3>
+              <PortaleBottone v-if="isToday(giorno.dateStr) && entroOrario" variante="chiaro" piccolo @click="openLezioneRapida(giorno.dateStr)">
+                <UIcon name="i-heroicons-plus" class="size-4" aria-hidden="true" />
+                Aggiungi lezione
+              </PortaleBottone>
             </div>
 
-            <div v-else class="bg-slate-50/30">
-              <div class="p-4 flex items-center justify-between border-b border-slate-100 bg-white">
-                <h4 class="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                  <UIcon name="i-heroicons-squares-2x2" class="w-4 h-4 text-slate-400" />
-                  Griglia Oraria
-                </h4>
-                <UButton v-if="isToday(giorno.dateStr) && entroOrario" size="xs" color="neutral" variant="soft" icon="i-heroicons-plus" @click="openLezioneRapida(giorno.dateStr)">
-                  Aggiungi lezione
-                </UButton>
-              </div>
-
-              <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse min-w-[400px]">
-                  <thead>
-                    <tr class="bg-sky-50">
-                      <th v-for="slot in getActiveSlotsForDay(giorno)" :key="slot.id" class="py-3.5 px-2 text-xs font-bold text-sky-700 text-center border-b-2 border-sky-200 min-w-[150px] uppercase tracking-wider">
-                        {{ slot.label }}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody class="bg-white">
-                    <tr>
-                      <td
-                        v-for="slot in getActiveSlotsForDay(giorno)"
-                        :key="slot.id"
-                        class="p-0 border-l-2 border-slate-200 relative align-top"
-                        :class="[
-                          getStudentsInSlot(giorno, slot.id).length > 0 ? 'bg-sky-50/60' : '',
-                          isToday(giorno.dateStr) && entroOrario ? 'cursor-pointer hover:bg-sky-100/60 transition-colors group' : ''
-                        ]"
-                        @click="isToday(giorno.dateStr) && entroOrario ? openGestisciSlot(giorno.dateStr, slot) : null"
+            <!-- Le fasce in colonna: la tabella scorre di lato, la pagina no -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse min-w-[400px]">
+                <thead>
+                  <tr class="bg-pf-celeste">
+                    <th v-for="slot in getActiveSlotsForDay(giorno)" :key="slot.id" scope="col" class="py-3 px-2 text-xs font-bold text-pf-blu-scuro text-center min-w-[150px]">
+                      {{ slot.label }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td
+                      v-for="slot in getActiveSlotsForDay(giorno)"
+                      :key="slot.id"
+                      class="p-1.5 border-l border-pf-bordo first:border-l-0 align-top"
+                    >
+                      <!-- Oggi entro le 20:00 la fascia è un bottone: apre la finestra per gestirla -->
+                      <button
+                        v-if="isToday(giorno.dateStr) && entroOrario"
+                        type="button"
+                        class="w-full min-h-[52px] p-2 rounded-xl flex flex-wrap gap-1.5 items-start content-start transition-colors"
+                        :class="getStudentsInSlot(giorno, slot.id).length > 0 ? 'bg-pf-fondo hover:bg-pf-celeste' : 'border border-dashed border-pf-grigio/50 justify-center items-center text-pf-blu hover:bg-pf-celeste'"
+                        :aria-label="getStudentsInSlot(giorno, slot.id).length > 0
+                          ? `Gestisci la fascia ${slot.label}: ${nomiInSlot(giorno, slot.id)}`
+                          : `Fascia ${slot.label} vuota: aggiungi un alunno`"
+                        @click="openGestisciSlot(giorno.dateStr, slot)"
                       >
-                        <div v-if="getStudentsInSlot(giorno, slot.id).length > 0" class="min-h-[52px] p-2.5 flex flex-wrap gap-2 items-start content-start">
-                          <div
-                            v-for="stu in getStudentsInSlot(giorno, slot.id)"
-                            :key="stu.id"
-                            class="text-xs font-semibold rounded-lg px-2.5 py-1 shadow-sm ring-1 ring-slate-300 bg-white text-slate-700 inline-flex items-center gap-1 whitespace-nowrap"
-                          >
-                            <span>{{ stu.firstName || '?' }} {{ stu.lastName ? stu.lastName.charAt(0) + '.' : '' }}</span>
-                          </div>
-                        </div>
-                        <div v-else class="min-h-[52px] flex items-center justify-center text-slate-200 group-hover:text-primary-400 transition-colors">
-                          <UIcon v-if="isToday(giorno.dateStr) && entroOrario" name="i-heroicons-plus" class="w-5 h-5 opacity-0 group-hover:opacity-100" />
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+                        <span v-for="stu in getStudentsInSlot(giorno, slot.id)" :key="stu.id" :class="CHIP">{{ nomeBreve(stu) }}</span>
+                        <UIcon v-if="getStudentsInSlot(giorno, slot.id).length === 0" name="i-heroicons-plus" class="size-5" aria-hidden="true" />
+                      </button>
+                      <div v-else class="min-h-[52px] p-2 flex flex-wrap gap-1.5 items-start content-start">
+                        <span v-for="stu in getStudentsInSlot(giorno, slot.id)" :key="stu.id" :class="CHIP">{{ nomeBreve(stu) }}</span>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
+            <p v-if="isToday(giorno.dateStr) && entroOrario" class="px-4 py-3 text-[13px] leading-[18px] text-pf-grigio">
+              Tocca una fascia per aggiungere o togliere alunni. Scorri di lato per le altre fasce.
+            </p>
           </div>
         </div>
-      </div>
-
-      <div v-else class="py-16 text-center bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm flex flex-col items-center">
-        <UIcon name="i-heroicons-calendar" class="w-16 h-16 text-slate-300 mb-4" />
-        <h3 class="text-lg font-bold text-slate-700">Nessuna lezione trovata</h3>
-        <p class="text-slate-500 mt-1 max-w-sm">In questo mese non ci sono lezioni registrate.</p>
-      </div>
+      </section>
     </div>
 
-    <!-- ═══ Colonna destra (30%) — Nota Studente, sticky ═══ -->
-    <div class="lg:col-span-3">
-      <div class="sticky top-6">
-        <UCard>
-          <template #header>
-            <h2 class="font-semibold text-slate-800">Nuova Nota Studente</h2>
-            <p class="text-xs text-slate-500 font-normal">Aggiungi un commento su un alunno.</p>
-          </template>
-
-          <UForm :state="notaState" class="space-y-4" @submit="salvaNota">
-            <UFormField label="Studente" required>
-              <USelectMenu
-                v-model="notaState.studentId"
-                :items="studentsOptionsNota"
-                searchable
-                placeholder="Cerca studente..."
-                value-key="value"
-                label-key="label"
-                class="w-full"
-              />
-            </UFormField>
-
-            <UFormField label="Visibilità" required>
-              <URadioGroup
-                v-model="notaState.visibilita"
-                :items="[{ label: 'Interna (Solo Staff)', value: 'INTERNA' }, { label: 'Famiglia (Visibile ai genitori)', value: 'FAMIGLIA' }]"
-              />
-            </UFormField>
-
-            <UFormField label="Contenuto della nota" required>
-              <UTextarea v-model="notaState.contenuto" :rows="4" placeholder="Scrivi qui..." />
-            </UFormField>
-
-            <div class="flex justify-end pt-2">
-              <UButton type="submit" icon="i-heroicons-paper-airplane" :loading="salvandoNota">Salva Nota</UButton>
-            </div>
-          </UForm>
-        </UCard>
-      </div>
+    <div v-else class="mx-5 mt-5 bg-white rounded-3xl p-6 text-center flex flex-col items-center gap-2 pf-ombra">
+      <img src="/portale/calendario.webp" alt="" class="size-16 object-contain" />
+      <p class="font-semibold">Nessuna lezione trovata</p>
+      <p class="text-sm text-pf-grigio">In questo mese non ci sono lezioni registrate.</p>
     </div>
 
-    <!-- Modali -->
+    <!-- Disponibilità e stampa -->
+    <nav aria-label="Altro" class="mx-5 mt-5 bg-white rounded-[22px] pf-ombra divide-y divide-pf-fondo overflow-hidden">
+      <NuxtLink to="/area-tutor/disponibilita" class="min-h-14 px-4 flex items-center gap-3 text-[15px] font-medium text-pf-testo hover:bg-pf-fondo">
+        <span class="flex-1">La mia disponibilità</span>
+        <UIcon name="i-heroicons-chevron-right" class="size-4 text-pf-grigio" aria-hidden="true" />
+      </NuxtLink>
+      <NuxtLink to="/stampe/tutor-lezioni" class="min-h-14 px-4 flex items-center gap-3 text-[15px] font-medium text-pf-testo hover:bg-pf-fondo">
+        <span class="flex-1">Stampa le mie lezioni</span>
+        <UIcon name="i-heroicons-printer" class="size-4 text-pf-grigio" aria-hidden="true" />
+      </NuxtLink>
+    </nav>
+
+    <!-- Modali (le finestre di sempre, non cambiano) -->
     <ModalLezioneRapida
       v-if="modaleRapidaData"
       v-model:open="modaleRapidaAperto"
@@ -214,11 +179,11 @@ import { it } from 'date-fns/locale'
 import ModalLezioneRapida from '~/components/calendario/ModalLezioneRapida.vue'
 import ModalGestisciSlot from '~/components/calendario/ModalGestisciSlot.vue'
 
-definePageMeta({ middleware: ['tutor-only'] })
+// La veste è quella dell'area tutor (D3): logica, finestre e orari restano quelli di sempre
+definePageMeta({ layout: 'tutor', middleware: ['tutor-only'] })
 useHead({ title: 'Il mio Calendario — tiformiamonoi' })
 
 const { user } = useUserSession()
-const toast = useToast()
 
 // ==========================================
 // Finestra oraria (solo per la UI — la verità è sempre lato server)
@@ -229,7 +194,10 @@ function aggiornaEntroOrario() {
   entroOrario.value = parseInt(oraRome, 10) < 20
 }
 aggiornaEntroOrario()
-setInterval(aggiornaEntroOrario, 60_000)
+// Solo nel browser, e si ferma uscendo dalla pagina (con il menu in basso si cambia pagina spesso)
+let timerOrario: ReturnType<typeof setInterval> | undefined
+onMounted(() => { timerOrario = setInterval(aggiornaEntroOrario, 60_000) })
+onBeforeUnmount(() => clearInterval(timerOrario))
 
 // ==========================================
 // STATE
@@ -305,8 +273,11 @@ const giorniConDati = computed(() => {
   })
 })
 
+// Oggi in cima, poi dal giorno più vicino al più lontano (D3)
 const giorniVisibili = computed(() => {
-  return giorniConDati.value.filter(g => isToday(g.dateStr) || g.lezioniBase.length > 0)
+  return giorniConDati.value
+    .filter(g => isToday(g.dateStr) || g.lezioniBase.length > 0)
+    .sort((a, b) => (isToday(a.dateStr) ? -1 : isToday(b.dateStr) ? 1 : b.dateStr.localeCompare(a.dateStr)))
 })
 
 // ==========================================
@@ -380,44 +351,14 @@ function openGestisciSlot(dateStr: string, slot: any) {
   modaleGestisciAperto.value = true
 }
 
-// ==========================================
-// NOTA STUDENTE (spostata da Area Tutor)
-// ==========================================
-const salvandoNota = ref(false)
-const notaState = reactive({
-  studentId: '',
-  visibilita: 'INTERNA' as 'INTERNA' | 'FAMIGLIA',
-  contenuto: ''
-})
-
-const { data: studentsRes } = useLazyFetch('/api/students?active=true&limit=1000&light=true')
-const studentsOptionsNota = computed(() => {
-  return (studentsRes.value?.data || []).map((s: any) => ({
-    label: `${s.firstName} ${s.lastName}`,
-    value: s.id
-  }))
-})
-
-async function salvaNota() {
-  if (!notaState.studentId || !notaState.contenuto) {
-    toast.add({ title: 'Compila tutti i campi', color: 'warning' })
-    return
-  }
-  salvandoNota.value = true
-  try {
-    const creata: any = await $fetch('/api/notes', { method: 'POST', body: notaState })
-    const inAttesa = creata?.visibilita === 'FAMIGLIA' && !creata?.approvataAt
-    toast.add({
-      title: 'Nota salvata con successo',
-      description: inAttesa ? 'Sarà visibile alla famiglia dopo l\'approvazione della segreteria.' : undefined,
-      color: 'success'
-    })
-    notaState.contenuto = ''
-    notaState.studentId = ''
-  } catch (err) {
-    toast.add({ title: 'Errore salvataggio nota', color: 'error' })
-  } finally {
-    salvandoNota.value = false
-  }
+// Nome e iniziale del cognome, come sempre nella griglia
+const CHIP = 'text-xs font-semibold rounded-lg px-2.5 py-1 bg-white ring-1 ring-pf-bordo text-pf-testo whitespace-nowrap'
+function nomeBreve(stu: { firstName?: string, lastName?: string }) {
+  return `${stu.firstName || '?'} ${stu.lastName ? stu.lastName.charAt(0) + '.' : ''}`.trim()
 }
+function nomiInSlot(giorno: any, slotId: string) {
+  return getStudentsInSlot(giorno, slotId).map(nomeBreve).join(', ')
+}
+
+// Il modulo "Nuova nota" ora sta nella pagina Note (/area-tutor/note, linguetta Scrivi)
 </script>

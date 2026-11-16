@@ -7,7 +7,7 @@
       style="padding-bottom: max(10px, env(safe-area-inset-bottom))"
     >
       <NuxtLink
-        v-for="voce in VOCI"
+        v-for="voce in voci"
         :key="voce.to"
         :to="voce.to"
         :aria-current="attiva(voce.to) ? 'page' : undefined"
@@ -31,10 +31,20 @@
 </template>
 
 <script setup lang="ts">
+type VoceMenu = {
+  to: string
+  etichetta: string
+  icona: string
+  centrale?: boolean
+  /** Altre pagine che accendono questa voce (es. Disponibilità accende Lezioni del tutor) */
+  anche?: string[]
+}
+
 // Cinque voci per tutti, genitore e alunno. Prenota sta dentro Lezioni (e nella Home),
 // Notifiche nella campanella, Paga e le note nella Home: così il menu non cambia
 // da una famiglia all'altra e le voci restano grandi abbastanza per il dito.
-const VOCI = [
+// L'area tutor passa le sue voci (layouts/tutor.vue); la prima voce è sempre la Home.
+const VOCI: VoceMenu[] = [
   { to: '/portale',         etichetta: 'Home',        icona: 'i-heroicons-home' },
   { to: '/portale/lezioni', etichetta: 'Lezioni',     icona: 'i-heroicons-calendar-days' },
   { to: '/portale/card',    etichetta: 'Card',        icona: 'i-heroicons-qr-code', centrale: true },
@@ -42,6 +52,14 @@ const VOCI = [
   { to: '/portale/profilo', etichetta: 'Profilo',     icona: 'i-heroicons-user' },
 ]
 
+const props = defineProps<{ voci?: VoceMenu[] }>()
+const voci = computed(() => props.voci ?? VOCI)
+
 const route = useRoute()
-const attiva = (to: string) => (to === '/portale' ? route.path === '/portale' : route.path.startsWith(to))
+// La Home si accende solo su se stessa (le altre pagine iniziano con lo stesso indirizzo)
+const attiva = (to: string) => {
+  if (to === voci.value[0]?.to) return route.path === to
+  const voce = voci.value.find((v) => v.to === to)
+  return [to, ...(voce?.anche ?? [])].some((p) => route.path.startsWith(p))
+}
 </script>

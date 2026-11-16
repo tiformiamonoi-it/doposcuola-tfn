@@ -303,9 +303,8 @@
       </div>
     </div>
 
-    <!-- Tutorial di benvenuto (solo primo accesso TUTOR; admin esclusi dal componente) -->
-    <TutorialPrimoAccesso />
-    <!-- Finestra "Novità" dopo un aggiornamento (tutor e segreteria, mai le famiglie) -->
+    <!-- Finestra "Novità" dopo un aggiornamento (solo segreteria). Il benvenuto e le
+         Novità dei tutor sono a schermo intero nel layout "tutor" (PortalePresentazione). -->
     <NovitaAggiornamento />
 
   </div>

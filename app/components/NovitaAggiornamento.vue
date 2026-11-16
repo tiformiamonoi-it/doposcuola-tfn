@@ -27,9 +27,10 @@
 import { ultimaNovitaPer, novitaGiaVista, type PubblicoNovita } from '#shared/changelog'
 
 // Finestra "Novità" dopo un aggiornamento (registro in shared/changelog.ts).
-// Compare UNA volta, al primo caricamento dopo l'uscita: il tutor vede le voci
-// "tutor", Admin e Super Tutor quelle "segreteria". Genitori e studenti mai
-// (e infatti sta solo nel layout dello staff). Chi si è perso più uscite vede
+// Compare UNA volta, al primo caricamento dopo l'uscita: Admin e Super Tutor vedono
+// le voci "segreteria". Genitori, studenti e (dal 17/11/2026) tutor mai: loro hanno
+// le schermate a tutto schermo (components/portale/Presentazione.vue), anche se aprono
+// una pagina col layout dello staff (es. /stampe/...). Chi si è perso più uscite vede
 // solo l'ultima che lo riguarda. Admin e Super Tutor la riaprono cliccando il
 // numero di versione in fondo al menu (stato condiviso 'novita-riapri').
 const { user, fetch: refreshSession } = useUserSession()
@@ -40,7 +41,6 @@ const chiusaOra = ref(false)
 
 const pubblico = computed<PubblicoNovita | null>(() => {
   const ruolo = user.value?.role
-  if (ruolo === 'TUTOR') return 'tutor'
   if (ruolo === 'ADMIN' || ruolo === 'SUPER_TUTOR') return 'segreteria'
   return null
 })
@@ -52,11 +52,7 @@ const daMostrare = computed(() =>
   !!novita.value
   && !novitaGiaVista(novita.value.versione, user.value?.novitaVista)
   // Prima le cose obbligatorie: col cambio password in corso non si disturba
-  && user.value?.mustChangePassword !== true
-  // Il tutor appena arrivato ha il tutorial di benvenuto (TutorialPrimoAccesso):
-  // una finestra alla volta. Chiudendo il tutorial, il server segna vista anche
-  // questa versione. Admin e Super Tutor il tutorial non ce l'hanno.
-  && !(user.value?.role === 'TUTOR' && user.value?.tutorialVisto === false),
+  && user.value?.mustChangePassword !== true,
 )
 
 const aperto = computed({

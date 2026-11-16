@@ -165,6 +165,18 @@
                   :dettaglio-email="linkAccesso.dettaglioEmail"
                 />
               </div>
+              <!-- La card del tutor (attiva finché l'account è attivo): qui solo il codice.
+                   SUPER_TUTOR e ADMIN non hanno card. -->
+              <div v-if="tutor.role === 'TUTOR'" class="mt-4 flex flex-wrap items-center justify-between gap-2">
+                <div class="text-sm text-slate-500">
+                  Codice card tutor
+                  <span v-if="tutor.codiceCard" class="font-mono tracking-wider text-slate-700">{{ tutor.codiceCard }}</span>
+                  <span v-else>—</span>
+                </div>
+                <UButton variant="outline" size="xs" icon="i-heroicons-arrow-path" :loading="cambiandoCodiceCard" :aria-label="`${tutor.codiceCard ? 'Cambia' : 'Crea'} codice della card di ${tutor.firstName} ${tutor.lastName}`" @click="cambiaCodiceCardTutor">
+                  {{ tutor.codiceCard ? 'Cambia codice' : 'Crea codice' }}
+                </UButton>
+              </div>
             </UCard>
 
             <!-- Materie -->
@@ -754,6 +766,8 @@ interface SchedaTutor {
   forfaitAl: string | null
   /** Interruttore "Sempre disponibile (lunedì–venerdì)"; null se il profilo manca */
   sempreDisponibile: boolean | null
+  /** Codice della card del tutor (solo ruolo TUTOR), null se non ce l'ha */
+  codiceCard: string | null
 }
 
 /** GET /api/tutors/:id/compensation — una riga per mese. */
@@ -893,6 +907,30 @@ async function inviaLinkAccesso() {
 
 // ─── ConfirmDialog: stato e logica in app/composables/useConfirm.ts ───
 const { confirmOpen, confirmTitle, confirmDescription, confirmLabel, confirmColor, chiediConferma, eseguiConferma } = useConfirm()
+
+// "Cambia codice" della card del tutor (card persa o girata ad altri), come quella del
+// genitore nella scheda dell'alunno: il vecchio QR smette subito di funzionare.
+const cambiandoCodiceCard = ref(false)
+
+function cambiaCodiceCardTutor() {
+  const t = tutor.value
+  if (!t) return
+  chiediConferma(
+    { title: `Cambiare il codice della card di ${t.firstName} ${t.lastName}?`, description: 'Il codice attuale e il suo QR smettono subito di funzionare. Il tutor vedrà il codice nuovo nella sua area.', confirmLabel: 'Cambia codice', confirmColor: 'warning' },
+    async () => {
+      cambiandoCodiceCard.value = true
+      try {
+        await $fetch(`${indirizzoTutor}/cambia-codice-card`, { method: 'POST' })
+        toast.add({ title: 'Codice della card del tutor cambiato', color: 'success', icon: 'i-heroicons-check-circle' })
+        await refreshTutor()
+      } catch (err: any) {
+        toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile cambiare il codice', color: 'error' })
+      } finally {
+        cambiandoCodiceCard.value = false
+      }
+    }
+  )
+}
 
 async function eliminaCompenso(p: CompensoPagato) {
   chiediConferma(

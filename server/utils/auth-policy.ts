@@ -66,6 +66,9 @@ export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: 
   { prefix: '/api/tutors/availabilities/me',     roles: STAFF, esatto: true },
   { prefix: '/api/tutors/availabilities/toggle', roles: STAFF, esatto: true },
   { prefix: '/api/tutors/today-pool',            roles: STAFF, mutationRoles: ADMIN_SUPER, esatto: true },
+  // Area tutor (card e convenzioni): solo il TUTOR, che le legge per sé (id dalla sessione).
+  // Confronto per segmento intero: '/api/tutors' e '/api/tutor-payments' restano fuori.
+  { prefix: '/api/tutor',                   roles: ['TUTOR'] },
   { prefix: '/api/tutor-payments',          roles: ADMIN_SUPER },
   { prefix: '/api/notes',                   roles: STAFF },
   // Centro notifiche (il campanellino): il default STAFF non basterebbe.

@@ -105,3 +105,6 @@ export function testoCardInScadenza(motivo: string | null | undefined, perGenito
     ? 'C\'è un pacchetto da saldare: salda entro questa data per continuare ad avere gli sconti.'
     : 'Rinnova il pacchetto entro questa data per continuare ad avere gli sconti.'
 }
+
+// La card tutor si spegne con l'account del tutor (archiviato in segreteria)
+export const TESTO_CARD_TUTOR_SPENTA = 'La card si riattiva quando torni attivo come tutor: chiedi in segreteria.'

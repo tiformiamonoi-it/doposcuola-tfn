@@ -3,7 +3,8 @@
        illustrazioni (bozze v6). Riusa il meccanismo di sempre: user.tutorialVisto con
        /api/auth/tutorial-visto, user.novitaVista con /api/auth/novita-vista, le schermate
        Novità scritte in shared/changelog.ts. "Rivedi il tutorial" nel Profilo usa lo
-       stato condiviso 'tutorial-riapri', come prima. -->
+       stato condiviso 'tutorial-riapri', come prima. Dal 17/11/2026 anche per i tutor
+       (layouts/tutor.vue), con schermate e bottoni loro. -->
   <div
     v-if="schermata"
     role="dialog"
@@ -57,11 +58,11 @@
 </template>
 
 <script setup lang="ts">
-import { novitaGiaVista, ultimaNovitaFamiglie } from '#shared/changelog'
+import { novitaGiaVista, ultimaNovitaFamiglie, ultimaNovitaTutor } from '#shared/changelog'
 
 type Schermata = { immagine: string; titolo: string; evidenza: string; testo: string }
 
-// Il benvenuto: tre-quattro schermate, diverse per genitore e alunno. All'alunno niente
+// Il benvenuto: tre-quattro schermate, diverse per genitore, alunno e tutor. All'alunno niente
 // schermata delle note: le note dei tutor le legge il genitore (deciso il 16/11/2026).
 const BENVENUTO: Record<string, Schermata[]> = {
   GENITORE: [
@@ -75,13 +76,20 @@ const BENVENUTO: Record<string, Schermata[]> = {
     { immagine: 'scena-calendario.webp', titolo: 'Prenotare è', evidenza: 'semplicissimo', testo: 'Scegli il giorno e le materie: la lezione è subito confermata.' },
     { immagine: 'scena-card.webp', titolo: 'Un piccolo', evidenza: 'regalo per te', testo: 'Hai la tua card studente: sconti nei negozi amici della zona.' },
   ],
+  TUTOR: [
+    { immagine: 'scena-benvenuto.webp', titolo: 'Benvenuto', evidenza: 'nella squadra!', testo: 'Da qui gestisci le tue lezioni, la disponibilità e le note sugli alunni. Tutto dal telefono, anche tra una lezione e l\'altra.' },
+    { immagine: 'scena-calendario.webp', titolo: 'Le tue lezioni,', evidenza: 'giorno per giorno', testo: 'In Lezioni c\'è la griglia oraria di oggi: registra i tuoi alunni entro le 20:00. I giorni in cui ci sei li segni in Disponibilità, entro le 9:30 del giorno stesso.' },
+    { immagine: 'scena-notifiche.webp', titolo: 'Due righe', evidenza: 'fanno la differenza', testo: 'Dopo la lezione scrivi una nota dalla Home. Può restare tra noi, oppure arrivare alla famiglia dopo che l\'ha letta la segreteria.' },
+    { immagine: 'scena-card.webp', titolo: 'Un grazie', evidenza: 'anche per te', testo: 'Hai la tua card tutor: sconti nei negozi amici della zona. La trovi al centro del menu, e in Convenzioni vedi dove usarla.' },
+  ],
 }
 
 const route = useRoute()
 const { user, fetch: refreshSession } = useUserSession()
 const ruolo = computed(() => user.value?.role ?? '')
 const riapri = useState('tutorial-riapri', () => false)
-const novita = ultimaNovitaFamiglie()
+// Il tutor ha le sue Novità (campo `tutorSchermate` del changelog), le famiglie le loro
+const novita = computed(() => ruolo.value === 'TUTOR' ? ultimaNovitaTutor() : ultimaNovitaFamiglie())
 // Chiusa in questa pagina: sparisce subito, senza aspettare il server
 const chiusaOra = ref(false)
 const chiudendo = ref(false)
@@ -89,13 +97,14 @@ const indice = ref(0)
 
 const tipo = computed<'benvenuto' | 'novita' | null>(() => {
   const u = user.value
-  if (!u || !['GENITORE', 'STUDENTE'].includes(u.role)) return null
+  if (!u || !['GENITORE', 'STUDENTE', 'TUTOR'].includes(u.role)) return null
   if (riapri.value) return 'benvenuto'
   if (chiusaOra.value) return null
   // Prima le cose obbligatorie: password, termini, autorizzazioni per i minori
+  // (il tutor i termini non li ha: per lui termsAccepted è sempre vero)
   if (u.mustChangePassword === true || u.termsAccepted === false || route.path === '/portale/accetta-termini') return null
   if (u.tutorialVisto === false) return 'benvenuto'
-  if (novita && !novitaGiaVista(novita.versione, u.novitaVista)) return 'novita'
+  if (novita.value && !novitaGiaVista(novita.value.versione, u.novitaVista)) return 'novita'
   return null
 })
 
@@ -107,7 +116,8 @@ watch(tipo, (t) => { if (t === 'novita' && ruolo.value === 'GENITORE') caricaPag
 const schermate = computed<Schermata[]>(() => {
   if (tipo.value === 'benvenuto') return BENVENUTO[ruolo.value] ?? []
   if (tipo.value === 'novita') {
-    return (novita?.famiglie ?? []).filter((s) => (!s.solo || s.solo === ruolo.value) && (!s.conPagamenti || pagamenti.value?.attivi === true))
+    if (ruolo.value === 'TUTOR') return novita.value?.tutorSchermate ?? []
+    return (novita.value?.famiglie ?? []).filter((s) => (!s.solo || s.solo === ruolo.value) && (!s.conPagamenti || pagamenti.value?.attivi === true))
   }
   return []
 })
@@ -116,7 +126,9 @@ const ultima = computed(() => indice.value >= schermate.value.length - 1)
 
 const etichettaBottone = computed(() => {
   if (tipo.value === 'novita') return ultima.value ? 'Entra nell\'app' : indice.value === 0 ? 'Scopri cosa c\'è di nuovo' : 'Avanti'
-  return ultima.value ? 'Iniziamo insieme' : 'Avanti'
+  // Le bozze dei tutor chiudono con "Iniziamo", quelle delle famiglie con "Iniziamo insieme"
+  if (ultima.value) return ruolo.value === 'TUTOR' ? 'Iniziamo' : 'Iniziamo insieme'
+  return 'Avanti'
 })
 
 // Il fuoco va sul tasto "Salta" quando la presentazione compare: chi usa la tastiera
@@ -141,7 +153,7 @@ async function chiudi() {
   chiudendo.value = true
   try {
     if (era === 'benvenuto') await $fetch('/api/auth/tutorial-visto', { method: 'POST' })
-    else if (era === 'novita' && novita) await $fetch('/api/auth/novita-vista', { method: 'POST', body: { versione: novita.versione } })
+    else if (era === 'novita' && novita.value) await $fetch('/api/auth/novita-vista', { method: 'POST', body: { versione: novita.value.versione } })
     await refreshSession()
   } catch {
     // Se fallisce ricomparirà al prossimo caricamento: non blocca nulla

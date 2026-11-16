@@ -50,7 +50,8 @@ export const users = pgTable('users', {
   notificheVisteAt: timestamp('notifiche_viste_at', { withTimezone: true }),
   // CARD DEL GENITORE: il codice scritto sotto il QR, come students.codiceCard e dallo
   // stesso insieme (mai uguale a quello di un alunno, vedi codiceCardLibero in
-  // card.service.ts). Vuoto per staff e alunni, che qui non hanno card: per questo
+  // card.service.ts). Ce l'ha anche il TUTOR (stessa card, attiva finché l'account è attivo:
+  // createTutor, migrazione 0043). Vuoto per SUPER_TUTOR, ADMIN e alunni: per questo
   // niente NOT NULL. Lo dà l'app alla creazione del genitore (createPortalAccount);
   // i genitori già registrati l'hanno ricevuto dalla migrazione 0041.
   codiceCard: varchar('codice_card', { length: 9 }).unique(),

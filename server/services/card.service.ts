@@ -126,45 +126,62 @@ export async function getCardGenitore(userId: string) {
   }
 }
 
+// La card del TUTOR nell'area tutor (deciso il 16/11/2026): solo la sua, per id della
+// sessione. Accesa finché l'account è attivo, senza data di scadenza: archiviando il
+// tutor si spegne. Null per chi non è TUTOR o non ha ancora un codice.
+export async function getCardTutor(userId: string) {
+  const [t] = await db.select({ firstName: users.firstName, lastName: users.lastName, codiceCard: users.codiceCard, active: users.active })
+    .from(users).where(and(eq(users.id, userId), eq(users.role, 'TUTOR'))).limit(1)
+  if (!t?.codiceCard) return null
+  return {
+    tipo: 'TUTOR' as const, id: userId, firstName: t.firstName, lastName: t.lastName,
+    codiceCard: t.codiceCard, attiva: t.active, validaFino: null, inMargine: false, motivo: null,
+  }
+}
+
 // Verifica del negozio. Risponde SOLO se la card esiste ED è attiva: codice inesistente
 // e card sospesa danno lo stesso null, così da fuori non si capisce se un codice esiste.
 // Escono il nome e l'iniziale del cognome, nient'altro (regolamento, art. 6.1), più se è
-// la card di uno studente o di un genitore.
+// la card di uno studente, di un genitore o di un tutor.
 //
 // TEMPI UGUALI qualunque sia l'esito: si cerca SEMPRE in tutte e due le tabelle insieme,
 // e lo stato si calcola SEMPRE, anche per un codice inesistente (su un id che non c'è).
 // Altrimenti la risposta più rapida direbbe "codice mai dato", quella più lenta "codice di
-// qualcuno, card sospesa", e la differenza tra alunno e genitore si sentirebbe nei tempi.
-// Il genitore porta con sé i figli (una riga per figlio) nella stessa lettura.
+// qualcuno, card sospesa", e la differenza tra alunno, genitore e tutor si sentirebbe nei tempi.
+// Il genitore porta con sé i figli (una riga per figlio) nella stessa lettura; il tutor
+// passa dalla stessa lettura (senza figli) e anche per lui lo stato si calcola, a vuoto.
 export async function verificaCard(codice: string) {
-  const [[s], righeGenitore] = await Promise.all([
+  const [[s], righeUtente] = await Promise.all([
     db.select({ id: students.id, firstName: students.firstName, lastName: students.lastName })
       .from(students).where(eq(students.codiceCard, codice)).limit(1),
-    // Solo un account GENITORE attivo: un account disattivato (o anonimizzato) non ha card
-    db.select({ firstName: users.firstName, lastName: users.lastName, figlioId: studentParents.studentId })
+    // Solo un account GENITORE o TUTOR attivo: un account disattivato, archiviato o
+    // anonimizzato non ha card. SUPER_TUTOR e ADMIN non hanno card.
+    db.select({ firstName: users.firstName, lastName: users.lastName, role: users.role, figlioId: studentParents.studentId })
       .from(users)
       .leftJoin(studentParents, eq(studentParents.parentUserId, users.id))
-      .where(and(eq(users.codiceCard, codice), eq(users.role, 'GENITORE'), eq(users.active, true))),
+      .where(and(eq(users.codiceCard, codice), inArray(users.role, ['GENITORE', 'TUTOR']), eq(users.active, true))),
   ])
-  const g = righeGenitore[0]
-  const figli = righeGenitore.flatMap((r) => r.figlioId ? [r.figlioId] : [])
+  const g = righeUtente[0]
+  const figli = righeUtente.flatMap((r) => r.figlioId ? [r.figlioId] : [])
   const ids = s ? [s.id] : figli.length > 0 ? figli : ['']
   const stati = await statoCardStudenti(ids)
 
   const chi = s ?? g
-  const stato = s ? stati.get(s.id)! : calcolaStatoCardGenitore(figli.map((id) => stati.get(id)!))
+  const tutor = !s && g?.role === 'TUTOR'
+  // Il tutor: card accesa finché l'account è attivo (già filtrato sopra), senza scadenza
+  const stato = s ? stati.get(s.id)! : tutor ? { attiva: true, validaFino: null } : calcolaStatoCardGenitore(figli.map((id) => stati.get(id)!))
   if (!chi || !stato.attiva) return null
   return {
-    tipo: s ? 'STUDENTE' as const : 'GENITORE' as const,
+    tipo: s ? 'STUDENTE' as const : tutor ? 'TUTOR' as const : 'GENITORE' as const,
     nome: chi.firstName, inizialeCognome: chi.lastName.charAt(0).toUpperCase(), validaFino: stato.validaFino,
   }
 }
 
-// Un codice che non hanno né un alunno né un genitore: la pagina del negozio cerca in
-// tutte e due le tabelle, e uno stesso codice porterebbe a due persone. I vincoli unici
-// del database valgono una tabella per volta, quindi il controllo incrociato sta qui.
-// Lo usano la creazione dell'alunno (createStudent), quella del genitore e i due "Cambia
-// codice". Il $defaultFn di schema/students.ts resta solo come rete di sicurezza per chi
+// Un codice che non hanno né un alunno né un utente (genitore o tutor): la pagina del
+// negozio cerca in tutte e due le tabelle, e uno stesso codice porterebbe a due persone.
+// I vincoli unici del database valgono una tabella per volta, quindi il controllo
+// incrociato sta qui. Lo usano la creazione dell'alunno (createStudent), quella del
+// genitore e del tutor, e i "Cambia codice". Il $defaultFn di schema/students.ts resta solo come rete di sicurezza per chi
 // inserisce un alunno senza passare da qui (l'import dal vecchio gestionale): quello non
 // guarda i genitori, ma con mille card una collisione capita 1 volta su ~10^9.
 export async function codiceCardLibero(): Promise<string> {
@@ -191,12 +208,14 @@ export async function cambiaCodiceCard(studentId: string) {
 
 // "Cambia codice" della card del GENITORE, dalla scheda dell'alunno in segreteria
 // (Credenziali Portale Famiglie). Solo su un account GENITORE.
-export async function cambiaCodiceCardGenitore(userId: string) {
+// Con ruolo 'TUTOR' è quello della card del tutor, dalla sua scheda in segreteria: solo su
+// un account TUTOR. A un tutor che il codice non l'ha (era SUPER_TUTOR) ne dà uno nuovo.
+export async function cambiaCodiceCardGenitore(userId: string, ruolo: 'GENITORE' | 'TUTOR' = 'GENITORE') {
   const [aggiornato] = await db.update(users)
     .set({ codiceCard: await codiceCardLibero(), updatedAt: new Date() })
-    .where(and(eq(users.id, userId), eq(users.role, 'GENITORE')))
+    .where(and(eq(users.id, userId), eq(users.role, ruolo)))
     .returning({ codiceCard: users.codiceCard })
-  if (!aggiornato) throw nonTrovato('Genitore non trovato')
+  if (!aggiornato) throw nonTrovato(ruolo === 'TUTOR' ? 'Tutor non trovato' : 'Genitore non trovato')
   return aggiornato
 }
 

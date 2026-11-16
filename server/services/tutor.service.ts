@@ -8,6 +8,7 @@ import {
 import { and, asc, desc, eq, gte, ilike, inArray, lt, or, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { annullaLinkAperti, inviaInvitoPassword } from '../utils/password-token'
+import { codiceCardLibero } from './card.service'
 import { inCentesimi, inEuro, restaDaPagare } from '#shared/arrotondamenti'
 import { nomeProprio } from '../utils/nomi'
 import { CAT } from '#shared/accounting-categories'
@@ -343,6 +344,9 @@ export async function getTutorById(id: string) {
       forfaitAl:         tutorProfiles.forfaitAl,
       // Interruttore della scheda: il badge "Sempre disponibile lun–ven" e il modale Modifica
       sempreDisponibile: tutorProfiles.sempreDisponibile,
+      // Codice della card del tutor (solo TUTOR, null per SUPER_TUTOR): la scheda lo mostra
+      // con "Cambia codice". Questa lettura la fa solo la segreteria (GET /api/tutors/:id).
+      codiceCard:        users.codiceCard,
     })
     .from(users)
     .leftJoin(tutorProfiles, eq(tutorProfiles.userId, users.id))
@@ -358,6 +362,10 @@ export async function getTutorById(id: string) {
 // ─────────────────────────────────────────────
 export async function createTutor(data: CreateTutorInput) {
   const hashed = await bcrypt.hash(data.password, 10)
+  const role = data.role ?? 'TUTOR'
+  // CARD DEL TUTOR: solo il ruolo TUTOR ce l'ha, e il codice non è mai quello di un
+  // alunno o di un genitore (vedi codiceCardLibero). SUPER_TUTOR e ADMIN restano senza.
+  const codiceCard = role === 'TUTOR' ? await codiceCardLibero() : null
 
   const created = await db.transaction(async (tx) => {
     const [user] = await tx.insert(users).values({
@@ -365,8 +373,9 @@ export async function createTutor(data: CreateTutorInput) {
       password:  hashed,
       firstName: nomeProprio(data.firstName),
       lastName:  nomeProprio(data.lastName),
-      role:      data.role ?? 'TUTOR',
+      role,
       phone:     data.phone ?? null,
+      codiceCard,
       // La password iniziale la digita l'admin nel modulo di creazione, quindi la
       // conosce anche un'altra persona: resta l'obbligo di cambiarla al primo
       // accesso. Se invece il tutor usa il link qui sotto e se ne sceglie una sua,
@@ -459,6 +468,12 @@ export async function updateTutor(id: string, data: UpdateTutorInput, ruoloChiam
     userChanges.sessionVersion = sql`${users.sessionVersion} + 1`
   } else if (cambiaAccesso.length > 0) {
     userChanges.sessionVersion = sql`CASE WHEN ${sql.join(cambiaAccesso, sql` OR `)} THEN ${users.sessionVersion} + 1 ELSE ${users.sessionVersion} END`
+  }
+
+  // CARD DEL TUTOR a chi diventa TUTOR (un SUPER_TUTOR riportato a tutor): COALESCE tiene
+  // il codice che c'è già, quindi rimandare il ruolo a ogni salvataggio non lo cambia.
+  if (userChanges.role === 'TUTOR') {
+    userChanges.codiceCard = sql`COALESCE(${users.codiceCard}, ${await codiceCardLibero()})`
   }
 
   const updated = await db.transaction(async (tx) => {

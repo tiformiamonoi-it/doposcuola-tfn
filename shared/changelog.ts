@@ -12,6 +12,9 @@
 // - famiglie (facoltativo): le schermate "Novità" del portale, con un'illustrazione
 //   ciascuna (public/portale/). `solo` le riserva al genitore o all'alunno;
 //   `conPagamenti` le mostra solo se in Impostazioni la sezione pagamenti è accesa.
+// - tutorSchermate (facoltativo): le schermate "Novità" dell'area tutor, fatte come
+//   quelle delle famiglie (senza `solo` né `conPagamenti`). Dal 17/11/2026 i tutor
+//   vedono solo queste: la finestra con le voci `tutor` a loro non compare più.
 // - Il grassetto si scrive **così** (solo quello: il testo non diventa mai HTML).
 
 export type PubblicoNovita = 'tutor' | 'segreteria'
@@ -31,9 +34,25 @@ export interface VersioneNovita {
   tutor: string[]
   segreteria: string[]
   famiglie?: SchermataNovita[]
+  tutorSchermate?: SchermataNovita[]
 }
 
 export const CHANGELOG: VersioneNovita[] = [
+  {
+    versione: '2026.11.17',
+    data: '2026-11-17',
+    tutor: [],
+    segreteria: [
+      '**Area tutor rinnovata**: i tutor hanno la veste nuova, come il portale delle famiglie, con la loro **card tutor** e le **Convenzioni**.',
+      '**Nella scheda del tutor** trovi il codice della sua card e il bottone **"Cambia codice"**. Il negozio che controlla una card di un tutor vede scritto **"Tutor"**.',
+    ],
+    tutorSchermate: [
+      { immagine: 'scena-app.webp', titolo: 'L\'area tutor', evidenza: 'si rinnova', testo: 'Ora ha la stessa veste del portale delle famiglie: più grande, più chiara e pensata per il telefono. In tre passi ti mostriamo cosa cambia.' },
+      { immagine: 'scena-calendario.webp', titolo: 'Le lezioni', evidenza: 'come le conosci', testo: 'Il calendario non cambia: stesso mese, stessi giorni, stessa griglia oraria e stesso limite delle 20:00. Lo trovi in basso, alla voce Lezioni.' },
+      { immagine: 'scena-notifiche.webp', titolo: 'Le note', evidenza: 'partono dalla Home', testo: 'Scrivere una nota, rileggere le tue o leggere quelle dei colleghi: ora è tutto tra le azioni rapide della Home, a un tocco.' },
+      { immagine: 'scena-card.webp', titolo: 'E in più,', evidenza: 'la tua card', testo: 'Al centro del menu c\'è la card tutor: mostrala alla cassa dei negozi convenzionati. In Convenzioni trovi tutti gli sconti.' },
+    ],
+  },
   {
     // ponytail: la data è quella in cui sono state decise le schermate; alla pubblicazione
     // del blocco 4 va riscritta con il giorno dell'uscita (qui e in `data`).
@@ -76,6 +95,11 @@ export const versioniNote = CHANGELOG.map(v => v.versione)
 /** L'ultima uscita con delle schermate "Novità" per il portale delle famiglie (o nessuna). */
 export function ultimaNovitaFamiglie(): VersioneNovita | undefined {
   return CHANGELOG.find(v => (v.famiglie?.length ?? 0) > 0)
+}
+
+/** L'ultima uscita con delle schermate "Novità" per l'area tutor (o nessuna). */
+export function ultimaNovitaTutor(): VersioneNovita | undefined {
+  return CHANGELOG.find(v => (v.tutorSchermate?.length ?? 0) > 0)
 }
 
 /** L'ultima uscita che ha qualcosa da dire a questo pubblico (o nessuna). */
