@@ -108,7 +108,7 @@ export async function notifichePortale(user: { id: string; role: string }) {
       oreResiduo:    packages.oreResiduo,
       dataScadenza:  packages.dataScadenza,
       createdAt:     packages.createdAt,
-      updatedAt:     packages.updatedAt,
+      oreQuasiFiniteDal: packages.oreQuasiFiniteDal,
     }).from(packages).where(and(
       inArray(packages.studentId, ids),
       eq(packages.sospeso, false),
@@ -233,15 +233,16 @@ export async function notifichePortale(user: { id: string; role: string }) {
         link: '/portale',
       })
     } else if (oreQuasiFinite) {
-      // DATA: l'ultima modifica del pacchetto, di solito la lezione che ha scalato le ore.
-      // ponytail: il pacchetto non ricorda QUANDO è sceso sotto il 20%; con updatedAt la voce
-      // torna "nuova" a ogni lezione successiva (le ore calano ancora). Per una data fissa
-      // servirebbe una colonna, che il piano non prevede.
+      // DATA: il giorno in cui il cron delle 06 UTC l'ha visto scendere sotto il 20%
+      // (oreQuasiFiniteDal, package-alerts.service.ts). Non cambia alle lezioni successive,
+      // quindi la voce non torna "nuova" (con updated_at succedeva a ogni lezione).
+      // Finché il cron non è passato la colonna è vuota: si usa la creazione del pacchetto,
+      // una data che non si muove. Mai "adesso", che renderebbe la voce nuova a ogni apertura.
       voci.push({
         id: `pacchetto-ore:${p.id}`, categoria: 'AVVISI',
         titolo: `Il pacchetto di ${chi} sta per esaurirsi`,
         testo: 'Contatta la segreteria per una ricarica o un rinnovo.',
-        data: p.updatedAt,
+        data: p.oreQuasiFiniteDal ?? p.createdAt,
         link: '/portale',
       })
     }

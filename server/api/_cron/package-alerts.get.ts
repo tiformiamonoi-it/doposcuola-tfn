@@ -1,4 +1,4 @@
-import { runPackageAlerts } from '../../services/package-alerts.service'
+import { aggiornaOreQuasiFinite, runPackageAlerts } from '../../services/package-alerts.service'
 import { anonymizeLostContacts } from '../../services/gdpr.service'
 import { pulisciRateLimitScaduti } from '../../utils/rate-limit'
 
@@ -7,6 +7,15 @@ import { pulisciRateLimitScaduti } from '../../utils/rate-limit'
 // da oltre 12 mesi: è l'unico appuntamento giornaliero, non serve un secondo cron.
 // Il segreto CRON_SECRET lo controlla la auth-guard per tutto /api/_cron/.
 export default defineEventHandler(async () => {
+  // Prima delle email e senza guardare i loro interruttori: la data "ore quasi finite dal"
+  // della notifica F del portale. Se va storta, le email partono lo stesso e si riprova domani.
+  let oreQuasiFinite: { segnati: number; svuotati: number } | null = null
+  try {
+    oreQuasiFinite = await aggiornaOreQuasiFinite()
+  } catch (err) {
+    console.error('Aggiornamento di "ore quasi finite dal" non riuscito:', err)
+  }
+
   const avvisi = await runPackageAlerts()
 
   // La pulizia privacy non deve mai far fallire gli avvisi: se va storta si registra
@@ -28,5 +37,5 @@ export default defineEventHandler(async () => {
     console.error('Pulizia dei contatori dei tentativi non riuscita:', err)
   }
 
-  return { ...avvisi, contattiAnonimizzati, puliziaRiuscita, rateLimitCancellati }
+  return { ...avvisi, oreQuasiFinite, contattiAnonimizzati, puliziaRiuscita, rateLimitCancellati }
 })

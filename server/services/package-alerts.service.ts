@@ -4,13 +4,50 @@
 // Soglie identiche allo stato DA_RINNOVARE: ore residue < 20%, scadenza entro 3 giorni.
 // Dedup tramite packages.avvisoOreInviatoAt / avvisoScadenzaInviatoAt
 // (azzerati da ricarica o modifica di ore/scadenza in package.service.ts).
-import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
 import { db } from '../database/client'
 import { packages, students, studentParents, users } from '../database/schema'
 import { randomUUID } from 'node:crypto'
 import { sendEmail, emailAvvisoPacchetto, notificaInvioDiMassa, tipoEmailAttivo } from '../utils/email'
 import { motiviRinnovo } from './package.service'
 import { cardTenutaDaPacchetto } from './card.service'
+
+// "ORE QUASI FINITE DAL" (packages.oreQuasiFiniteDal), per la notifica F del portale.
+// Gira ogni mattina con il cron, ACCESE O SPENTE le email: la data serve al portale anche
+// quando l'email 6 non parte. Non tocca nient'altro, e non decide quando partono le email.
+// - pacchetto con le ore quasi finite (motiviRinnovo, la regola dello stato DA_RINNOVARE)
+//   e colonna vuota → adesso;
+// - pacchetto che non lo è più (ricarica, modifica, ore finite, scaduto) → si svuota.
+// Si leggono solo i candidati: quelli sotto il 20% con ancora ore, e quelli già segnati.
+export async function aggiornaOreQuasiFinite() {
+  const righe = await db.select({
+    id:                packages.id,
+    oreAcquistate:     packages.oreAcquistate,
+    oreResiduo:        packages.oreResiduo,
+    dataScadenza:      packages.dataScadenza,
+    oreQuasiFiniteDal: packages.oreQuasiFiniteDal,
+  }).from(packages).where(or(
+    isNotNull(packages.oreQuasiFiniteDal),
+    and(
+      sql`${packages.oreAcquistate}::numeric > 0`,
+      sql`${packages.oreResiduo}::numeric > 0`,
+      // NULLIF: Postgres non promette di controllare prima il "> 0" qui sopra
+      sql`${packages.oreResiduo}::numeric / nullif(${packages.oreAcquistate}::numeric, 0) < 0.20`,
+    ),
+  ))
+
+  const daSegnare: string[] = []
+  const daSvuotare: string[] = []
+  for (const r of righe) {
+    const quasiFinite = motiviRinnovo(r).oreQuasiFinite
+    if (quasiFinite && !r.oreQuasiFiniteDal) daSegnare.push(r.id)
+    if (!quasiFinite && r.oreQuasiFiniteDal) daSvuotare.push(r.id)
+  }
+  // updated_at NON si tocca: è un segno del cron, non una modifica del pacchetto
+  if (daSegnare.length > 0) await db.update(packages).set({ oreQuasiFiniteDal: new Date() }).where(inArray(packages.id, daSegnare))
+  if (daSvuotare.length > 0) await db.update(packages).set({ oreQuasiFiniteDal: null }).where(inArray(packages.id, daSvuotare))
+  return { segnati: daSegnare.length, svuotati: daSvuotare.length }
+}
 
 // ponytail: cap 50 pacchetti/run — ben sotto il limite Brevo (300/giorno); il resto passa al giro dopo
 const MAX_PER_RUN = 50
