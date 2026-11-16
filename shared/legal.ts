@@ -201,7 +201,7 @@ Responsabili del trattamento attualmente utilizzati:
 - Brevo (Sendinblue SAS, Francia — UE) — invio delle email di servizio (credenziali, avvisi sui pacchetti) e, a chi ha prestato il consenso di cui al §3 lettera f), delle comunicazioni promozionali;
 - i gestori delle piattaforme social sulle quali il Centro pubblica le immagini, limitatamente alle immagini per cui è stato prestato il consenso di cui al §3 lettera g).
 L'elenco aggiornato dei responsabili può essere richiesto in qualsiasi momento a info@tiformiamonoi.it.
-Card studente: quando un negozio convenzionato inquadra il codice QR della Card, vede soltanto il nome dello studente, l'iniziale del cognome, la data fino a cui la Card è valida e l'ora del controllo. Non vede la scuola, la classe, i contatti né dati economici, e non gli viene mai indicato il motivo per cui una Card non è valida. Il Centro non registra quale negozio effettua il controllo, non tiene alcun registro degli acquisti e non usa la Card per inviare pubblicità o per profilare chi la usa; la Card non dipende dal consenso di cui al §3 lettera f). Le regole d'uso sono nel Regolamento della Card studente, consultabile nel portale.
+Card studente: quando un negozio convenzionato inquadra il codice QR della Card, vede soltanto il nome dello studente, l'iniziale del cognome, la data fino a cui la Card è valida e l'ora del controllo. Non vede la scuola, la classe, i contatti né dati economici, e non gli viene mai indicato il motivo per cui una Card non è valida. Per la Card del genitore registrato al portale il negozio vede, allo stesso modo, la scritta «Genitore» con il nome del genitore e l'iniziale del cognome. Il Centro non registra quale negozio effettua il controllo, non tiene alcun registro degli acquisti e non usa la Card per inviare pubblicità o per profilare chi la usa; la Card non dipende dal consenso di cui al §3 lettera f). Le regole d'uso sono nel Regolamento della Card studente, consultabile nel portale.
 
 6. TRASFERIMENTI EXTRA-UE
 I server che ospitano i dati sono situati nell'Unione Europea. Supabase, Inc. e Vercel, Inc. sono società statunitensi: un accesso ai dati dagli Stati Uniti, ad esempio per attività di assistenza tecnica, non è escluso. Tali trattamenti sono coperti dalle garanzie previste dagli artt. 44 e ss. GDPR, ossia dalle Clausole Contrattuali Standard approvate dalla Commissione Europea e, ove i fornitori vi abbiano aderito, dalla decisione di adeguatezza EU-U.S. Data Privacy Framework. Copia delle garanzie può essere richiesta a info@tiformiamonoi.it.
@@ -301,6 +301,7 @@ La Card studente è offerta da tiformiamonoi.it di Alessandro Barone, P.IVA IT02
 1.1 La Card studente è una tessera digitale che permette agli studenti del Centro di ottenere gli sconti offerti dai negozi e dalle attività convenzionate.
 1.2 La Card è gratuita. Non è un mezzo di pagamento, non ha valore in denaro, non accumula punti e non si può convertire in denaro o in lezioni.
 1.3 La Card è personale: vale solo per lo studente a cui è intestata e non si può cedere ad altri.
+1.4 La Card vale anche per i genitori registrati al portale: ogni genitore con un proprio accesso ha una sua Card personale, con un codice diverso da quello dei figli. Se tutti e due i genitori hanno l'accesso, ciascuno ha la propria.
 
 2. CHI LA RICEVE E QUANTO DURA
 2.1 La Card si attiva da sola per ogni studente iscritto con un pacchetto di lezioni. Non serve chiederla né compilare moduli.
@@ -310,6 +311,7 @@ La Card studente è offerta da tiformiamonoi.it di Alessandro Barone, P.IVA IT02
 2.5 La data fino a cui la Card è valida è sempre scritta sulla Card, nel portale. Qualche giorno prima che la Card si sospenda, la famiglia riceve un avviso nel portale.
 2.6 Passato quel termine, la Card risulta sospesa. Quando la segreteria registra il rinnovo o il pagamento, la Card torna attiva da sola, con lo stesso codice.
 2.7 Per gli studenti che il Centro segue gratuitamente, la Card è sempre attiva, senza scadenza, finché lo studente è iscritto al Centro.
+2.8 La Card del genitore è attiva finché almeno uno dei suoi figli ha la Card attiva, ed è valida fino alla data più lontana tra quelle delle Card attive dei figli (senza scadenza, se una di loro non ne ha). Quando nessun figlio ha la Card attiva, anche quella del genitore risulta sospesa, e torna attiva da sola appena si riattiva quella di un figlio. Quando il negozio inquadra il QR della Card di un genitore, vede la scritta «Genitore» con il nome e l'iniziale del cognome del genitore.
 
 3. COME SI USA
 3.1 La Card si trova nel portale delle famiglie, alla voce "Card". La vede il genitore e, se ha un account, anche lo studente.
