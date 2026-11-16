@@ -324,6 +324,7 @@ La Card studente è offerta da tiformiamonoi.it di Alessandro Barone, P.IVA IT02
 
 5. SMARRIMENTO O USO DA PARTE DI ALTRI
 5.1 Se il telefono con l'accesso al portale viene perso, o se il codice della Card è finito in mano ad altri, la famiglia può avvisare la segreteria. Il Centro genera un codice nuovo: quello vecchio smette subito di funzionare, la Card resta attiva con il codice nuovo.
+5.2 Il Centro può disattivare la Card solo in due casi: su richiesta della famiglia, oppure se risulta usata da persone diverse dallo studente a cui è intestata. La famiglia ne è avvisata nel portale. Chiarito il motivo, la Card torna attiva, anche con un codice nuovo se serve.
 
 6. PRIVACY
 6.1 Quando il negozio inquadra il QR, vede soltanto: il nome dello studente, l'iniziale del cognome, la data fino a cui la Card è valida e l'ora del controllo. Non vede la scuola, la classe, i contatti né altri dati.

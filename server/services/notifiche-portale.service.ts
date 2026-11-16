@@ -51,6 +51,7 @@ export type NotificaPortale = {
   nuova: boolean
   link?: string
   immagine?: string          // indirizzo della foto (voce C), mai la foto stessa
+  chi?: string               // di quale ragazzo parla la nota (voce A): l'iniziale nel pallino
 }
 
 // 'AAAA-MM-GG' → "giovedì 19 novembre" / "15 dicembre": a mezzogiorno UTC, così il fuso
@@ -74,7 +75,7 @@ export async function notifichePortale(user: { id: string; role: string }) {
 
   const [utente, anagrafiche, note, lezioniDomani, comunicazioni, card, pacchetti, convenzioniOggi, conPagamenti] = await Promise.all([
     db.select({ viste: users.notificheVisteAt }).from(users).where(eq(users.id, user.id)).limit(1),
-    conAlunni ? db.select({ id: students.id, firstName: students.firstName }).from(students).where(inArray(students.id, ids)) : [],
+    conAlunni ? db.select({ id: students.id, firstName: students.firstName, cardDisattivataAt: students.cardDisattivataAt }).from(students).where(inArray(students.id, ids)) : [],
     // A solo al genitore: oggi le note dei tutor le legge lui, non l'alunno. Mostrarle
     // anche all'alunno è una scelta da fare apposta (in attesa di decisione del titolare).
     perStudente ? [] : getPortalNotes(ids),
@@ -112,6 +113,7 @@ export async function notifichePortale(user: { id: string; role: string }) {
   ])
 
   const nome = new Map(anagrafiche.map((s) => [s.id, s.firstName]))
+  const disattivataIl = new Map(anagrafiche.map((s) => [s.id, s.cardDisattivataAt]))
   const voci: Omit<NotificaPortale, 'nuova'>[] = []
 
   // A. Le note, dalla data in cui la segreteria le ha rese visibili (approvataAt)
@@ -119,6 +121,7 @@ export async function notifichePortale(user: { id: string; role: string }) {
     voci.push({
       id: `nota:${n.id}`, categoria: 'TUTOR',
       titolo: `Nuova nota su ${n.student?.firstName ?? ''}`.trim(),
+      chi: n.student?.firstName ?? undefined,
       testo: n.contenuto,
       data: n.approvataAt!,
       // La pagina delle note è solo del genitore (l'account studente non ce l'ha nel menu)
@@ -139,7 +142,7 @@ export async function notifichePortale(user: { id: string; role: string }) {
         titolo: 'Domani c\'è lezione',
         testo: [nome.get(b.studentId!), giornoEsteso(domani, true), queste.join(', ')].filter(Boolean).join(' · '),
         data: piuRecente(inizioOggi, b.createdAt),
-        link: '/portale',
+        link: '/portale/lezioni',
       })
     }
   }
@@ -155,6 +158,21 @@ export async function notifichePortale(user: { id: string; role: string }) {
   // D ed E. La card, dalla regola unica (card.service.ts → shared/card-studente.ts).
   for (const [studentId, stato] of card) {
     const chi = nome.get(studentId) ?? ''
+    // E bis. Card disattivata a mano dalla segreteria (art. 5.2). DATA: il momento della
+    // disattivazione. All'alunno lo stesso messaggio generico della card sospesa.
+    if (stato.motivo === 'DISATTIVATA') {
+      const il = disattivataIl.get(studentId)
+      if (il) {
+        voci.push({
+          id: `card-disattivata:${studentId}:${il.getTime()}`, categoria: 'AVVISI',
+          titolo: perStudente ? `La card di ${chi} è sospesa` : `La card di ${chi} è stata disattivata dalla segreteria`,
+          testo: perStudente ? 'Chiedi in segreteria.' : 'Contattaci per sapere come riattivarla.',
+          data: il,
+          link: '/portale/card',
+        })
+      }
+      continue
+    }
     // Senza validaFino non c'è un giorno da raccontare: o la card non si è mai accesa
     // (pacchetto a ore mai pagato, nessun pacchetto, alunno archiviato) o è "senza fine".
     // La pagina Card dice già com'è; una notifica serve quando qualcosa CAMBIA.

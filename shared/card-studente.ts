@@ -28,7 +28,16 @@ import type { TipoPacchetto } from './scadenza-pacchetto'
 
 export const GIORNI_MARGINE_CARD = 15
 
-export type MotivoCard = 'SCADUTO' | 'DA_SALDARE' | 'ORE_FINITE' | 'NESSUN_PAGAMENTO'
+export type MotivoCard = 'SCADUTO' | 'DA_SALDARE' | 'ORE_FINITE' | 'NESSUN_PAGAMENTO' | 'DISATTIVATA'
+
+// DISATTIVATA A MANO dalla segreteria (regolamento, art. 5.2, deciso il 16/11/2026): solo
+// per uno di questi due motivi, mai per un pagamento in ritardo (a quello pensa la regola).
+export const MOTIVI_DISATTIVAZIONE_CARD = ['RICHIESTA_FAMIGLIA', 'USO_SCORRETTO'] as const
+export type MotivoDisattivazioneCard = (typeof MOTIVI_DISATTIVAZIONE_CARD)[number]
+export const ETICHETTE_DISATTIVAZIONE_CARD: Record<MotivoDisattivazioneCard, string> = {
+  RICHIESTA_FAMIGLIA: 'la famiglia lo ha chiesto',
+  USO_SCORRETTO:      'uso scorretto (usata da altri)',
+}
 
 export type PacchettoPerCard = {
   tipo: TipoPacchetto
@@ -64,8 +73,11 @@ const SENZA_FINE = '9999-12-31'
 
 // `archiviato`: alunno disattivato in anagrafica (non più iscritto). Card sempre spenta,
 // qualunque pacchetto abbia ancora (deciso da Alessandro il 16/11/2026).
-export function calcolaStatoCard(pacchetti: PacchettoPerCard[], oggi: string, archiviato = false): StatoCard {
+// `disattivata`: la segreteria l'ha spenta a mano (art. 5.2). Vince su tutto, Pro Bono
+// compresi: si controlla subito dopo l'archiviazione.
+export function calcolaStatoCard(pacchetti: PacchettoPerCard[], oggi: string, archiviato = false, disattivata = false): StatoCard {
   if (archiviato) return { attiva: false, validaFino: null, motivo: 'SCADUTO', inMargine: false }
+  if (disattivata) return { attiva: false, validaFino: null, motivo: 'DISATTIVATA', inMargine: false }
   if (pacchetti.some((p) => p.proBono)) return { attiva: true, validaFino: null, motivo: null, inMargine: false }
 
   // 1. Fino a quando i pacchetti la tengono accesa (il più lontano)

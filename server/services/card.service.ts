@@ -5,7 +5,7 @@ import { db } from '../database/client'
 import { lessons, lessonStudents, packages, standardPackages, students } from '../database/schema'
 import { nonTrovato } from '../utils/http-error'
 import { oggiRomeStr, romeDateStr } from '../utils/tutor-time-window'
-import { calcolaStatoCard, eNomeProBono, generaCodiceCard, type PacchettoPerCard, type StatoCard } from '#shared/card-studente'
+import { calcolaStatoCard, eNomeProBono, generaCodiceCard, type MotivoDisattivazioneCard, type PacchettoPerCard, type StatoCard } from '#shared/card-studente'
 
 // Stato della card di più alunni in quattro letture, qualunque sia il loro numero.
 // Si leggono TUTTI i pacchetti, anche chiusi e vecchi: un mensile saldato e appena
@@ -40,11 +40,13 @@ export async function statoCardStudenti(studentIds: string[], senzaPacchetto?: s
       .innerJoin(lessons, eq(lessons.id, lessonStudents.lessonId))
       .where(and(inArray(lessonStudents.studentId, studentIds), lte(lessons.data, oggi)))
       .groupBy(lessonStudents.packageId),
-    // Alunno archiviato (active = false) → card sempre spenta, vedi calcolaStatoCard
-    db.select({ id: students.id, active: students.active }).from(students).where(inArray(students.id, studentIds)),
+    // Alunno archiviato (active = false) o card disattivata a mano → card sempre spenta, vedi calcolaStatoCard
+    db.select({ id: students.id, active: students.active, disattivata: students.cardDisattivataMotivo })
+      .from(students).where(inArray(students.id, studentIds)),
   ])
 
   const archiviati = new Set(anagrafiche.filter((s) => !s.active).map((s) => s.id))
+  const disattivate = new Set(anagrafiche.filter((s) => s.disattivata).map((s) => s.id))
   const ultimaPer = new Map(ultime.map((u) => [u.packageId, u.ultima]))
   const perAlunno = new Map<string, PacchettoPerCard[]>(studentIds.map((id) => [id, []]))
   for (const p of righe) {
@@ -60,7 +62,7 @@ export async function statoCardStudenti(studentIds: string[], senzaPacchetto?: s
       proBono:        eNomeProBono(p.nome) || eNomeProBono(p.nomeStandard),
     })
   }
-  for (const [id, lista] of perAlunno) esito.set(id, calcolaStatoCard(lista, oggi, archiviati.has(id)))
+  for (const [id, lista] of perAlunno) esito.set(id, calcolaStatoCard(lista, oggi, archiviati.has(id), disattivate.has(id)))
   return esito
 }
 
@@ -129,6 +131,18 @@ export async function cambiaCodiceCard(studentId: string) {
     .set({ codiceCard: generaCodiceCard(), updatedAt: new Date() })
     .where(eq(students.id, studentId))
     .returning({ codiceCard: students.codiceCard })
+  if (!aggiornato) throw nonTrovato('Studente non trovato')
+  return aggiornato
+}
+
+// "Disattiva card" / "Riattiva card" in segreteria (regolamento, art. 5.2). Il motivo è uno
+// dei due ammessi (controllato dall'API); null = riattiva, e la card torna a seguire le
+// regole di pacchetti e pagamenti. La data serve alla notifica "è stata disattivata".
+export async function impostaCardDisattivata(studentId: string, motivo: MotivoDisattivazioneCard | null) {
+  const [aggiornato] = await db.update(students)
+    .set({ cardDisattivataMotivo: motivo, cardDisattivataAt: motivo ? new Date() : null, updatedAt: new Date() })
+    .where(eq(students.id, studentId))
+    .returning({ cardDisattivataMotivo: students.cardDisattivataMotivo, cardDisattivataAt: students.cardDisattivataAt })
   if (!aggiornato) throw nonTrovato('Studente non trovato')
   return aggiornato
 }

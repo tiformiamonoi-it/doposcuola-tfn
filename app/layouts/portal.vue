@@ -1,191 +1,35 @@
 <template>
-  <div class="min-h-screen bg-white">
+  <!-- IL PORTALE DELLE FAMIGLIE, grafica v6. Pensato per il telefono: sul computer la
+       stessa colonna sta al centro, larga al massimo 640 px, con il menu in fondo alla
+       colonna. La testata blu la mette ogni pagina (components/portale/Testata.vue),
+       perché cambia da una schermata all'altra (titolo, Indietro, linguette). -->
+  <div class="pf min-h-screen bg-pf-fondo text-pf-testo font-sans overflow-x-hidden">
+    <div class="mx-auto max-w-[640px] min-h-screen flex flex-col" :class="senzaMenu ? '' : 'pb-28'">
+      <slot />
 
-    <!-- ═══ HEADER ═══ -->
-    <header class="fixed top-0 left-0 right-0 h-16 bg-tfn-500 flex items-center justify-between px-4 z-40">
-      <!-- Il campanellino delle notifiche del portale, con il numero delle nuove -->
-      <NuxtLink
-        to="/portale/notifiche"
-        class="relative w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors"
-        :aria-label="notificheNuove > 0 ? `Notifiche, ${notificheNuove} nuove` : 'Notifiche'"
-      >
-        <UIcon name="i-heroicons-bell" class="w-4 h-4 text-white" />
-        <span
-          v-if="notificheNuove > 0"
-          class="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center"
-          aria-hidden="true"
-        >
-          {{ notificheNuove }}
-        </span>
-      </NuxtLink>
-      <span class="font-heading font-semibold text-white text-base tracking-tight">
-        tiformiamonoi.it
-      </span>
-      <div class="flex items-center gap-2">
-        <!-- WhatsApp FAB -->
-        <a
-          v-if="showWhatsApp"
-          :href="whatsappLink"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors"
-          :title="whatsappOrario ? 'Scrivi su WhatsApp' : 'Fuori orario segreteria (9:00–18:00)'"
-        >
-          <UIcon name="i-heroicons-device-phone-mobile" class="w-4 h-4 text-white" />
-        </a>
-        <div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-          <span class="text-white text-xs font-semibold">
-            {{ user?.firstName?.[0] ?? 'G' }}
-          </span>
-        </div>
-      </div>
-    </header>
+      <footer class="mt-auto px-5 pt-10 pb-4 text-center text-xs text-pf-grigio">
+        <NuxtLink to="/privacy" class="inline-block py-2 px-1 hover:underline">Privacy</NuxtLink> ·
+        <NuxtLink to="/termini" class="inline-block py-2 px-1 hover:underline">Termini</NuxtLink> ·
+        <NuxtLink to="/cookie" class="inline-block py-2 px-1 hover:underline">Cookie</NuxtLink>
+      </footer>
+    </div>
 
-    <!-- ═══ DESKTOP NAV (md+) ═══ -->
-    <nav class="hidden md:flex fixed top-16 left-0 right-0 bg-white border-b border-slate-200 justify-center gap-8 h-12 items-center z-30">
-      <NuxtLink
-        v-for="item in visibleNavItems"
-        :key="item.route"
-        :to="item.route"
-        class="flex items-center gap-1.5 text-sm font-medium transition-colors"
-        :class="isActive(item.route)
-          ? 'text-tfn-600'
-          : 'text-slate-500 hover:text-slate-900'"
-      >
-        <UIcon :name="item.icon" class="w-4 h-4" />
-        {{ item.label }}
-        <span
-          v-if="item.route === '/portale/note' && noteUnseenCount > 0"
-          class="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center"
-        >
-          {{ noteUnseenCount }}
-        </span>
-      </NuxtLink>
-    </nav>
+    <PortaleMenu v-if="!senzaMenu" />
 
-    <!-- ═══ CONTENUTO ═══ -->
-    <main class="pt-16 pb-16 md:pt-28 md:pb-0 min-h-screen">
-      <div class="max-w-[680px] mx-auto px-4 md:px-6 py-6">
-        <InstallBanner />
-        <slot />
-
-        <p class="text-center text-[11px] text-slate-300 mt-10">
-          <NuxtLink to="/privacy" class="hover:underline">Privacy</NuxtLink> ·
-          <NuxtLink to="/termini" class="hover:underline">Termini</NuxtLink> ·
-          <NuxtLink to="/cookie" class="hover:underline">Cookie</NuxtLink>
-        </p>
-      </div>
-    </main>
-
-    <!-- ═══ BOTTOM NAV (mobile) ═══ -->
-    <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex z-40 h-16">
-      <NuxtLink
-        v-for="item in visibleNavItems"
-        :key="item.route"
-        :to="item.route"
-        class="flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 transition-colors"
-        :class="isActive(item.route) ? 'text-tfn-600' : 'text-slate-400'"
-      >
-        <span class="relative">
-          <UIcon :name="item.icon" class="w-6 h-6" />
-          <span
-            v-if="item.route === '/portale/note' && noteUnseenCount > 0"
-            class="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center"
-          >
-            {{ noteUnseenCount }}
-          </span>
-        </span>
-        <span class="text-[10px] font-medium leading-tight w-full px-0.5 text-center truncate">{{ item.label }}</span>
-      </NuxtLink>
-    </nav>
-
-    <!-- Tutorial di benvenuto (solo primo accesso genitore/studente) -->
-    <TutorialPrimoAccesso />
-
+    <!-- Benvenuto al primo accesso e Novità dopo un aggiornamento -->
+    <PortalePresentazione />
   </div>
 </template>
 
 <script setup lang="ts">
+// Le pagine che hanno già il loro bottone in fondo (Prenota) o che vengono prima di
+// tutto il resto (Termini) dichiarano `senzaMenu` in definePageMeta.
 const route = useRoute()
-const { user } = useUserSession()
+const senzaMenu = computed(() => route.meta.senzaMenu === true)
 
-const { data: studentsData } = await useFetch('/api/portal/students')
-const students = computed(() => (studentsData.value as any[]) ?? [])
-
-const prenotazioneAbilitata = computed(() =>
-  students.value.some((s: any) => s.abilitatoPrenotazioneOnline)
-)
-
-// LA VOCE "ASSENZE" NON C'È PIÙ (N9, 17/09/2026).
-//
-// Nasceva per elementari e medie, che non prenotavano, ma nessuno l'ha mai usata.
-// Adesso elementari e medie prenotano come tutti, scegliendo le materie (quando
-// non si sanno ci sono le voci generiche "Elementari" e "Medie"), e chi non viene
-// annulla la prenotazione. La segreteria può ancora annotare un'assenza dal
-// Calendario, quando la famiglia telefona.
-const allNavItems = computed(() => [
-  { icon: 'i-heroicons-home',          label: 'Home',    route: '/portale',          always: true },
-  { icon: 'i-heroicons-calendar-days', label: 'Prenota', route: '/portale/prenota',  always: false },
-  // "Comunicazioni", non più "Note": le firma a volte la segreteria e a volte
-  // una persona con nome e cognome, quindi "note del tutor" era falso già nel
-  // menù. Sulla striscia in fondo al telefono la parola è lunga: il `truncate`
-  // qui sotto le impedisce di sfondare la casella su uno schermo stretto.
-  { icon: 'i-heroicons-document-text', label: 'Comunicazioni', route: '/portale/note', always: true },
-  // La card studente la vedono genitore e studente (regolamento, art. 3.1)
-  { icon: 'i-heroicons-identification', label: 'Card',  route: '/portale/card',     always: true },
-  { icon: 'i-heroicons-tag',           label: 'Sconti',  route: '/portale/sconti',   always: true },
-  // Pagamenti: solo il genitore (l'alunno non vede importi). Provvisoria fino alla grafica v6
-  { icon: 'i-heroicons-banknotes',     label: 'Paga',    route: '/portale/pagamenti', always: true },
-  { icon: 'i-heroicons-user',          label: 'Profilo', route: '/portale/profilo',  always: true },
-])
-
-// STUDENTE: account solo-prenotazioni → niente Note; Prenota sempre visibile
-// (il permesso dello studente è l'account stesso, non il flag della famiglia)
-const isStudente = computed(() => user.value?.role === 'STUDENTE')
-
-const visibleNavItems = computed(() =>
-  allNavItems.value
-    .filter(item => !(isStudente.value && ['/portale/note', '/portale/pagamenti'].includes(item.route)))
-    .filter(item => item.always || prenotazioneAbilitata.value || isStudente.value)
-)
-
-function isActive(path: string) {
-  if (path === '/portale') return route.path === '/portale'
-  return route.path.startsWith(path)
-}
-
-// Badge "note non lette": caricato all'apertura; la pagina Note lo azzera via useState
-const noteUnseenCount = useState<number>('portal-note-unseen', () => 0)
-const { data: noteUnseenRes } = useLazyFetch('/api/portal/notes-unseen-count', { server: false })
-watchEffect(() => { noteUnseenCount.value = noteUnseenRes.value?.count ?? 0 })
-
-// Pallino del campanellino: le notifiche nuove. La pagina Notifiche lo aggiorna (useState)
-// quando si segna tutto come letto.
+// Il pallino della campanella: le notifiche nuove. La pagina Notifiche lo aggiorna
+// (useState) quando si segna tutto come letto. Una lettura sola, condivisa dalle pagine.
 const notificheNuove = useState<number>('portal-notifiche-nuove', () => 0)
-const { data: notificheRes } = useLazyFetch<{ nuove: number }>('/api/portal/notifiche', { server: false })
+const { data: notificheRes } = useLazyFetch<{ nuove: number }>('/api/portal/notifiche', { server: false, key: 'portale-notifiche-menu' })
 watchEffect(() => { if (notificheRes.value) notificheNuove.value = notificheRes.value.nuove })
-
-// ─── WhatsApp logic ───
-const { data: portalConfigs } = useLazyFetch('/api/portal/configs')
-const whatsappNumero = computed(() => (portalConfigs.value as any)?.whatsapp_numero || '')
-
-const whatsappOrario = computed(() => {
-  const now = new Date()
-  const formatter = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hour12: false
-  })
-  const parts = formatter.formatToParts(now)
-  const p = (type: string) => parts.find(x => x.type === type)?.value
-  const h = parseInt(p('hour') || '0', 10)
-  const m = parseInt(p('minute') || '0', 10)
-  const time = h * 60 + m
-  // Orario segreteria 9:00–18:00
-  return time >= 540 && time < 1080
-})
-
-const showWhatsApp = computed(() => !!whatsappNumero.value)
-const whatsappLink = computed(() => {
-  const text = encodeURIComponent('Ciao, scrivo dal portale tiformiamonoi.it.')
-  return `https://wa.me/${whatsappNumero.value.replace(/\D/g, '')}?text=${text}`
-})
 </script>

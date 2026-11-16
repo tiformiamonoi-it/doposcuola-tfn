@@ -50,6 +50,8 @@ export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: 
   { prefix: '/api/auth/change-password',    roles: [...STAFF, ...FAMIGLIA] },
   { prefix: '/api/auth/accept-terms',       roles: FAMIGLIA },
   { prefix: '/api/auth/tutorial-visto',     roles: [...STAFF, ...FAMIGLIA] },
+  // Le schermate "Novità" ora le vedono anche genitori e alunni (portale, grafica v6)
+  { prefix: '/api/auth/novita-vista',       roles: [...STAFF, ...FAMIGLIA] },
   { prefix: '/api/auth/logout',             roles: [...STAFF, ...FAMIGLIA] },
   { prefix: '/api/accounting',              roles: ADMIN_ONLY },
   // Registro delle email: indirizzi e nomi di tutte le famiglie, e cosa hanno

@@ -83,7 +83,7 @@ export default defineEventHandler(async (event) => {
 
   if (alreadyBooked) {
     // Il messaggio lo legge un genitore: niente "dashboard", si dice dove andare.
-    throw createError({ statusCode: 409, statusMessage: 'Per questo giorno c\'è già una prenotazione. La trovi nella home del portale, dove puoi modificarla o annullarla.' })
+    throw createError({ statusCode: 409, statusMessage: 'Per questo giorno c\'è già una prenotazione. La trovi in Lezioni, dove puoi modificarla o annullarla.' })
   }
 
   try {

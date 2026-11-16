@@ -94,6 +94,13 @@ export const students = pgTable('students', {
   // ricevuto dalla migrazione 0039. "Cambia codice" in segreteria lo sostituisce.
   codiceCard: varchar('codice_card', { length: 9 }).notNull().unique().$defaultFn(generaCodiceCard),
 
+  // CARD DISATTIVATA A MANO dalla segreteria (regolamento della card, art. 5.2). Vuote =
+  // la card segue le regole normali. Il motivo è uno di MOTIVI_DISATTIVAZIONE_CARD
+  // (shared/card-studente.ts), controllato dallo schema zod dell'API: testo e non enum,
+  // così un motivo in più non chiede di toccare un tipo del database.
+  cardDisattivataMotivo: text('card_disattivata_motivo'),
+  cardDisattivataAt:     timestamp('card_disattivata_at', { withTimezone: true }),
+
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

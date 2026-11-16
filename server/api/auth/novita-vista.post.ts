@@ -7,7 +7,8 @@ import { versioniNote } from '#shared/changelog'
 // POST /api/auth/novita-vista — la finestra "Novità" di questa versione è stata letta.
 // Gemello di tutorial-visto: scrive nel database (vale su ogni dispositivo) e
 // aggiorna la sessione, così la finestra non ricompare al prossimo caricamento.
-// Accesso: il default STAFF di auth-policy (Admin, Super Tutor, Tutor); le famiglie no.
+// Accesso: staff e famiglie (auth-policy.ts). Le famiglie vedono le schermate "Novità"
+// del portale (campo `famiglie` del changelog), lo staff la finestra con le voci.
 //
 // La versione la manda il browser (è quella che ha mostrato davvero), ma deve
 // essere una di quelle scritte in shared/changelog.ts: niente testo libero nel database.

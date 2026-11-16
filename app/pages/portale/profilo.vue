@@ -1,213 +1,171 @@
 <template>
-  <div class="space-y-6">
-    <h2 class="font-heading text-xl font-bold text-slate-900">Il mio account</h2>
-
-    <UCard>
-      <template #header>
-        <div class="flex items-center gap-2">
-          <UIcon name="i-heroicons-user-circle" class="w-4 h-4 text-tfn-500" />
-          <span class="font-medium text-slate-800">Dati account</span>
+  <div>
+    <PortaleTestata>
+      <div class="flex items-center gap-3.5">
+        <span class="size-16 shrink-0 rounded-full bg-white text-pf-blu flex items-center justify-center font-heading font-bold text-[22px]" aria-hidden="true">
+          {{ inizialiDa(user?.firstName, user?.lastName) }}
+        </span>
+        <div class="min-w-0">
+          <h1 class="font-heading font-bold text-[22px] truncate">{{ [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Il mio profilo' }}</h1>
+          <p class="text-sm text-pf-su-blu truncate">{{ user?.email }}</p>
         </div>
-      </template>
-      <dl class="space-y-2 text-sm">
-        <div class="flex justify-between py-1 border-b border-slate-100">
-          <span class="text-slate-500">Nome</span>
-          <span class="font-medium text-slate-800">{{ [user?.firstName, user?.lastName].filter(Boolean).join(' ') || '—' }}</span>
-        </div>
-        <div class="flex justify-between py-1">
-          <span class="text-slate-500">Email</span>
-          <span class="font-medium text-slate-800">{{ user?.email }}</span>
-        </div>
-      </dl>
-    </UCard>
+      </div>
+    </PortaleTestata>
 
-    <UCard v-if="!isStudente">
-      <template #header>
-        <div class="flex items-center gap-2">
-          <UIcon name="i-heroicons-academic-cap" class="w-4 h-4 text-tfn-500" />
-          <span class="font-medium text-slate-800">Figli collegati</span>
+    <div class="px-5 pt-[22px] flex flex-col gap-[22px]">
+      <!-- ─── I tuoi ragazzi (genitore) ─── -->
+      <section v-if="!isStudente" aria-labelledby="t-ragazzi">
+        <h2 id="t-ragazzi" class="mb-2 ml-1 text-[13px] font-bold text-pf-grigio uppercase tracking-wide">I tuoi ragazzi</h2>
+        <div class="bg-white rounded-[22px] px-4 py-1.5 pf-ombra divide-y divide-pf-fondo">
+          <USkeleton v-if="pendingStudents" class="h-12 w-full my-2" />
+          <p v-else-if="students.length === 0" class="py-3 text-sm text-pf-grigio">Nessun ragazzo collegato.</p>
+          <template v-else>
+            <PortaleSchedaAlunno v-for="(s, i) in students" :key="s.id" :alunno="s" :indice="i" riga />
+          </template>
         </div>
-      </template>
-      <template v-if="pendingStudents">
-        <USkeleton class="h-8 w-full" />
-      </template>
-      <template v-else-if="students.length === 0">
-        <p class="text-sm text-slate-500">Nessuno studente collegato.</p>
-      </template>
-      <ul v-else class="space-y-1">
-        <li v-for="s in students" :key="s.id" class="flex items-center gap-2 text-sm py-1">
-          <UIcon name="i-heroicons-user" class="w-4 h-4 text-slate-400" />
-          <span class="text-slate-800">{{ s.firstName }} {{ s.lastName }}</span>
-          <span v-if="s.classe" class="text-slate-400">— {{ s.classe }}</span>
-        </li>
-      </ul>
-    </UCard>
+      </section>
 
-    <!-- ─── CONSENSI (solo genitori) ───
-         Qui stanno le scelte FACOLTATIVE: foto/video e comunicazioni promozionali.
-         Non sono nella schermata d'ingresso apposta — un consenso raccolto in mezzo
-         a quelli obbligatori non sarebbe libero, e quindi non varrebbe niente.
-         La dichiarazione per i minori di 14 anni compare qui in sola lettura, con
-         la possibilità di revocarla: è un diritto, e toglierla non chiude fuori
-         nessuno dal portale. -->
-    <UCard v-if="!isStudente">
-      <template #header>
-        <div class="flex items-center gap-2">
-          <UIcon name="i-heroicons-shield-check" class="w-4 h-4 text-tfn-500" />
-          <span class="font-medium text-slate-800">Consensi privacy</span>
-        </div>
-      </template>
-
-      <USkeleton v-if="pendingConsensi" class="h-24 w-full" />
-
-      <div v-else class="space-y-5">
-        <!-- Foto e video, uno per figlio -->
-        <div class="space-y-3">
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <p class="text-sm font-medium text-slate-800">Foto e video</p>
-              <p class="text-xs text-slate-500">Facoltativo: se dici di no, il servizio resta identico in tutto.</p>
+      <!-- ─── CONSENSI (solo genitori) ───
+           Qui stanno le scelte FACOLTATIVE: foto/video e comunicazioni promozionali.
+           Non sono nella schermata d'ingresso apposta — un consenso raccolto in mezzo
+           a quelli obbligatori non sarebbe libero, e quindi non varrebbe niente.
+           La dichiarazione per i minori di 14 anni compare qui con la possibilità di
+           revocarla: è un diritto, e toglierla non chiude fuori nessuno dal portale. -->
+      <section v-if="!isStudente" aria-labelledby="t-privacy">
+        <h2 id="t-privacy" class="mb-2 ml-1 text-[13px] font-bold text-pf-grigio uppercase tracking-wide">Privacy e consensi</h2>
+        <div class="bg-white rounded-[22px] px-4 py-1.5 pf-ombra">
+          <USkeleton v-if="pendingConsensi" class="h-24 w-full my-2" />
+          <div v-else class="divide-y divide-pf-fondo">
+            <div class="pt-3 pb-1">
+              <p class="font-semibold text-[15px]">Foto e video</p>
+              <p class="text-[13px] text-pf-grigio">Facoltativo: se dici di no, il servizio resta identico in tutto.</p>
             </div>
-          </div>
-
-          <div v-for="f in figli" :key="f.studentId" class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 first:border-0 first:pt-0">
-            <div class="min-w-0">
-              <p class="text-sm text-slate-800">{{ f.nome }}</p>
-              <p class="text-xs text-slate-500">{{ descriviVoce(f.immagini) }}</p>
+            <div v-for="f in figli" :key="f.studentId" class="flex items-center gap-3 py-3">
+              <div class="flex-1 min-w-0">
+                <p class="text-[15px]">{{ f.nome }}</p>
+                <p class="text-xs text-pf-grigio">{{ descriviVoce(f.immagini) }}</p>
+              </div>
+              <USwitch
+                :model-value="f.immagini.valore === true"
+                :loading="inCorso === `IMMAGINI:${f.studentId}`"
+                :aria-label="`Foto e video di ${f.nome}`"
+                size="xl"
+                @update:model-value="(v: boolean) => cambia('IMMAGINI', v, f.studentId, f.nome)"
+              />
             </div>
-            <USwitch
-              :model-value="f.immagini.valore === true"
-              :loading="inCorso === `IMMAGINI:${f.studentId}`"
-              :aria-label="`Consenso alle immagini per ${f.nome}`"
-              @update:model-value="(v: boolean) => cambia('IMMAGINI', v, f.studentId, f.nome)"
-            />
-          </div>
 
-          <UCollapsible v-model:open="testoImmaginiAperto">
-            <button type="button" class="text-xs text-tfn-600 hover:underline">
-              {{ testoImmaginiAperto ? 'Nascondi il testo' : 'Leggi il testo completo' }}
-            </button>
-            <template #content>
-              <p class="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed mt-2 bg-slate-50 rounded-lg p-3">{{ CONSENSO_IMMAGINI_TESTO }}</p>
+            <!-- Comunicazioni promozionali: è della persona, non del figlio -->
+            <div class="flex items-center gap-3 py-3">
+              <div class="flex-1 min-w-0">
+                <p class="font-semibold text-[15px]">Offerte e novità</p>
+                <p class="text-xs text-pf-grigio">{{ descriviVoce(marketing) }}</p>
+              </div>
+              <USwitch
+                :model-value="marketing.valore === true"
+                :loading="inCorso === 'MARKETING:'"
+                aria-label="Comunicazioni promozionali"
+                size="xl"
+                @update:model-value="(v: boolean) => cambia('MARKETING', v)"
+              />
+            </div>
+
+            <!-- Autorizzazione per i minori di 14 anni -->
+            <template v-if="figliMinori.length > 0">
+              <div class="pt-3 pb-1">
+                <p class="font-semibold text-[15px]">Autorizzazione per i minori di 14 anni</p>
+                <p class="text-[13px] text-pf-grigio">
+                  Se la togli, il Centro viene avvisato e ti ricontatta: l'account di tuo figlio potrebbe essere
+                  disattivato, perché sotto i 14 anni serve la tua autorizzazione.
+                </p>
+              </div>
+              <div v-for="f in figliMinori" :key="`m-${f.studentId}`" class="flex items-center gap-3 py-3">
+                <div class="flex-1 min-w-0">
+                  <p class="text-[15px]">{{ f.nome }}</p>
+                  <p class="text-xs text-pf-grigio">{{ descriviVoce(f.minore14) }}</p>
+                </div>
+                <USwitch
+                  :model-value="f.minore14.valore === true"
+                  :loading="inCorso === `MINORE_14:${f.studentId}`"
+                  :aria-label="`Autorizzazione del genitore per ${f.nome}`"
+                  size="xl"
+                  @update:model-value="(v: boolean) => cambia('MINORE_14', v, f.studentId, f.nome)"
+                />
+              </div>
             </template>
-          </UCollapsible>
-        </div>
 
-        <!-- Comunicazioni promozionali: è della persona, non del figlio -->
-        <div class="space-y-2 border-t border-slate-100 pt-4">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="min-w-0">
-              <p class="text-sm font-medium text-slate-800">Comunicazioni promozionali</p>
-              <p class="text-xs text-slate-500">{{ descriviVoce(marketing) }}</p>
+            <div class="py-1">
+              <button type="button" class="min-h-11 text-sm font-semibold text-pf-blu hover:text-pf-blu-scuro" :aria-expanded="testiAperti" @click="() => { testiAperti = !testiAperti }">
+                {{ testiAperti ? 'Nascondi i testi completi' : 'Leggi i testi completi' }}
+              </button>
+              <div v-if="testiAperti" class="pb-3 flex flex-col gap-3 text-xs text-pf-grigio-scuro leading-relaxed">
+                <p class="whitespace-pre-wrap bg-pf-fondo rounded-xl p-3">{{ CONSENSO_IMMAGINI_TESTO }}</p>
+                <p class="whitespace-pre-wrap bg-pf-fondo rounded-xl p-3">{{ CONSENSO_MARKETING_TESTO }}</p>
+              </div>
             </div>
-            <USwitch
-              :model-value="marketing.valore === true"
-              :loading="inCorso === 'MARKETING:'"
-              aria-label="Consenso alle comunicazioni promozionali"
-              @update:model-value="(v: boolean) => cambia('MARKETING', v)"
-            />
           </div>
-          <UCollapsible v-model:open="testoMarketingAperto">
-            <button type="button" class="text-xs text-tfn-600 hover:underline">
-              {{ testoMarketingAperto ? 'Nascondi il testo' : 'Leggi il testo completo' }}
-            </button>
-            <template #content>
-              <p class="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed mt-2 bg-slate-50 rounded-lg p-3">{{ CONSENSO_MARKETING_TESTO }}</p>
-            </template>
-          </UCollapsible>
         </div>
+      </section>
 
-        <!-- Autorizzazione per i minori di 14 anni -->
-        <div v-if="figliMinori.length > 0" class="space-y-2 border-t border-slate-100 pt-4">
-          <p class="text-sm font-medium text-slate-800">Autorizzazione per i minori di 14 anni</p>
-          <div v-for="f in figliMinori" :key="f.studentId" class="flex flex-wrap items-center justify-between gap-3">
-            <div class="min-w-0">
-              <p class="text-sm text-slate-800">{{ f.nome }}</p>
-              <p class="text-xs text-slate-500">{{ descriviVoce(f.minore14) }}</p>
-            </div>
-            <USwitch
-              :model-value="f.minore14.valore === true"
-              :loading="inCorso === `MINORE_14:${f.studentId}`"
-              :aria-label="`Autorizzazione del genitore per ${f.nome}`"
-              @update:model-value="(v: boolean) => cambia('MINORE_14', v, f.studentId, f.nome)"
-            />
-          </div>
-          <p class="text-xs text-slate-500">
-            Se la togli, il Centro viene avvisato e ti ricontatta: l'account di tuo figlio potrebbe
-            essere disattivato, perché sotto i 14 anni serve la tua autorizzazione.
-          </p>
+      <!-- ─── Account: cambia password, si apre sul posto ─── -->
+      <section aria-labelledby="t-account">
+        <h2 id="t-account" class="mb-2 ml-1 text-[13px] font-bold text-pf-grigio uppercase tracking-wide">Account</h2>
+        <div class="bg-white rounded-[22px] px-4 py-1.5 pf-ombra">
+          <button type="button" class="w-full min-h-12 flex items-center gap-3 text-left text-[15px]" :aria-expanded="passwordAperta" aria-controls="form-password" @click="() => { passwordAperta = !passwordAperta }">
+            <span class="flex-1">Cambia password</span>
+            <UIcon :name="passwordAperta ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="size-5 text-pf-grigio" aria-hidden="true" />
+          </button>
+          <form v-if="passwordAperta" id="form-password" class="pb-4 flex flex-col gap-3" @submit.prevent="cambiaPassword">
+            <UFormField label="Password attuale">
+              <UInput v-model="pwForm.currentPassword" type="password" autocomplete="current-password" size="xl" class="w-full" />
+            </UFormField>
+            <UFormField label="Nuova password (minimo 8 caratteri)">
+              <UInput v-model="pwForm.newPassword" type="password" autocomplete="new-password" size="xl" class="w-full" />
+            </UFormField>
+            <UFormField label="Ripeti la nuova password">
+              <UInput v-model="pwForm.confirmPassword" type="password" autocomplete="new-password" size="xl" class="w-full" />
+            </UFormField>
+            <p v-if="pwError" role="alert" class="text-sm text-pf-rosso">{{ pwError }}</p>
+            <PortaleBottone type="submit" variante="blu" :loading="savingPw">Aggiorna password</PortaleBottone>
+          </form>
         </div>
-      </div>
-    </UCard>
+      </section>
 
-    <UCard>
-      <template #header>
-        <div class="flex items-center gap-2">
-          <UIcon name="i-heroicons-lock-closed" class="w-4 h-4 text-tfn-500" />
-          <span class="font-medium text-slate-800">Cambia password</span>
+      <!-- ─── Documenti ─── -->
+      <section aria-labelledby="t-doc">
+        <h2 id="t-doc" class="mb-2 ml-1 text-[13px] font-bold text-pf-grigio uppercase tracking-wide">Documenti</h2>
+        <div class="bg-white rounded-[22px] px-4 py-1.5 pf-ombra divide-y divide-pf-fondo">
+          <NuxtLink :to="isStudente ? '/privacy-studente' : '/privacy'" class="min-h-12 flex items-center gap-3 text-[15px] hover:text-pf-blu">
+            <span class="flex-1">Informativa privacy</span>
+            <UIcon name="i-heroicons-chevron-right" class="size-5 text-pf-grigio" aria-hidden="true" />
+          </NuxtLink>
+          <NuxtLink v-if="!isStudente" to="/termini" class="min-h-12 flex items-center gap-3 text-[15px] hover:text-pf-blu">
+            <span class="flex-1">Termini e condizioni</span>
+            <UIcon name="i-heroicons-chevron-right" class="size-5 text-pf-grigio" aria-hidden="true" />
+          </NuxtLink>
+          <NuxtLink to="/regolamento-card" class="min-h-12 flex items-center gap-3 text-[15px] hover:text-pf-blu">
+            <span class="flex-1">Regolamento della card studente</span>
+            <UIcon name="i-heroicons-chevron-right" class="size-5 text-pf-grigio" aria-hidden="true" />
+          </NuxtLink>
         </div>
-      </template>
-      <div class="space-y-3">
-        <UFormField label="Password attuale">
-          <UInput v-model="pwForm.currentPassword" type="password" class="w-full" />
-        </UFormField>
-        <UFormField label="Nuova password (minimo 8 caratteri)">
-          <UInput v-model="pwForm.newPassword" type="password" class="w-full" />
-        </UFormField>
-        <UFormField label="Ripeti nuova password">
-          <UInput v-model="pwForm.confirmPassword" type="password" class="w-full" />
-        </UFormField>
-        <p v-if="pwError" class="text-xs text-red-500">{{ pwError }}</p>
-      </div>
-      <template #footer>
-        <UButton color="primary" :loading="savingPw" @click="cambiaPassword">
-          Aggiorna password
-        </UButton>
-      </template>
-    </UCard>
+      </section>
 
-    <UCard>
-      <template #header>
-        <div class="flex items-center gap-2">
-          <UIcon name="i-heroicons-document-text" class="w-4 h-4 text-tfn-500" />
-          <span class="font-medium text-slate-800">Documentazione e Privacy</span>
+      <!-- ─── Aiuto. Niente "Notifiche sul telefono": rinviate (piano, sezione F) ─── -->
+      <section aria-labelledby="t-aiuto">
+        <h2 id="t-aiuto" class="mb-2 ml-1 text-[13px] font-bold text-pf-grigio uppercase tracking-wide">Aiuto</h2>
+        <div class="bg-white rounded-[22px] px-4 py-1.5 pf-ombra divide-y divide-pf-fondo">
+          <a v-if="whatsapp" :href="whatsappSegreteria(whatsapp)" target="_blank" rel="noopener noreferrer" class="min-h-12 flex items-center gap-3 text-[15px] hover:text-pf-blu">
+            <span class="flex-1">Scrivi alla segreteria su WhatsApp<span class="sr-only"> (si apre in un'altra finestra)</span></span>
+            <span class="text-xs text-pf-grigio">9:00–18:00</span>
+          </a>
+          <button type="button" class="w-full min-h-12 flex items-center gap-3 text-left text-[15px] hover:text-pf-blu" @click="() => { tutorialRiapri = true }">
+            <span class="flex-1">Rivedi il tutorial di benvenuto</span>
+            <UIcon name="i-heroicons-chevron-right" class="size-5 text-pf-grigio" aria-hidden="true" />
+          </button>
         </div>
-      </template>
-      <div class="space-y-2 text-sm">
-        <NuxtLink :to="isStudente ? '/privacy-studente' : '/privacy'" class="flex items-center justify-between py-2 border-b border-slate-100 text-slate-600 hover:text-indigo-600 transition-colors">
-          <span>Privacy Policy</span>
-          <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
-        </NuxtLink>
-        <NuxtLink v-if="!isStudente" to="/termini" class="flex items-center justify-between py-2 border-b border-slate-100 text-slate-600 hover:text-indigo-600 transition-colors">
-          <span>Termini e Condizioni</span>
-          <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
-        </NuxtLink>
-        <NuxtLink to="/regolamento-card" class="flex items-center justify-between py-2 text-slate-600 hover:text-indigo-600 transition-colors">
-          <span>Regolamento della Card studente</span>
-          <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
-        </NuxtLink>
-      </div>
-    </UCard>
+      </section>
 
-    <UButton
-      block
-      variant="soft"
-      icon="i-heroicons-play-circle"
-      @click="() => { tutorialRiapri = true }"
-    >
-      Rivedi il tutorial di benvenuto
-    </UButton>
-
-    <UButton
-      block
-      variant="outline"
-      color="error"
-      icon="i-heroicons-arrow-right-on-rectangle"
-      :loading="loggingOut"
-      @click="esciDalPortale"
-    >
-      Esci dall'account
-    </UButton>
+      <PortaleBottone variante="bordo" blocco :loading="loggingOut" @click="esciDalPortale">Esci dall'account</PortaleBottone>
+    </div>
 
     <!-- Togliere un consenso si chiede sempre: un tocco per sbaglio sullo
          schermo del telefono non deve revocare niente. Darlo invece no: è una
@@ -225,6 +183,8 @@
 </template>
 
 <script setup lang="ts">
+import { CONSENSO_IMMAGINI_TESTO, CONSENSO_MARKETING_TESTO } from '#shared/legal'
+
 definePageMeta({
   layout: 'portal',
   middleware: ['portal-only'],
@@ -236,12 +196,13 @@ const { user } = useUserSession()
 const isStudente = computed(() => user.value?.role === 'STUDENTE')
 const tutorialRiapri = useState('tutorial-riapri', () => false)
 
-const { data: studentsData, pending: pendingStudents } = useLazyFetch('/api/portal/students')
-const students = computed(() => (studentsData.value as any[]) ?? [])
+const { data: studentsData, pending: pendingStudents } = useLazyFetch<{ id: string; firstName: string; lastName: string; classe: string | null; scuola: string | null; packages: { stati: string[] }[] }[]>('/api/portal/students')
+const students = computed(() => studentsData.value ?? [])
+
+const { data: portalConfigs } = useLazyFetch<{ whatsapp_numero?: string }>('/api/portal/configs')
+const whatsapp = computed(() => portalConfigs.value?.whatsapp_numero ?? '')
 
 // ─── Consensi privacy (solo genitori) ───
-import { CONSENSO_IMMAGINI_TESTO, CONSENSO_MARKETING_TESTO } from '#shared/legal'
-
 type TipoConsenso = 'MINORE_14' | 'IMMAGINI' | 'MARKETING'
 /** `valore: null` = non ha mai risposto (diverso da "ha detto no") */
 interface VoceConsenso {
@@ -260,7 +221,7 @@ interface FiglioConsensi {
 const { data: datiConsensi, pending: pendingConsensi, refresh: refreshConsensi } = useLazyFetch<{
   figli: FiglioConsensi[]
   marketing: VoceConsenso
-}>('/api/portal/consensi', { server: false })
+}>('/api/portal/consensi', { server: false, immediate: !isStudente.value })
 
 const figli = computed(() => datiConsensi.value?.figli ?? [])
 const marketing = computed<VoceConsenso>(() => datiConsensi.value?.marketing ?? { valore: null, quando: null, origine: null })
@@ -268,8 +229,8 @@ const marketing = computed<VoceConsenso>(() => datiConsensi.value?.marketing ?? 
 // oppure se una risposta c'è già (magari il ragazzo nel frattempo li ha compiuti)
 const figliMinori = computed(() => figli.value.filter((f) => f.minoreDi14 === true || f.minore14.valore !== null))
 
-const testoImmaginiAperto  = ref(false)
-const testoMarketingAperto = ref(false)
+const testiAperti = ref(false)
+const passwordAperta = ref(false)
 // Chiave "TIPO:studentId" dell'interruttore che sta salvando in questo momento
 const inCorso = ref<string | null>(null)
 
@@ -334,6 +295,7 @@ async function salva(tipo: TipoConsenso, valore: boolean, studentId?: string) {
   }
 }
 
+// ─── Password ───
 const pwForm = reactive({ currentPassword: '', newPassword: '', confirmPassword: '' })
 const pwError = ref('')
 const savingPw = ref(false)
@@ -367,6 +329,7 @@ async function cambiaPassword() {
     pwForm.currentPassword = ''
     pwForm.newPassword = ''
     pwForm.confirmPassword = ''
+    passwordAperta.value = false
   } catch (e: any) {
     pwError.value = e?.data?.statusMessage ?? 'Errore durante il cambio password'
   } finally {
@@ -385,4 +348,3 @@ async function esciDalPortale() {
   }
 }
 </script>
-

@@ -1,358 +1,229 @@
 <template>
-  <div class="space-y-8">
-    <!-- ═══ HEADER BANNED PREMIUM ═══ -->
-    <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-tfn-600 p-6 sm:p-8 text-white shadow-lg">
-      <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-xl" />
-      <div class="absolute -left-10 -top-10 w-48 h-48 bg-white/5 rounded-full blur-2xl" />
-      
-      <div class="relative z-10 space-y-2">
-        <h1 class="font-heading text-2xl sm:text-3xl font-extrabold tracking-tight">
-          Ciao{{ user?.firstName ? `, ${user.firstName}` : '' }}! 👋
+  <div>
+    <!-- ═══ TESTATA: data e saluto che cambia con l'ora italiana ═══ -->
+    <PortaleTestata sovrapposta>
+      <div class="flex flex-col gap-1">
+        <p class="text-sm text-pf-su-blu first-letter:uppercase">{{ oggiInParole }}</p>
+        <h1 class="font-heading text-[28px] leading-9 font-medium">
+          {{ saluto }}<template v-if="user?.firstName">, <span class="font-bold">{{ user.firstName }}</span></template>
         </h1>
-        <p class="text-indigo-100 text-sm sm:text-base max-w-md">
-          Qui puoi controllare lo stato dei pacchetti dei ragazzi e gestire in autonomia le lezioni prenotate.
-        </p>
       </div>
-    </div>
+    </PortaleTestata>
 
-    <!-- ═══ INVITO AI CONSENSI FACOLTATIVI ═══
-         Compare solo finché una delle due scelte facoltative (foto/video e
-         promozioni) non ha MAI avuto risposta, e si può chiudere. Non è un
-         blocco: un consenso facoltativo che assilla la famiglia finché non dice
-         di sì non è più libero. -->
-    <UAlert
-      v-if="mostraInvitoConsensi"
-      color="info"
-      variant="subtle"
-      icon="i-heroicons-shield-check"
-      title="Due scelte facoltative da fare"
-      description="Nel tuo profilo puoi dirci se possiamo usare foto e video dei ragazzi e se vuoi ricevere le nostre novità. Puoi cambiare idea quando vuoi."
-      :actions="[{ label: 'Vai al profilo', color: 'info', variant: 'soft', onClick: () => { navigateTo('/portale/profilo') } }]"
-      close
-      @update:open="chiudiInvitoConsensi"
-    />
-
-    <!-- ═══ ULTIMO AVVISO NON LETTO DELLA SEGRETERIA ═══
-         Solo il più recente, e solo finché non è stato letto: per tutti gli
-         altri c'è la pagina Comunicazioni. -->
-    <NuxtLink
-      v-if="ultimoAvvisoNuovo"
-      to="/portale/note"
-      class="block rounded-2xl ring-1 ring-tfn-200 bg-tfn-50 p-4 hover:shadow-md transition-shadow focus-visible:outline-2 focus-visible:outline-tfn-500"
-    >
-      <div class="flex items-start gap-3">
-        <UIcon name="i-heroicons-megaphone" class="w-5 h-5 text-tfn-600 shrink-0 mt-0.5" />
-        <div class="min-w-0 flex-1 space-y-0.5">
-          <p class="text-xs font-semibold text-tfn-700">Nuova comunicazione dalla Segreteria</p>
-          <p class="font-semibold text-slate-800 truncate">{{ ultimoAvvisoNuovo.titolo }}</p>
-          <p class="text-sm text-slate-600 line-clamp-2">{{ ultimoAvvisoNuovo.testo }}</p>
-          <p class="text-xs font-medium text-tfn-700 pt-1">Leggi in Comunicazioni →</p>
-        </div>
-      </div>
-    </NuxtLink>
-
-    <!-- ═══ «TORNA DA NOI QUEST'ANNO?» ═══
-         Solo per i genitori, e solo quando la segreteria l'ha acceso nella
-         pagina Rientri: il riquadro si nasconde da solo se non c'è niente da chiedere. -->
-    <DomandaRientro v-if="!isStudente" />
-
-    <!-- ═══ GIORNATE MATERIE SPECIALI DEL MESE ═══ -->
-    <UCard v-if="giornateSpecialiMese.length" class="border border-amber-200 bg-amber-50/60">
-      <div class="flex items-start gap-3">
-        <span class="text-xl leading-none mt-0.5">⭐</span>
-        <div class="flex-1 space-y-1">
-          <button
-            type="button"
-            class="w-full flex items-center justify-between gap-2 text-left"
-            @click="giornateSpecialiAperte = !giornateSpecialiAperte"
-          >
-            <h3 class="font-semibold text-slate-800 text-sm">Giornate speciali di <span class="capitalize">{{ nomeMeseCorrente }}</span></h3>
-            <UIcon
-              :name="giornateSpecialiAperte ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
-              class="w-4 h-4 text-slate-500 shrink-0"
-            />
-          </button>
-          <template v-if="giornateSpecialiAperte">
-            <p class="text-xs text-slate-500">
-              In queste giornate le materie speciali si prenotano senza supplemento;
-              negli altri giorni è previsto un supplemento di €{{ SUPPLEMENTO_SPECIALE }} per giornata.
-            </p>
-            <ul class="mt-2 space-y-1">
-              <li v-for="g in giornateSpecialiMese" :key="g.materia" class="text-sm text-slate-700">
-                <strong>{{ g.materia }}</strong>: <span class="capitalize">{{ g.giorni }}</span>
-              </li>
-            </ul>
+    <!-- ═══════════════ HOME DELL'ALUNNO (schermata 15) ═══════════════ -->
+    <template v-if="isStudente">
+      <NuxtLink
+        to="/portale/lezioni"
+        class="relative -mt-11 mx-5 bg-white rounded-3xl p-4 flex items-center gap-3.5 pf-ombra-alta hover:bg-pf-fondo transition-colors"
+      >
+        <img src="/portale/calendario.webp" alt="" class="size-[60px] shrink-0 object-contain" />
+        <span class="flex-1 min-w-0 flex flex-col gap-0.5">
+          <span class="text-xs font-bold text-pf-blu uppercase tracking-wide">La tua prossima lezione</span>
+          <template v-if="prossimaDi(studenteSolo?.id)">
+            <span class="font-heading font-bold text-lg first-letter:uppercase">{{ giornoInParole(giornoPrenotazione(prossimaDi(studenteSolo?.id)!)) }}</span>
+            <span class="text-[13px] text-pf-grigio">{{ materieDi(prossimaDi(studenteSolo?.id)!) }} · confermata</span>
           </template>
+          <template v-else>
+            <span class="font-heading font-bold text-lg">Nessuna in programma</span>
+            <span class="text-[13px] text-pf-grigio">Tocca qui per prenotarne una</span>
+          </template>
+        </span>
+      </NuxtLink>
+
+      <nav aria-label="Azioni rapide" class="mx-5 mt-6 grid grid-cols-3 gap-2.5">
+        <NuxtLink v-for="a in azioniAlunno" :key="a.to" :to="a.to" class="flex flex-col items-center gap-2 text-pf-testo rounded-2xl group">
+          <span class="size-[84px] rounded-3xl bg-white shadow-[0_6px_16px_rgb(15_27_45/0.07)] flex items-center justify-center group-hover:bg-pf-celeste transition-colors">
+            <img :src="a.img" alt="" class="size-[58px] object-contain" />
+          </span>
+          <span class="text-[13px] font-semibold text-center">{{ a.etichetta }}</span>
+        </NuxtLink>
+      </nav>
+
+      <!-- La card in breve: attiva o no, fino a quando. Mai il motivo (privacy economica) -->
+      <section v-if="cardAlunno" aria-labelledby="t-tua-card" class="relative mx-5 mt-6 rounded-3xl bg-pf-notte text-white p-[18px] flex flex-col gap-3.5 overflow-hidden">
+        <span aria-hidden="true" class="absolute -right-[50px] -top-[60px] size-[180px] rounded-full border-[26px] border-pf-notte-anello" />
+        <div class="relative flex items-center justify-between">
+          <h2 id="t-tua-card" class="font-heading font-bold text-[17px]">La tua card</h2>
+          <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-white" :class="cardAlunno.attiva ? 'text-pf-verde' : 'text-pf-rosso'">
+            {{ cardAlunno.attiva ? 'Attiva' : 'Sospesa' }}
+          </span>
         </div>
-      </div>
-    </UCard>
+        <p class="relative text-sm leading-5 text-pf-su-blu">
+          <template v-if="!cardAlunno.attiva">{{ testoCardSospesa(null, false) }}</template>
+          <template v-else-if="cardAlunno.validaFino">Sconti nei negozi convenzionati fino al {{ giornoInParole(cardAlunno.validaFino, { day: 'numeric', month: 'long', year: 'numeric' }) }}.</template>
+          <template v-else>Sconti nei negozi convenzionati.</template>
+        </p>
+        <PortaleBottone to="/portale/card" class="relative self-start">Mostra la card</PortaleBottone>
+      </section>
+    </template>
 
-    <!-- ═══ SEZIONE STUDENTI / PACCHETTI ═══ -->
-    <div class="space-y-4">
-      <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
-        <UIcon name="i-heroicons-academic-cap" class="w-5 h-5 text-tfn-500" />
-        Stato Pacchetti Studenti
-      </h2>
-
-      <div v-if="pendingStudents" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <USkeleton v-for="i in 2" :key="i" class="h-28 w-full rounded-xl" />
-      </div>
-
-      <div v-else-if="students.length === 0" class="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-6 text-center text-slate-500">
-        Nessuno studente collegato a questo account. Contatta la segreteria.
-      </div>
-
-      <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <UCard
-          v-for="student in students"
-          :key="student.id"
-          class="hover:shadow-md transition-shadow duration-300 border border-slate-100 rounded-xl"
-        >
-          <div class="flex items-start justify-between">
-            <div class="space-y-1">
-              <h3 class="font-bold text-slate-800">{{ student.firstName }} {{ student.lastName }}</h3>
-              <p class="text-xs text-slate-500">{{ student.classe || 'Nessuna classe' }} — {{ student.scuola || 'Nessuna scuola' }}</p>
-            </div>
-            <UBadge
-              :color="student.abilitatoPrenotazioneOnline ? 'success' : 'neutral'"
-              variant="subtle"
-              size="xs"
-            >
-              {{ student.abilitatoPrenotazioneOnline ? 'Prenotazione Attiva' : 'Solo Consultazione' }}
-            </UBadge>
-          </div>
-
-          <!-- Stato pacchetto attivo -->
-          <div class="mt-4 pt-3 border-t border-slate-50">
-            <div v-if="student.packages && student.packages.length > 0">
-              <!-- Solo lo STATO del pacchetto: ore e giorni residui restano in segreteria -->
-              <div v-for="pkg in student.packages" :key="pkg.id" class="space-y-2">
-                <div class="flex justify-between items-center gap-2 text-xs font-semibold text-slate-600">
-                  <span class="truncate">{{ pkg.nome }}</span>
-                  <div class="flex flex-wrap gap-1 justify-end shrink-0">
-                    <UBadge
-                      v-for="stato in statiVisibili(pkg)"
-                      :key="stato"
-                      :color="coloreStato(stato)"
-                      variant="subtle"
-                      size="xs"
-                    >
-                      {{ etichettaStato(stato) }}
-                    </UBadge>
-                  </div>
-                </div>
-                <p class="text-[11px] text-slate-400 leading-snug">
-                  Per conoscere le ore o i giorni ancora disponibili contatta la segreteria.
-                </p>
-              </div>
-            </div>
-            <div v-else class="text-xs text-amber-500 font-medium flex items-center gap-1">
-              <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4" />
-              Nessun pacchetto attivo trovato. Contatta il centro per ricaricare.
-            </div>
-          </div>
-        </UCard>
-      </div>
-    </div>
-
-    <!-- ═══ SEZIONE LEZIONI PRENOTATE ═══ -->
-    <div class="space-y-4">
-      <div class="flex items-center justify-between">
-        <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
-          <UIcon name="i-heroicons-calendar" class="w-5 h-5 text-tfn-500" />
-          Le tue Lezioni Prenotate
-        </h2>
-        <UButton
-          v-if="prenotazioneAbilitata || isStudente"
-          to="/portale/prenota"
-          size="sm"
-          color="primary"
-          icon="i-heroicons-plus"
-        >
-          Prenota lezione
-        </UButton>
-      </div>
-
-      <p class="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
-        <UIcon name="i-heroicons-information-circle" class="w-4 h-4 shrink-0 text-slate-400" />
-        Puoi modificare una prenotazione entro le <strong>11:30</strong> e annullarla entro le <strong>12:30</strong> del giorno stesso.
-      </p>
-
-      <div v-if="pendingBookings" class="space-y-3">
-        <USkeleton v-for="i in 2" :key="i" class="h-32 w-full rounded-xl" />
-      </div>
-
-      <div v-else-if="bookings.length === 0" class="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-8 text-center text-slate-500 space-y-3">
-        <UIcon name="i-heroicons-calendar-days" class="w-8 h-8 mx-auto text-slate-400" />
-        <p class="text-sm font-medium">Non hai lezioni prenotate nel sistema.</p>
-        <p class="text-xs text-slate-400 max-w-xs mx-auto">Le lezioni che prenoti appariranno qui pronte per essere svolte.</p>
-        <UButton v-if="prenotazioneAbilitata || isStudente" to="/portale/prenota" size="xs" color="indigo" variant="outline">Prenota Ora</UButton>
-      </div>
-
-      <div v-else class="space-y-3">
-        <div
-          v-for="b in bookings"
-          :key="b.id"
-          class="bg-white border rounded-xl p-4 shadow-sm hover:border-indigo-200 transition-colors duration-200 relative"
-          :class="b.status === 'CANCELLED' ? 'opacity-60 bg-slate-50/50' : 'border-slate-100'"
-        >
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div class="space-y-1">
-              <!-- Giorno e Studente -->
-              <div class="flex items-center gap-2 flex-wrap">
-                <span class="font-extrabold text-slate-800 text-sm sm:text-base">
-                  {{ formatDateLong(b.requestedDate) }}
-                </span>
-                <UBadge
-                  :color="getStatusColor(b.status)"
-                  variant="subtle"
-                  size="xs"
-                >
-                  {{ getStatusLabel(b.status) }}
-                </UBadge>
-              </div>
-              <p class="text-xs text-slate-500 font-medium">Studente: <span class="text-slate-700">{{ b.studentName }} {{ b.studentSurname }}</span></p>
-
-              <!-- Materie -->
-              <div class="flex flex-wrap gap-1 mt-1.5">
-                <span 
-                  v-for="s in b.subjects" 
-                  :key="s.name"
-                  class="text-xs font-semibold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded"
-                >
-                  {{ s.name }}
-                </span>
-              </div>
-
-              <!-- Note orario della famiglia -->
-              <p v-if="b.notes" class="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded inline-block mt-1 font-medium italic">
-                Nota: "{{ b.notes }}"
-              </p>
-
-            </div>
-
-            <!-- Pulsanti di azione per il genitore -->
-            <div v-if="b.status !== 'CANCELLED'" class="flex items-center gap-2 sm:self-center shrink-0">
-              <UButton
-                v-if="canModify(b.requestedDate)"
-                size="xs"
-                color="indigo"
-                variant="soft"
-                icon="i-heroicons-pencil"
-                @click="apriModifica(b)"
-              >
-                Modifica
-              </UButton>
-              <UButton
-                v-if="canCancel(b.requestedDate)"
-                size="xs"
-                color="error"
-                variant="outline"
-                icon="i-heroicons-trash"
-                :loading="cancellandoId === b.id"
-                @click="annullaLezione(b.id)"
-              >
-                Annulla
-              </UButton>
-
-              <!-- Indicazione di blocco orario -->
-              <span 
-                v-if="!canModify(b.requestedDate) && !canCancel(b.requestedDate) && isOggi(b.requestedDate)" 
-                class="text-[11px] text-slate-400 bg-slate-100 px-2 py-1 rounded flex items-center gap-1"
-                title="Modifiche chiuse dopo le 11:30 e cancellazioni chiuse dopo le 12:30 per oggi."
-              >
-                <UIcon name="i-heroicons-lock-closed" class="w-3.5 h-3.5" />
-                Orario limite superato
-              </span>
-            </div>
-          </div>
+    <!-- ═══════════════ HOME DELLA FAMIGLIA (schermata 1) ═══════════════ -->
+    <template v-else>
+      <section aria-label="I tuoi ragazzi" class="relative -mt-11">
+        <div v-if="studenti.length === 0" class="mx-5 bg-white rounded-3xl p-5 pf-ombra-alta text-sm text-pf-grigio-scuro">
+          Nessun ragazzo collegato a questo account. Scrivi alla segreteria.
         </div>
-      </div>
-    </div>
-
-    <!-- ═══ MODAL DI MODIFICA PRENOTAZIONE ═══ -->
-    <UModal v-model:open="modalModificaAperto" title="Modifica Prenotazione">
-      <template #body>
-        <div class="space-y-4 p-4">
-          <p class="text-xs text-slate-500">
-            Modifica la data, le materie o le note per questa lezione.
-            <span class="block mt-1 font-semibold text-slate-600">Puoi modificare la prenotazione entro le 11:30 e annullarla entro le 12:30 del giorno stesso.</span>
-          </p>
-
-          <!-- Data -->
-          <UFormField label="Nuova data desiderata" required>
-            <UInput
-              v-model="modificaForm.dataDesiderata"
-              type="date"
-              :min="minDate"
-              class="w-full"
-              @change="validaDataModifica"
-            />
-          </UFormField>
-
-          <!-- Materie -->
-          <UFormField label="Materia / Materie" required>              <div class="grid grid-cols-2 gap-2 mt-1">
-              <button
-                v-for="materia in MATERIE"
-                :key="materia"
-                type="button"
-                class="px-2.5 py-1.5 text-xs rounded-lg border text-left transition-colors font-medium"
-                :class="modificaForm.materie.includes(materia)
-                  ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
-                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'"
-                @click="toggleMateriaModifica(materia)"
-              >
-                {{ materia }}
-              </button>
-            </div>
-            <p v-if="modificaForm.materie.length === 0" class="text-xs text-red-500 mt-1">Seleziona almeno una materia</p>
-          </UFormField>
-
-          <!-- Note -->
-          <UFormField label="Nota per l'orario (opzionale)">
-            <UTextarea
-              v-model="modificaForm.noteOrario"
-              placeholder="Es. preferisco dopo le 16:30"
-              :rows="2"
-              class="w-full"
-            />
-          </UFormField>
-        </div>
-      </template>
-
-      <template #footer>
-        <div class="flex justify-end gap-2 px-4 pb-4">
-          <UButton variant="ghost" size="sm" @click="() => { modalModificaAperto = false }">Annulla</UButton>
-          <UButton 
-            color="primary" 
-            size="sm"
-            :loading="salvandoModifica" 
-            :disabled="modificaForm.materie.length === 0 || !modificaForm.dataDesiderata"
-            @click="salvaModifica"
+        <!-- Più figli: scorrono di lato, come nelle bozze. La pagina non scorre mai di lato -->
+        <div v-else class="flex gap-3 px-5 pb-2 overflow-x-auto snap-x snap-mandatory scrollbar-nascosta">
+          <PortaleSchedaAlunno
+            v-for="(s, i) in studenti"
+            :key="s.id"
+            :alunno="s"
+            :indice="i"
+            class="shrink-0 snap-start"
+            :class="studenti.length > 1 ? 'w-[296px]' : 'w-full'"
           >
-            Salva Modifiche
-          </UButton>
+            <div class="grid grid-cols-2 gap-2">
+              <NuxtLink to="/portale/lezioni" class="flex flex-col gap-0.5 rounded-lg hover:bg-pf-fondo">
+                <span class="text-xs text-pf-grigio">Prossima lezione</span>
+                <span class="text-sm font-semibold">
+                  {{ prossimaDi(s.id) ? giornoInParole(giornoPrenotazione(prossimaDi(s.id)!), { weekday: 'short', day: 'numeric', month: 'short' }) : 'Nessuna' }}
+                </span>
+              </NuxtLink>
+              <div class="flex flex-col gap-0.5 min-w-0">
+                <span class="text-xs text-pf-grigio">Pacchetto</span>
+                <span class="text-sm font-semibold truncate">{{ s.packages?.[0]?.nome ?? 'Nessuno attivo' }}</span>
+              </div>
+            </div>
+          </PortaleSchedaAlunno>
         </div>
-      </template>
-    </UModal>
-  </div>
+      </section>
 
-  <ConfirmDialog
-    v-model:open="confirmOpen"
-    :title="confirmTitle"
-    :description="confirmDescription"
-    confirm-label="Annulla"
-    confirm-color="error"
-    @confirm="eseguiAnnullamento"
-  />
+      <section aria-labelledby="t-azioni" class="mx-5 mt-7 flex flex-col gap-3">
+        <h2 id="t-azioni" class="font-heading font-bold text-lg">Azioni rapide</h2>
+        <div class="grid gap-2.5" :class="azioniGenitore.length === 4 ? 'grid-cols-4' : 'grid-cols-3'">
+          <NuxtLink v-for="a in azioniGenitore" :key="a.to" :to="a.to" class="flex flex-col items-center gap-2 text-pf-testo rounded-2xl group">
+            <span class="size-[72px] rounded-[22px] bg-white shadow-[0_6px_16px_rgb(15_27_45/0.07)] flex items-center justify-center group-hover:bg-pf-celeste transition-colors">
+              <img :src="a.img" alt="" class="size-[52px] object-contain" />
+            </span>
+            <span class="text-xs font-semibold text-center leading-[15px]">{{ a.etichetta }}</span>
+          </NuxtLink>
+        </div>
+      </section>
+
+      <!-- Le card che chiedono attenzione: sospese, disattivate o nei 15 giorni di margine.
+           Come le notifiche: una card mai accesa (senza data) non è una novità da segnalare. -->
+      <section
+        v-for="c in cardDaSegnalare"
+        :key="c.id"
+        :aria-label="`Avviso sulla card di ${c.firstName}`"
+        class="mx-5 mt-6 p-4 rounded-[22px] bg-pf-crema flex gap-3.5 items-center"
+      >
+        <img src="/portale/tessera.webp" alt="" class="size-14 shrink-0 object-contain" />
+        <div class="flex-1 flex flex-col gap-1">
+          <p class="font-semibold text-[15px] text-pf-giallo-testo">
+            <template v-if="c.motivo === 'DISATTIVATA'">La card di {{ c.firstName }} è disattivata</template>
+            <template v-else-if="!c.attiva">La card di {{ c.firstName }} è sospesa</template>
+            <template v-else>La card di {{ c.firstName }} resta attiva fino al {{ giornoNumeri(c.validaFino) }}</template>
+          </p>
+          <p class="text-[13px] leading-[18px] text-pf-crema-testo">
+            {{ c.attiva ? testoCardInScadenza(c.motivo, true) : testoCardSospesa(c.motivo, true) }}
+          </p>
+          <PortaleBottone variante="blu" piccolo :to="`/portale/card?alunno=${c.id}`" class="self-start mt-2">Vai alla card</PortaleBottone>
+        </div>
+      </section>
+
+      <!-- Invito ai consensi facoltativi: solo finché foto/video o promozioni non hanno MAI
+           avuto risposta, e si può chiudere. Non è un blocco: un consenso facoltativo che
+           assilla la famiglia finché non dice di sì non è più libero. -->
+      <section v-if="mostraInvitoConsensi" aria-labelledby="t-consensi" class="mx-5 mt-6 p-4 rounded-[22px] bg-pf-celeste flex gap-3 items-start">
+        <UIcon name="i-heroicons-shield-check" class="size-6 shrink-0 text-pf-blu-scuro" aria-hidden="true" />
+        <div class="flex-1 flex flex-col gap-1">
+          <h2 id="t-consensi" class="font-semibold text-[15px] text-pf-blu-scuro">Due scelte facoltative da fare</h2>
+          <p class="text-[13px] leading-[18px] text-pf-blu-scuro">
+            Nel tuo profilo puoi dirci se possiamo usare foto e video dei ragazzi e se vuoi ricevere le nostre novità. Puoi cambiare idea quando vuoi.
+          </p>
+          <NuxtLink to="/portale/profilo" class="self-start mt-1 py-2 text-sm font-semibold text-pf-blu underline-offset-2 hover:underline">Vai al profilo</NuxtLink>
+        </div>
+        <button type="button" aria-label="Chiudi l'invito" class="size-11 -m-2 shrink-0 rounded-full flex items-center justify-center text-pf-blu-scuro hover:bg-white/60" @click="chiudiInvitoConsensi">
+          <UIcon name="i-heroicons-x-mark" class="size-5" aria-hidden="true" />
+        </button>
+      </section>
+
+      <!-- «Torna da noi quest'anno?»: compare solo se la segreteria l'ha acceso in Rientri -->
+      <div class="mx-5 mt-6 empty:hidden"><DomandaRientro /></div>
+
+      <!-- Dalla segreteria: le ultime note e comunicazioni (le note entrano qui e nelle
+           Notifiche, non c'è più una voce a parte nel menu). Mai il nome del tutor. -->
+      <section v-if="ultimeDallaSegreteria.length" aria-labelledby="t-avvisi" class="mx-5 mt-7 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <img src="/portale/megafono.webp" alt="" class="size-[30px] object-contain" loading="lazy" />
+            <h2 id="t-avvisi" class="font-heading font-bold text-lg">Dalla segreteria</h2>
+          </div>
+          <NuxtLink to="/portale/notifiche" class="py-2 text-sm font-semibold text-pf-blu hover:text-pf-blu-scuro">Tutte</NuxtLink>
+        </div>
+        <NuxtLink
+          v-for="v in ultimeDallaSegreteria"
+          :key="v.id"
+          :to="v.link ?? '/portale/notifiche'"
+          class="bg-white rounded-[22px] p-4 flex flex-col gap-1.5 text-pf-testo pf-ombra hover:bg-pf-fondo transition-colors"
+        >
+          <span class="flex items-center gap-2">
+            <PortaleStato v-if="v.nuova" tono="rosso">Nuova</PortaleStato>
+            <span class="text-xs text-pf-grigio">{{ quando(v.data) }}</span>
+          </span>
+          <span class="font-semibold text-base">{{ v.titolo }}</span>
+          <span class="text-sm leading-5 text-pf-grigio-scuro line-clamp-3 whitespace-pre-line">{{ v.testo }}</span>
+        </NuxtLink>
+      </section>
+    </template>
+
+    <!-- ═══ MATERIE SPECIALI DEL MESE (genitore e alunno) ═══ -->
+    <section v-if="giornateSpecialiMese.length" aria-labelledby="t-speciali" class="mx-5 mt-7 bg-white rounded-[22px] p-4 flex flex-col gap-3 pf-ombra">
+      <div class="flex items-center gap-3">
+        <img src="/portale/stella.webp" alt="" class="size-11 object-contain" loading="lazy" />
+        <div>
+          <h2 id="t-speciali" class="font-semibold text-base">Materie speciali di {{ nomeMeseCorrente }}</h2>
+          <p class="text-xs text-pf-grigio">In questi giorni senza supplemento</p>
+        </div>
+      </div>
+      <ul class="flex flex-col gap-2">
+        <li v-for="g in giornateSpecialiMese" :key="g.materia" class="flex justify-between items-center gap-3 px-3 py-2.5 bg-pf-fondo rounded-xl">
+          <span class="text-sm font-semibold">{{ g.materia }}</span>
+          <span class="text-[13px] text-pf-grigio-scuro text-right">{{ g.giorni }}</span>
+        </li>
+      </ul>
+      <p class="text-xs text-pf-grigio">Negli altri giorni è previsto un supplemento di €{{ SUPPLEMENTO_SPECIALE }}.</p>
+    </section>
+
+    <!-- ═══ ULTIME CONVENZIONI (genitore) ═══ -->
+    <section v-if="!isStudente && ultimeConvenzioni.length" aria-labelledby="t-conv" class="mt-7 flex flex-col gap-3">
+      <div class="flex items-center justify-between px-5">
+        <div class="flex items-center gap-2">
+          <img src="/portale/regalo.webp" alt="" class="size-[30px] object-contain" loading="lazy" />
+          <h2 id="t-conv" class="font-heading font-bold text-lg">Ultime convenzioni</h2>
+        </div>
+        <NuxtLink to="/portale/sconti" class="py-2 text-sm font-semibold text-pf-blu hover:text-pf-blu-scuro">Vedi tutte</NuxtLink>
+      </div>
+      <div class="flex gap-3 px-5 pb-2 overflow-x-auto snap-x scrollbar-nascosta">
+        <NuxtLink
+          v-for="c in ultimeConvenzioni"
+          :key="c.id"
+          :to="`/portale/sconti/${c.id}`"
+          class="shrink-0 snap-start w-[200px] bg-white rounded-[22px] overflow-hidden text-pf-testo flex flex-col pf-ombra hover:bg-pf-fondo transition-colors"
+        >
+          <span class="relative h-[110px] bg-pf-bordo flex items-center justify-center">
+            <img v-if="c.foto" :src="c.foto" alt="" loading="lazy" class="size-full object-cover" />
+            <UIcon v-else name="i-heroicons-building-storefront" class="size-9 text-pf-grigio" aria-hidden="true" />
+            <span v-if="c.sconto" class="absolute top-2.5 left-2.5 text-[13px] font-bold px-2.5 py-1 rounded-full bg-pf-giallo text-pf-giallo-testo">{{ c.sconto }}</span>
+          </span>
+          <span class="p-3 flex flex-col gap-0.5">
+            <span class="font-semibold text-[15px] line-clamp-2">{{ c.nome }}</span>
+            <span v-if="c.categoria || c.citta" class="text-xs text-pf-grigio">{{ [c.categoria, c.citta].filter(Boolean).join(' · ') }}</span>
+          </span>
+        </NuxtLink>
+      </div>
+    </section>
+
+    <div class="mx-5 mt-6"><InstallBanner /></div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
-import ConfirmDialog from '~/components/ConfirmDialog.vue'
 import { SUPPLEMENTO_SPECIALE } from '#shared/tariffe'
-import { MATERIE_DEFAULT } from '#shared/materie'
-import { isDomenica } from '#shared/giorno-civile'
+import type { Convenzione } from '#shared/convenzioni'
+import type { MotivoCard } from '#shared/card-studente'
 
 definePageMeta({
   layout: 'portal',
@@ -360,17 +231,69 @@ definePageMeta({
 })
 useHead({ title: 'Home — Portale Famiglie' })
 
-const toast = useToast()
 const { user } = useUserSession()
-const isStudente = computed(() => (user.value as any)?.role === 'STUDENTE')
+const isStudente = computed(() => user.value?.role === 'STUDENTE')
 
-// Card giornate speciali: chiusa di default, si apre con la freccetta
-const giornateSpecialiAperte = ref(false)
+// ─── Saluto e data, in ora italiana ───
+const ora = adessoItalia()
+const saluto = salutoDellOra(ora.minuti)
+const oggiInParole = giornoInParole(ora.giorno)
 
-// ─── Invito ai consensi facoltativi (blocco 5) ───
-// Solo per i genitori, e solo finché foto/video o promozioni non hanno MAI avuto
-// una risposta. Chi lo chiude non lo rivede più su quel dispositivo: la scelta
-// resta comunque disponibile nel Profilo, dove non scade mai.
+// ─── Dati: tutti dalle API del portale che già esistono ───
+type Studente = { id: string; firstName: string; lastName: string; classe: string | null; scuola: string | null; abilitatoPrenotazioneOnline: boolean; packages: { id: string; nome: string; stati: string[] }[] }
+type Prenotazione = { id: string; studentId: string | null; requestedDate: string; status: string; subjects: { name: string }[] }
+type Card = { id: string; firstName: string; attiva: boolean; validaFino: string | null; inMargine: boolean; motivo?: MotivoCard | null }
+type Voce = { id: string; titolo: string; testo: string; data: string; nuova: boolean; link?: string }
+
+const { data: studentsData } = await useFetch<Studente[]>('/api/portal/students')
+const studenti = computed(() => studentsData.value ?? [])
+const studenteSolo = computed(() => studenti.value[0])
+
+const { data: bookingsData } = useLazyFetch<Prenotazione[]>('/api/portal/bookings')
+const { data: cardData } = useLazyFetch<Card[]>('/api/portal/card')
+const { data: portalConfigs } = useLazyFetch<{ giornate_speciali?: Record<string, string[]> }>('/api/portal/configs')
+// Le note e le comunicazioni arrivano dalle notifiche: la stessa lettura del layout (stessa chiave)
+const { data: notificheData } = useLazyFetch<{ voci: Voce[] }>('/api/portal/notifiche', { server: false, key: 'portale-notifiche-menu' })
+const { data: scontiData } = useLazyFetch<Convenzione[]>('/api/portal/sconti', { server: false, immediate: !isStudente.value })
+
+// La prossima lezione di un ragazzo: da oggi in poi, non annullata
+function prossimaDi(studentId?: string) {
+  if (!studentId) return undefined
+  const oggi = ora.giorno
+  return (bookingsData.value ?? [])
+    .filter((b) => b.studentId === studentId && b.status !== 'CANCELLED' && giornoPrenotazione(b) >= oggi)
+    .sort((a, b) => a.requestedDate.localeCompare(b.requestedDate))[0]
+}
+const materieDi = (b: Prenotazione) => b.subjects.map((s) => s.name).join(', ')
+
+const prenotazioneAbilitata = computed(() => studenti.value.some((s) => s.abilitatoPrenotazioneOnline))
+
+const azioniAlunno = [
+  { to: '/portale/prenota', etichetta: 'Prenota lezione', img: '/portale/calendario.webp' },
+  { to: '/portale/card', etichetta: 'La mia card', img: '/portale/tessera.webp' },
+  { to: '/portale/sconti', etichetta: 'Convenzioni', img: '/portale/regalo.webp' },
+]
+const azioniGenitore = computed(() => [
+  ...(prenotazioneAbilitata.value ? [{ to: '/portale/prenota', etichetta: 'Prenota lezione', img: '/portale/calendario.webp' }] : []),
+  { to: '/portale/pagamenti', etichetta: 'Paga il mensile', img: '/portale/portafoglio.webp' },
+  { to: '/portale/card', etichetta: 'Card studente', img: '/portale/tessera.webp' },
+  { to: '/portale/sconti', etichetta: 'Convenzioni', img: '/portale/regalo.webp' },
+])
+
+const cardAlunno = computed(() => cardData.value?.[0])
+const cardDaSegnalare = computed(() => (cardData.value ?? []).filter((c) =>
+  c.motivo === 'DISATTIVATA' || (!c.attiva && !!c.validaFino) || (c.attiva && c.inMargine && !!c.validaFino)))
+
+const ultimeDallaSegreteria = computed(() => (notificheData.value?.voci ?? [])
+  .filter((v) => v.id.startsWith('nota:') || v.id.startsWith('comunicazione:'))
+  .slice(0, 2))
+const quando = (iso: string) => new Date(iso).toLocaleDateString('it-IT', { timeZone: 'Europe/Rome', day: 'numeric', month: 'long' })
+
+// Le ultime arrivate per prime: il server le ordina dalla più vecchia
+const ultimeConvenzioni = computed(() => [...(scontiData.value ?? [])].reverse().slice(0, 4))
+
+// ─── Invito ai consensi facoltativi (solo genitori) ───
+// Chi lo chiude non lo rivede più su quel dispositivo: la scelta resta nel Profilo.
 const invitoChiuso = ref(false)
 const { data: consensiFamiglia } = useLazyFetch<{
   figli: { immagini: { valore: boolean | null } }[]
@@ -389,9 +312,7 @@ const mostraInvitoConsensi = computed(() => {
   if (isStudente.value || invitoChiuso.value) return false
   const dati = consensiFamiglia.value
   if (!dati) return false
-  const senzaRisposta = dati.marketing?.valore === null
-    || (dati.figli ?? []).some((f) => f.immagini?.valore === null)
-  return senzaRisposta
+  return dati.marketing?.valore === null || (dati.figli ?? []).some((f) => f.immagini?.valore === null)
 })
 
 function chiudiInvitoConsensi() {
@@ -399,23 +320,15 @@ function chiudiInvitoConsensi() {
   try {
     localStorage.setItem('invito-consensi-chiuso', '1')
   } catch {
-    // vedi sopra: se non si può ricordare, l'invito ricomparirà al prossimo accesso
+    // se non si può ricordare, l'invito ricomparirà al prossimo accesso
   }
 }
 
-// Avvisi della segreteria a tutte le famiglie: in home solo il più recente non letto.
-// Agli account studente non arrivano (il server risponderebbe comunque vuoto).
-const { data: avvisiData } = useLazyFetch('/api/portal/comunicazioni', { server: false, immediate: !isStudente.value })
-const ultimoAvvisoNuovo = computed(() => (avvisiData.value ?? []).find((a) => !a.lettaAt) ?? null)
-
-const { data: portalConfigs } = useLazyFetch('/api/portal/configs')
-
-// ─── Giornate speciali del mese corrente, raggruppate per materia ───
-const nomeMeseCorrente = new Date().toLocaleDateString('it-IT', { month: 'long' })
+// ─── Materie speciali del mese corrente, raggruppate per materia ───
+const nomeMeseCorrente = giornoInParole(ora.giorno, { month: 'long' })
 const giornateSpecialiMese = computed(() => {
-  const giornate: Record<string, string[]> = (portalConfigs.value as any)?.giornate_speciali ?? {}
-  const oggi = new Date()
-  const mese = `${oggi.getFullYear()}-${String(oggi.getMonth() + 1).padStart(2, '0')}`
+  const giornate = portalConfigs.value?.giornate_speciali ?? {}
+  const mese = ora.giorno.slice(0, 7)
   const perMateria = new Map<string, string[]>()
   for (const [data, materie] of Object.entries(giornate).sort(([a], [b]) => a.localeCompare(b))) {
     if (!data.startsWith(mese)) continue
@@ -427,281 +340,7 @@ const giornateSpecialiMese = computed(() => {
   }
   return [...perMateria.entries()].map(([materia, date]) => ({
     materia,
-    giorni: date.map((d) => new Date(d + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric' })).join(', '),
+    giorni: date.map((d) => giornoInParole(d, { weekday: 'short', day: 'numeric' })).join(' · '),
   }))
 })
-const MATERIE = computed(() => (portalConfigs.value as any)?.materie ?? MATERIE_DEFAULT)
-
-// ─── CARICAMENTO DATI ───
-const { data: studentsData, pending: pendingStudents } = await useFetch('/api/portal/students')
-const students = computed(() => (studentsData.value as any[]) ?? [])
-
-const prenotazioneAbilitata = computed(() =>
-  students.value.some((s: any) => s.abilitatoPrenotazioneOnline)
-)
-
-const { data: bookingsData, pending: pendingBookings, refresh: refreshBookings } = await useFetch('/api/portal/bookings')
-const bookings = computed(() => (bookingsData.value as any[]) ?? [])
-
-const { data: closuresData } = useLazyFetch('/api/portal/closures')
-const closures = computed(() => (closuresData.value as any[]) ?? [])
-
-// ─── STATO PACCHETTO (senza ore/giorni residui) ───
-// Alla famiglia mostriamo solo gli stati del ciclo di vita del pacchetto.
-// Restano fuori DA_PAGARE/PAGATO (informazioni contabili, si vedono in segreteria)
-// e DA_RINNOVARE (direbbe indirettamente quante ore mancano).
-const STATI_FAMIGLIA = ['ATTIVO', 'SCADUTO', 'ESAURITO', 'SOSPESO'] as const
-
-function statiVisibili(pkg: any): string[] {
-  const stati = (pkg?.stati ?? []).filter((s: string) => STATI_FAMIGLIA.includes(s as any))
-  // Nessuno stato riconosciuto: meglio una parola sola che una card muta
-  return stati.length > 0 ? stati : ['ATTIVO']
-}
-
-function etichettaStato(stato: string) {
-  switch (stato) {
-    case 'ATTIVO':   return 'Attivo'
-    case 'SCADUTO':  return 'Scaduto'
-    case 'ESAURITO': return 'Esaurito'
-    case 'SOSPESO':  return 'Sospeso'
-    default:         return stato.replace(/_/g, ' ')
-  }
-}
-
-function coloreStato(stato: string) {
-  switch (stato) {
-    case 'ATTIVO':   return 'success'
-    case 'SCADUTO':  return 'error'
-    case 'ESAURITO': return 'error'
-    case 'SOSPESO':  return 'neutral'
-    default:         return 'neutral'
-  }
-}
-
-function getStatusColor(status: string) {
-  switch (status) {
-    case 'CONFIRMED': return 'success'
-    case 'CANCELLED': return 'neutral'
-    case 'PENDING': return 'warning'
-    case 'COMPLETED': return 'info'
-    default: return 'neutral'
-  }
-}
-
-function getStatusLabel(status: string) {
-  switch (status) {
-    case 'CONFIRMED': return 'Confermata'
-    case 'CANCELLED': return 'Annullata'
-    case 'PENDING': return 'In attesa'
-    case 'COMPLETED': return 'Completata'
-    default: return status
-  }
-}
-
-function formatDateLong(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('it-IT', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-  }).replace(/^\w/, c => c.toUpperCase())
-}
-
-
-// ─── VERIFICA LIMITI TEMPORALI ───
-function isOggi(dateStr: string) {
-  // oggiISO() = giorno civile italiano (evita lo slittamento UTC dopo mezzanotte)
-  return new Date(dateStr).toISOString().split('T')[0] === oggiISO()
-}
-
-function canModify(dateStr: string) {
-  const reqDate = new Date(dateStr)
-  const now = new Date()
-  
-  const formatter = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Rome',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false
-  })
-  const parts = formatter.formatToParts(now)
-  const p = (type: string) => parts.find(x => x.type === type)?.value
-  const todayStr = `${p('year')}-${p('month')}-${p('day')}`
-  const italyHour = parseInt(p('hour') || '0', 10)
-  const italyMinute = parseInt(p('minute') || '0', 10)
-
-  const reqStr = reqDate.toISOString().split('T')[0]
-  
-  if (reqStr === todayStr) {
-    // Oggi: entro le 11:30
-    return italyHour < 11 || (italyHour === 11 && italyMinute < 30)
-  }
-  return reqDate.getTime() > now.getTime()
-}
-
-function canCancel(dateStr: string) {
-  const reqDate = new Date(dateStr)
-  const now = new Date()
-  
-  const formatter = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Rome',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false
-  })
-  const parts = formatter.formatToParts(now)
-  const p = (type: string) => parts.find(x => x.type === type)?.value
-  const todayStr = `${p('year')}-${p('month')}-${p('day')}`
-  const italyHour = parseInt(p('hour') || '0', 10)
-  const italyMinute = parseInt(p('minute') || '0', 10)
-
-  const reqStr = reqDate.toISOString().split('T')[0]
-  
-  if (reqStr === todayStr) {
-    // Oggi: entro le 12:30
-    return italyHour < 12 || (italyHour === 12 && italyMinute < 30)
-  }
-  return reqDate.getTime() > now.getTime()
-}
-
-// ─── ANNULLAMENTO PRENOTAZIONE ───
-const cancellandoId = ref<string | null>(null)
-const confirmOpen = ref(false)
-const confirmTitle = ref('')
-const confirmDescription = ref('')
-const pendingCancelId = ref<string | null>(null)
-
-function annullaLezione(id: string) {
-  pendingCancelId.value = id
-  confirmTitle.value = 'Annullare questa prenotazione?'
-  confirmDescription.value = 'La lezione verrà cancellata e non potrà essere recuperata.'
-  confirmOpen.value = true
-}
-
-async function eseguiAnnullamento() {
-  confirmOpen.value = false
-  if (!pendingCancelId.value) return
-  cancellandoId.value = pendingCancelId.value
-  try {
-    await $fetch(`/api/portal/bookings/${pendingCancelId.value}`, { method: 'DELETE' })
-    toast.add({ title: 'Lezione annullata con successo', color: 'success' })
-    await refreshBookings()
-  } catch (err: any) {
-    toast.add({
-      title: 'Errore',
-      description: err.data?.statusMessage ?? 'Impossibile annullare la lezione',
-      color: 'error'
-    })
-  } finally {
-    cancellandoId.value = null
-    pendingCancelId.value = null
-  }
-}
-
-// ─── MODIFICA PRENOTAZIONE (MODAL & VALIDAZIONE) ───
-const modalModificaAperto = ref(false)
-const salvandoModifica = ref(false)
-const modificaForm = reactive({
-  id: '',
-  dataDesiderata: '',
-  materie: [] as string[],
-  noteOrario: ''
-})
-
-const minDate = computed(() => {
-  const now = new Date()
-  const formatter = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Rome',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false
-  })
-  const parts = formatter.formatToParts(now)
-  const p = (type: string) => parts.find(x => x.type === type)?.value
-  const italyHour = parseInt(p('hour') || '0', 10)
-  const italyMinute = parseInt(p('minute') || '0', 10)
-
-  // Se dopo le 11:30, la prima data utile è domani (giorno civile italiano)
-  if (italyHour > 11 || (italyHour === 11 && italyMinute >= 30)) {
-    const tomorrow = new Date(`${oggiISO()}T12:00:00.000Z`)
-    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
-    return tomorrow.toISOString().split('T')[0]
-  }
-  return oggiISO()
-})
-
-function apriModifica(booking: any) {
-  modificaForm.id = booking.id
-  modificaForm.dataDesiderata = booking.requestedDate.split('T')[0]
-  modificaForm.materie = booking.subjects ? booking.subjects.map((s: any) => s.name) : []
-  modificaForm.noteOrario = booking.notes || ''
-  modalModificaAperto.value = true
-}
-
-function toggleMateriaModifica(materia: string) {
-  const idx = modificaForm.materie.indexOf(materia)
-  if (idx === -1) modificaForm.materie.push(materia)
-  else modificaForm.materie.splice(idx, 1)
-}
-
-function validaDataModifica() {
-  if (!modificaForm.dataDesiderata) return
-  
-  // 1. Controllo Domenica (sul giorno scelto, indipendente dal fuso del browser)
-  if (isDomenica(modificaForm.dataDesiderata)) {
-    toast.add({ title: 'Impossibile prenotare o spostare di Domenica', color: 'error' })
-    modificaForm.dataDesiderata = ''
-    return
-  }
-
-  // 2. Controllo Chiusure
-  const isChiuso = closures.value.some((c: any) => c.date === modificaForm.dataDesiderata)
-  if (isChiuso) {
-    toast.add({ title: 'Il centro è chiuso in questa data', color: 'error' })
-    modificaForm.dataDesiderata = ''
-    return
-  }
-
-  // 3. Controllo limite 11:30 per oggi stesso
-  const now = new Date()
-  const formatter = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Rome',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false
-  })
-  const parts = formatter.formatToParts(now)
-  const p = (type: string) => parts.find(x => x.type === type)?.value
-  const todayStr = `${p('year')}-${p('month')}-${p('day')}`
-  const italyHour = parseInt(p('hour') || '0', 10)
-  const italyMinute = parseInt(p('minute') || '0', 10)
-
-  if (modificaForm.dataDesiderata === todayStr) {
-    if (italyHour > 11 || (italyHour === 11 && italyMinute >= 30)) {
-      toast.add({ title: 'Le lezioni per oggi si potevano modificare o prenotare solo entro le 11:30', color: 'error' })
-      modificaForm.dataDesiderata = ''
-    }
-  }
-}
-
-async function salvaModifica() {
-  if (!modificaForm.dataDesiderata || modificaForm.materie.length === 0) return
-  
-  salvandoModifica.value = true
-  try {
-    await $fetch(`/api/portal/bookings/${modificaForm.id}`, {
-      method: 'PUT',
-      body: {
-        dataDesiderata: modificaForm.dataDesiderata + 'T12:00:00.000Z',
-        materie:        modificaForm.materie,
-        noteOrario:     modificaForm.noteOrario || undefined
-      }
-    })
-    
-    toast.add({ title: 'Prenotazione modificata con successo', color: 'success' })
-    modalModificaAperto.value = false
-    await refreshBookings()
-  } catch (err: any) {
-    toast.add({
-      title: 'Errore',
-      description: err.data?.statusMessage ?? 'Impossibile salvare le modifiche',
-      color: 'error'
-    })
-  } finally {
-    salvandoModifica.value = false
-  }
-}
 </script>

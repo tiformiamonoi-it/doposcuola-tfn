@@ -30,6 +30,64 @@
   --color-primary-800: var(--color-tfn-800);
   --color-primary-900: var(--color-tfn-900);
   --color-primary-950: var(--color-tfn-950);
+
+  /* ─── Portale famiglie, grafica v6 (prefisso pf-) ───
+     I colori delle bozze approvate, in un posto solo: i componenti del portale usano
+     queste classi (bg-pf-blu, text-pf-grigio…), mai un esadecimale scritto a mano.
+     Lo staff non li usa: il gestionale resta sulla palette tfn qui sopra. */
+  --color-pf-blu: #006BAC;          /* testata, link, selezionato */
+  --color-pf-blu-scuro: #00476E;    /* testo su celeste, hover dei link */
+  --color-pf-blu-tasto: #1A73B3;    /* bottoni e linguette dentro la testata */
+  --color-pf-blu-bolla: #3399D6;    /* i due cerchi decorativi della testata */
+  --color-pf-celeste: #EAF3FB;      /* bottoni secondari, riquadri informativi */
+  --color-pf-su-blu: #E6F1FB;       /* testo secondario sulla testata (contrasto 5:1) */
+  --color-pf-giallo: #FFAA10;       /* il colore delle azioni */
+  --color-pf-giallo-testo: #3D2600; /* testo sul giallo (contrasto 7,5:1) */
+  --color-pf-crema: #FFF4DB;        /* avvisi caldi (card sospesa, materie speciali) */
+  --color-pf-crema-testo: #7A4B00;
+  --color-pf-fondo: #F4F7FB;        /* fondo delle pagine */
+  --color-pf-testo: #0F1B2D;
+  --color-pf-grigio: #5B6B7F;       /* testo secondario (5:1 sul fondo) */
+  --color-pf-grigio-scuro: #3F4D5E;
+  --color-pf-bordo: #E3E9F0;
+  --color-pf-verde: #15803D;
+  --color-pf-verde-chiaro: #E7F6EC;
+  --color-pf-rosso: #B83400;
+  --color-pf-rosso-chiaro: #FDE7DC;
+  --color-pf-notte: #0B2F4F;        /* la card studente */
+  --color-pf-notte-anello: #17476F;
+  --color-pf-spenta: #5F6B78;       /* la card sospesa (testo bianco 5,5:1) */
+  --color-pf-oro: #FFE3A3;          /* avatar del primo figlio */
+  --color-pf-oro-testo: #6B4100;
+  --color-pf-cielo: #CFE4F7;        /* avatar del secondo figlio */
+  --color-pf-svolta: #9AA8B8;       /* pallino "lezione già svolta" */
+}
+
+/* La testata blu del portale: due cerchi più chiari agli angoli, come nelle bozze v6.
+   Stanno negli angoli apposta: sotto il testo il contrasto scenderebbe sotto 4,5:1. */
+.pf-testata-sfondo {
+  background:
+    radial-gradient(circle at 104% -6%, var(--color-pf-blu-bolla) 0 118px, transparent 119px),
+    radial-gradient(circle at -8% 112%, var(--color-pf-blu-bolla) 0 72px, transparent 73px),
+    var(--color-pf-blu);
+}
+
+/* Focus visibile nel portale (WCAG 2.4.7), per chi usa la tastiera: blu scuro sul
+   chiaro, bianco sulla testata blu, dove il blu non si vedrebbe. */
+.pf :is(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 3px solid var(--color-pf-blu-scuro);
+  outline-offset: 2px;
+}
+.pf .pf-testata-sfondo :is(a, button):focus-visible {
+  outline-color: #fff;
+}
+
+/* Ombre delle schede del portale (due livelli, presi dalle bozze) */
+.pf-ombra {
+  box-shadow: 0 1px 2px rgb(15 27 45 / 0.04), 0 8px 24px rgb(15 27 45 / 0.06);
+}
+.pf-ombra-alta {
+  box-shadow: 0 2px 4px rgb(15 27 45 / 0.05), 0 12px 28px rgb(15 27 45 / 0.10);
 }
 
 /* Utility class per i titoli */

@@ -8,19 +8,47 @@
 // - versione: la DATA dell'uscita, 'AAAA.MM.GG'. Seconda uscita nello stesso giorno:
 //   'AAAA.MM.GG.2'. È anche il numero che Admin e Super Tutor vedono in fondo al menu.
 // - tutor / segreteria: le voci in parole semplici. Una lista vuota = quel pubblico
-//   non vede nessuna finestra per questa versione. Genitori e studenti non vedono mai niente.
+//   non vede nessuna finestra per questa versione.
+// - famiglie (facoltativo): le schermate "Novità" del portale, con un'illustrazione
+//   ciascuna (public/portale/). `solo` le riserva al genitore o all'alunno;
+//   `conPagamenti` le mostra solo se in Impostazioni la sezione pagamenti è accesa.
 // - Il grassetto si scrive **così** (solo quello: il testo non diventa mai HTML).
 
 export type PubblicoNovita = 'tutor' | 'segreteria'
+
+export interface SchermataNovita {
+  immagine: string   // nome del file in public/portale/, es. 'scena-card.webp'
+  titolo: string     // la prima parte del titolo…
+  evidenza: string   // …e la seconda, in blu
+  testo: string
+  solo?: 'GENITORE' | 'STUDENTE'
+  conPagamenti?: boolean
+}
 
 export interface VersioneNovita {
   versione: string
   data: string // giorno civile 'AAAA-MM-GG'
   tutor: string[]
   segreteria: string[]
+  famiglie?: SchermataNovita[]
 }
 
 export const CHANGELOG: VersioneNovita[] = [
+  {
+    // ponytail: la data è quella in cui sono state decise le schermate; alla pubblicazione
+    // del blocco 4 va riscritta con il giorno dell'uscita (qui e in `data`).
+    versione: '2026.11.16',
+    data: '2026-11-16',
+    tutor: [],
+    segreteria: [],
+    famiglie: [
+      { immagine: 'scena-app.webp', titolo: 'Abbiamo rinnovato', evidenza: 'la tua app', testo: 'Più colori e più ordine, ma i gesti sono quelli di sempre: prenoti proprio come prima.' },
+      { immagine: 'scena-card.webp', titolo: 'Una card', evidenza: 'per ogni ragazzo', testo: 'Il nostro piccolo grazie a chi studia con noi: sconti nei negozi amici della zona.', solo: 'GENITORE' },
+      { immagine: 'scena-card.webp', titolo: 'Una card', evidenza: 'tutta per te', testo: 'Il nostro piccolo grazie a chi studia con noi: sconti nei negozi amici della zona.', solo: 'STUDENTE' },
+      { immagine: 'scena-notifiche.webp', titolo: 'Le parole dei tutor,', evidenza: 'subito a te', testo: 'Ogni nota sui tuoi ragazzi arriva nella campanella in alto. Così sai sempre come va.', solo: 'GENITORE' },
+      { immagine: 'portafoglio.webp', titolo: 'Il mensile,', evidenza: 'senza pensieri', testo: 'I dati per il bonifico sono già pronti: basta un tocco per copiarli.', solo: 'GENITORE', conPagamenti: true },
+    ],
+  },
   {
     versione: '2026.10.09',
     data: '2026-10-09',
@@ -44,6 +72,11 @@ export const ultimaVersione = CHANGELOG[0]!.versione
 
 /** Tutte le versioni conosciute: l'endpoint "vista" accetta solo queste. */
 export const versioniNote = CHANGELOG.map(v => v.versione)
+
+/** L'ultima uscita con delle schermate "Novità" per il portale delle famiglie (o nessuna). */
+export function ultimaNovitaFamiglie(): VersioneNovita | undefined {
+  return CHANGELOG.find(v => (v.famiglie?.length ?? 0) > 0)
+}
 
 /** L'ultima uscita che ha qualcosa da dire a questo pubblico (o nessuna). */
 export function ultimaNovitaPer(pubblico: PubblicoNovita): VersioneNovita | undefined {

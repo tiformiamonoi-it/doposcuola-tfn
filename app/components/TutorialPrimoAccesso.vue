@@ -33,7 +33,7 @@
 </template>
 
 <script setup lang="ts">
-// Tutorial di benvenuto al primo accesso (tutor, genitori, studenti).
+// Tutorial di benvenuto al primo accesso dello staff (tutor).
 // Si mostra quando user.tutorialVisto è false; "Salta" o "Fine" lo marcano visto per sempre.
 // Si può rivedere in ogni momento dal profilo (stato condiviso 'tutorial-riapri').
 const { user, fetch: refreshSession } = useUserSession()
@@ -50,17 +50,10 @@ const STEPS_PER_RUOLO: Record<string, { icona: string; titolo: string; testo: st
     { icona: 'i-heroicons-printer', titolo: 'Stampa il programma', testo: 'Dal calendario puoi stampare (o salvare in PDF) l\'elenco delle tue lezioni della settimana.' },
     { icona: 'i-heroicons-identification', titolo: 'Il tuo profilo', testo: 'Da "Il mio profilo" puoi cambiare la password quando vuoi.' },
   ],
-  GENITORE: [
-    { icona: 'i-heroicons-home', titolo: 'La tua Home', testo: 'Appena entri vedi i pacchetti dei tuoi figli: quante ore restano e quando scadono, più le lezioni prenotate.' },
-    { icona: 'i-heroicons-calendar-days', titolo: 'Prenotare una lezione', testo: 'Se la prenotazione online è attiva, da "Prenota" scegli giorno e materie. Puoi prenotare o spostare la lezione di oggi solo entro le 11:30, e annullarla entro le 12:30.' },
-    { icona: 'i-heroicons-document-text', titolo: 'Comunicazioni', testo: 'In "Comunicazioni" trovi gli aggiornamenti che il centro condivide con la famiglia sull\'andamento di tuo figlio.' },
-    { icona: 'i-heroicons-user', titolo: 'Il tuo profilo', testo: 'Da "Profilo" cambi la password e trovi i documenti (privacy e termini). Le comunicazioni del centro arrivano alla tua email.' },
-  ],
-  STUDENTE: [
-    { icona: 'i-heroicons-home', titolo: 'La tua Home', testo: 'Qui vedi il tuo pacchetto (quante ore ti restano) e le tue lezioni prenotate.' },
-    { icona: 'i-heroicons-calendar-days', titolo: 'Prenotare una lezione', testo: 'Da "Prenota" scegli giorno e materie. Per oggi puoi prenotare o spostare solo entro le 11:30, e annullare entro le 12:30. I tuoi genitori vedono le tue prenotazioni.' },
-    { icona: 'i-heroicons-user', titolo: 'Il tuo profilo', testo: 'Da "Profilo" puoi cambiare la password quando vuoi.' },
-  ],
+  // GENITORE e STUDENTE non sono più qui: dal blocco 4 (grafica v6) il loro benvenuto è
+  // a schermo intero, con le illustrazioni (components/portale/Presentazione.vue).
+  // Senza passi, questa finestra per loro non si apre mai, nemmeno su una pagina
+  // con il layout dello staff (es. /privacy).
 }
 
 const steps = computed(() => STEPS_PER_RUOLO[user.value?.role ?? ''] ?? [])

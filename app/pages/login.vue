@@ -1,24 +1,23 @@
 <template>
-  <div class="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-    <div class="w-full max-w-sm">
+  <!-- ACCESSO (schermata 14). La stessa pagina serve a famiglie, alunni e staff: i testi
+       restano validi per tutti ("Accedi al tuo account", niente "portale delle famiglie"). -->
+  <div class="pf min-h-screen bg-pf-fondo text-pf-testo flex flex-col">
+    <header class="pf-testata-sfondo text-white rounded-b-[40px] min-h-[300px] px-5 pb-[84px] flex flex-col items-center justify-end">
+      <h1 class="sr-only">Accedi a tiformiamonoi.it</h1>
+      <PortaleMarchio grande />
+      <p class="mt-3.5 text-[15px] text-pf-su-blu">Accedi al tuo account</p>
+    </header>
 
-      <!-- Logo -->
-      <div class="text-center mb-8">
-        <img src="/logo.svg" alt="tiformiamonoi.it" class="w-56 mx-auto" />
-        <p class="text-sm text-slate-500 mt-2">Accedi al tuo account</p>
-      </div>
-
-      <!-- Card form -->
-      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-        <UForm :schema="schema" :state="state" @submit="onSubmit" class="space-y-4">
-
+    <div class="w-full max-w-[420px] mx-auto px-5 -mt-[60px] flex-1 flex flex-col">
+      <div class="bg-white rounded-[26px] px-[18px] py-[22px] pf-ombra-alta">
+        <UForm :schema="schema" :state="state" class="flex flex-col gap-4" @submit="onSubmit">
           <UFormField name="email" label="Email" required>
             <UInput
               v-model="state.email"
               type="email"
-              placeholder="nome@esempio.com"
-              icon="i-heroicons-envelope"
+              placeholder="nome@esempio.it"
               autocomplete="email"
+              size="xl"
               class="w-full"
             />
           </UFormField>
@@ -27,48 +26,39 @@
             <UInput
               v-model="state.password"
               type="password"
-              placeholder="••••••••"
-              icon="i-heroicons-lock-closed"
+              placeholder="La tua password"
               autocomplete="current-password"
+              size="xl"
               class="w-full"
             />
           </UFormField>
 
-          <div class="flex items-start gap-3 pt-1">
-            <USwitch v-model="state.ricordami" aria-label="Ricordami su questo dispositivo" />
+          <button type="button" class="self-end min-h-11 text-sm font-semibold text-pf-blu hover:text-pf-blu-scuro" @click="recuperoAperto = true">
+            Password dimenticata?
+          </button>
+
+          <div class="flex items-start gap-3">
+            <USwitch v-model="state.ricordami" size="xl" aria-label="Ricordami su questo dispositivo" />
             <div class="text-sm">
-              <p class="text-slate-700 font-medium">Ricordami su questo dispositivo</p>
-              <p class="text-xs text-slate-500">Resti collegato per 30 giorni. Spegnilo se il dispositivo è condiviso con altri.</p>
+              <p class="font-medium">Ricordami su questo dispositivo</p>
+              <p class="text-xs text-pf-grigio">Resti collegato per 30 giorni. Spegnilo se il dispositivo è condiviso con altri.</p>
             </div>
           </div>
 
-          <UAlert
-            v-if="errorMsg"
-            color="error"
-            variant="subtle"
-            icon="i-heroicons-exclamation-triangle"
-            :description="errorMsg"
-          />
+          <p v-if="errorMsg" role="alert" class="text-sm text-pf-rosso bg-pf-rosso-chiaro rounded-xl px-3 py-2">{{ errorMsg }}</p>
 
-          <UButton type="submit" block :loading="loading" class="mt-2">
-            Accedi
-          </UButton>
-
+          <PortaleBottone type="submit" grande blocco :loading="loading">Accedi</PortaleBottone>
         </UForm>
-
-        <button type="button" class="block w-full text-center text-xs text-tfn-600 hover:text-tfn-700 hover:underline mt-4" @click="recuperoAperto = true">
-          Password dimenticata?
-        </button>
       </div>
 
-      <p class="text-center text-xs text-slate-400 mt-6">
-        Problemi di accesso? Contatta l'amministratore.
+      <p class="mt-8 mx-2 text-[13px] leading-[19px] text-pf-grigio text-center">
+        Primo accesso? Apri il link che ti abbiamo mandato per email: ti farà scegliere la password.
       </p>
 
-      <p class="text-center text-xs text-slate-300 mt-2">
-        <NuxtLink to="/privacy" class="hover:underline">Privacy</NuxtLink> ·
-        <NuxtLink to="/termini" class="hover:underline">Termini</NuxtLink> ·
-        <NuxtLink to="/cookie" class="hover:underline">Cookie</NuxtLink>
+      <p class="mt-auto pt-8 pb-6 text-center text-xs text-pf-grigio">
+        <NuxtLink to="/privacy" class="inline-block py-2 px-1 hover:underline">Privacy</NuxtLink> ·
+        <NuxtLink to="/termini" class="inline-block py-2 px-1 hover:underline">Termini</NuxtLink> ·
+        <NuxtLink to="/cookie" class="inline-block py-2 px-1 hover:underline">Cookie</NuxtLink>
       </p>
     </div>
 
@@ -80,7 +70,7 @@
             Inserisci l'email del tuo account: se è registrata ti invieremo un link per scegliere una nuova password.
           </p>
           <UFormField label="Email">
-            <UInput v-model="recuperoEmail" type="email" placeholder="nome@esempio.com" icon="i-heroicons-envelope" class="w-full" />
+            <UInput v-model="recuperoEmail" type="email" placeholder="nome@esempio.it" icon="i-heroicons-envelope" class="w-full" />
           </UFormField>
           <UAlert
             v-if="recuperoMessaggio"
@@ -112,7 +102,7 @@
 import { z } from 'zod'
 
 definePageMeta({ layout: false })
-useHead({ title: 'Accedi — tiformiamonoi' })
+useHead({ title: 'Accedi — tiformiamonoi.it' })
 
 // Redirect se già loggato (solo client-side per evitare SSR loop)
 const { loggedIn, user } = useUserSession()

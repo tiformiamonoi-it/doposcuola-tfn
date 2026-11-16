@@ -21,6 +21,9 @@ const CAMPI_GENITORE_RISERVATI = [
   // Non è un dato del genitore, ma è la chiave della card studente: chi lo conosce può
   // farla verificare a nome dell'alunno. Al tutor non serve per fare lezione.
   'codiceCard',
+  // La card disattivata a mano e il suo motivo (uso scorretto, richiesta della famiglia):
+  // una decisione della segreteria che al tutor non serve.
+  'cardDisattivataMotivo', 'cardDisattivataAt',
 ] as const
 
 export function sanitizeStudentForTutor<T extends Record<string, any>>(student: T): T {

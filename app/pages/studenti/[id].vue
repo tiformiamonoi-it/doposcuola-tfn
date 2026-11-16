@@ -44,6 +44,38 @@
         </div>
       </div>
 
+      <!-- "Disattiva card": il motivo è obbligatorio e può essere solo uno dei due del regolamento -->
+      <UModal v-model:open="disattivaCardAperto" title="Disattivare la card?">
+        <template #body>
+          <div class="space-y-4 text-sm text-slate-700">
+            <p>
+              La card si spegne subito: il negozio vedrà "Card non valida" e la famiglia, nel portale,
+              "Card disattivata dalla segreteria". Puoi disattivarla solo per uno di questi motivi,
+              previsti dal regolamento della card (art. 5.2):
+            </p>
+            <ul class="list-disc pl-5 space-y-1">
+              <li>la famiglia lo ha chiesto;</li>
+              <li>la card risulta usata da altri (uso scorretto).</li>
+            </ul>
+            <p>
+              Non si può disattivare per altri motivi, ad esempio per un pagamento in ritardo: a quello
+              pensano già le regole automatiche della card. Quando il motivo è chiarito, premi "Riattiva card".
+            </p>
+            <URadioGroup
+              v-model="motivoDisattivazione"
+              legend="Motivo (obbligatorio)"
+              :items="SCELTE_DISATTIVAZIONE"
+            />
+          </div>
+        </template>
+        <template #footer>
+          <div class="flex justify-end gap-2 w-full">
+            <UButton variant="ghost" color="neutral" @click="() => { disattivaCardAperto = false }">Annulla</UButton>
+            <UButton color="error" :disabled="!motivoDisattivazione" :loading="salvandoCard" @click="disattivaCard">Disattiva card</UButton>
+          </div>
+        </template>
+      </UModal>
+
       <!-- Anonimizzazione GDPR (art. 17): conferma esplicita, operazione irreversibile -->
       <UModal v-model:open="anonimizzaAperto" title="Anonimizza studente (GDPR)">
         <template #body>
@@ -131,6 +163,23 @@
                 </div>
                 <UButton size="xs" variant="ghost" icon="i-heroicons-arrow-path" :loading="cambiandoCodice" @click="cambiaCodiceCard">
                   Cambia codice
+                </UButton>
+              </div>
+              <!-- Card disattivata a mano (regolamento, art. 5.2): solo ADMIN/SUPER_TUTOR -->
+              <div v-if="isAdmin" class="flex items-center gap-3">
+                <UIcon name="i-heroicons-no-symbol" class="w-4 h-4 text-slate-400" />
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs text-slate-500">Card studente</div>
+                  <div v-if="studente.cardDisattivataMotivo" class="text-sm font-medium text-red-700">
+                    Card disattivata il {{ formatData(studente.cardDisattivataAt) }}, motivo: {{ ETICHETTE_DISATTIVAZIONE_CARD[studente.cardDisattivataMotivo] ?? studente.cardDisattivataMotivo }}
+                  </div>
+                  <div v-else class="text-sm text-slate-700">Segue le regole di pacchetti e pagamenti</div>
+                </div>
+                <UButton v-if="studente.cardDisattivataMotivo" size="xs" variant="ghost" icon="i-heroicons-check-circle" :loading="salvandoCard" @click="riattivaCard">
+                  Riattiva card
+                </UButton>
+                <UButton v-else size="xs" variant="ghost" color="error" icon="i-heroicons-no-symbol" @click="() => { motivoDisattivazione = undefined; disattivaCardAperto = true }">
+                  Disattiva card
                 </UButton>
               </div>
             </div>
@@ -1256,6 +1305,7 @@
 
 <script setup lang="ts">
 import type { EsitoInvitoEmail } from '#shared/email'
+import { ETICHETTE_DISATTIVAZIONE_CARD, type MotivoDisattivazioneCard } from '#shared/card-studente'
 import ConfirmDialog from '~/components/ConfirmDialog.vue'
 import { UpdateStudentSchema } from '#shared/schemas/student.schema'
 import { normalizzaTelefono } from '~/utils/phone'
@@ -1426,6 +1476,8 @@ type AnagraficaStudente = {
   studentUserId: string | null
   abilitatoPrenotazioneOnline: boolean
   codiceCard: string
+  cardDisattivataMotivo: MotivoDisattivazioneCard | null
+  cardDisattivataAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -1512,6 +1564,42 @@ function cambiaCodiceCard() {
         cambiandoCodice.value = false
       }
     }
+  )
+}
+
+// ─── Card studente: "Disattiva card" / "Riattiva card" (regolamento, art. 5.2) ───
+// La card disattivata a mano è spenta qualunque cosa dicano pacchetti e pagamenti
+// (Pro Bono compresi): vedi calcolaStatoCard in shared/card-studente.ts.
+const SCELTE_DISATTIVAZIONE = [
+  { value: 'RICHIESTA_FAMIGLIA', label: 'La famiglia lo ha chiesto' },
+  { value: 'USO_SCORRETTO', label: 'Uso scorretto: la card risulta usata da altri' },
+] satisfies { value: MotivoDisattivazioneCard; label: string }[]
+const disattivaCardAperto = ref(false)
+const motivoDisattivazione = ref<MotivoDisattivazioneCard | undefined>()
+const salvandoCard = ref(false)
+
+async function salvaCardDisattivata(motivo: MotivoDisattivazioneCard | null) {
+  salvandoCard.value = true
+  try {
+    await $fetch(`/api/students/${id}/card-disattivata`, { method: 'PUT', body: { motivo } })
+    toast.add({ title: motivo ? 'Card disattivata' : 'Card riattivata', color: 'success', icon: 'i-heroicons-check-circle' })
+    disattivaCardAperto.value = false
+    refresh()
+  } catch (err: any) {
+    toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile salvare', color: 'error' })
+  } finally {
+    salvandoCard.value = false
+  }
+}
+
+function disattivaCard() {
+  if (motivoDisattivazione.value) salvaCardDisattivata(motivoDisattivazione.value)
+}
+
+function riattivaCard() {
+  chiediConferma(
+    { title: 'Riattivare la card?', description: 'La card torna a seguire le regole di pacchetti e pagamenti: se un pacchetto la tiene accesa, il negozio la vedrà subito valida.', confirmLabel: 'Riattiva card', confirmColor: 'primary' },
+    () => salvaCardDisattivata(null),
   )
 }
 

@@ -1,108 +1,67 @@
 <template>
-  <div class="space-y-4">
-    <div class="flex items-center justify-between">
-      <!-- "Comunicazioni" e non più "Note del tutor": a firmare è a volte la
-           segreteria e a volte una persona con nome e cognome, quindi il vecchio
-           titolo prometteva un mittente che spesso non era quello. -->
-      <h2 class="font-heading text-xl font-bold text-slate-900">Comunicazioni</h2>
-      <UBadge v-if="totale > 0" color="neutral" variant="subtle">
-        {{ totale }} {{ totale === 1 ? 'comunicazione' : 'comunicazioni' }}
-      </UBadge>
-    </div>
+  <div>
+    <PortaleTestata titolo="Note e comunicazioni" indietro="/portale/notifiche">
+      <p class="text-sm leading-5 text-pf-su-blu">Tutto quello che il Centro ha scritto alla tua famiglia, anche più vecchio di due mesi.</p>
+    </PortaleTestata>
 
-    <template v-if="pending">
-      <div v-for="i in 3" :key="i">
-        <USkeleton class="h-24 w-full rounded-xl" />
+    <div class="px-5 pt-5 flex flex-col gap-2.5">
+      <template v-if="pending">
+        <USkeleton v-for="i in 3" :key="i" class="h-24 w-full rounded-[22px]" />
+      </template>
+
+      <div v-else-if="totale === 0" class="bg-white rounded-[22px] p-6 text-center pf-ombra flex flex-col items-center gap-2">
+        <img src="/portale/megafono.webp" alt="" class="size-16 object-contain" />
+        <p class="font-semibold">Nessuna comunicazione al momento</p>
+        <p class="text-sm text-pf-grigio">Qui arrivano le note e gli avvisi del Centro.</p>
       </div>
-    </template>
 
-    <template v-else-if="totale === 0">
-      <UCard>
-        <div class="text-center py-8 space-y-2">
-          <UIcon name="i-heroicons-document-text" class="w-8 h-8 text-slate-300 mx-auto" />
-          <p class="text-sm text-slate-500">Nessuna comunicazione al momento</p>
-          <p class="text-xs text-slate-400">
-            Qui arrivano le comunicazioni del centro su tuo figlio.
-          </p>
-        </div>
-      </UCard>
-    </template>
-
-    <template v-else>
-      <!-- Gli avvisi della segreteria a tutte le famiglie stanno in cima: sono
-           pochi, valgono per tutti e di solito hanno una data (una chiusura, un
-           orario nuovo) che non deve perdersi in mezzo alle note sui figli. -->
-      <section v-if="avvisi.length > 0" class="space-y-3" aria-labelledby="titolo-avvisi">
-        <h3 id="titolo-avvisi" class="text-sm font-semibold text-slate-500">Avvisi a tutte le famiglie</h3>
-        <UCard v-for="avviso in avvisi" :key="avviso.id">
-          <template #header>
-            <div class="flex items-center justify-between gap-2">
-              <div class="flex items-center gap-2">
-                <div class="w-7 h-7 rounded-full bg-tfn-100 flex items-center justify-center">
-                  <span class="text-xs font-semibold text-tfn-700">S</span>
-                </div>
-                <span class="text-sm font-medium text-slate-800">Segreteria</span>
-                <!-- "Nuova" finché non l'hai vista: questa pagina la segna come
-                     letta appena aperta, ma il bollino resta fino alla prossima visita -->
-                <UBadge v-if="!avviso.lettaAt" color="primary" variant="solid" size="xs">Nuova</UBadge>
-              </div>
-              <span class="text-xs text-slate-400">{{ formatDate(avviso.createdAt) }}</span>
-            </div>
-          </template>
-          <!-- La foto in cima, intera (mai ritagliata), poi titolo e testo, come nell'email.
-               Dal suo indirizzo: così l'elenco non si porta dietro tutte le foto -->
-          <img v-if="avviso.conImmagine" :src="`/api/immagini/comunicazioni/${avviso.id}`" alt="" loading="lazy" class="mb-3 w-full h-auto rounded-lg" />
-          <p class="text-sm font-semibold text-slate-800">{{ avviso.titolo }}</p>
-          <p class="mt-1 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{{ avviso.testo }}</p>
-        </UCard>
-      </section>
-
-      <h3 v-if="avvisi.length > 0 && notes.length > 0" class="text-sm font-semibold text-slate-500 pt-2">Sui tuoi figli</h3>
-
-      <UCard
-        v-for="nota in notes"
-        :key="nota.id"
-        class="space-y-2"
-      >
-        <template #header>
-          <div class="flex items-center justify-between">
+      <template v-else>
+        <!-- Gli avvisi della segreteria a tutte le famiglie stanno in cima: sono pochi,
+             valgono per tutti e di solito hanno una data che non deve perdersi. -->
+        <template v-if="avvisi.length > 0">
+          <h2 class="mt-2 text-[13px] font-bold text-pf-grigio uppercase tracking-wide">Avvisi a tutte le famiglie</h2>
+          <article v-for="avviso in avvisi" :key="avviso.id" class="bg-white rounded-[22px] p-4 flex flex-col gap-1.5 pf-ombra">
             <div class="flex items-center gap-2">
-              <div class="w-7 h-7 rounded-full bg-tfn-100 flex items-center justify-center">
-                <span class="text-xs font-semibold text-tfn-700">{{ iniziale(nota) }}</span>
-              </div>
-              <!-- La firma arriva già decisa dal server: "Segreteria" per le note
-                   scritte da un tutor, il nome vero se a scrivere è stato un
-                   responsabile. Qui non si sceglie niente, si stampa e basta. -->
-              <span class="text-sm font-medium text-slate-800">{{ firma(nota) }}</span>
+              <!-- "Nuova" finché non l'hai vista: aprire la pagina la segna letta, ma il bollino resta fino alla prossima visita -->
+              <PortaleStato v-if="!avviso.lettaAt" tono="rosso">Nuova</PortaleStato>
+              <span class="text-xs text-pf-grigio">Segreteria · {{ formatDate(avviso.createdAt) }}</span>
             </div>
-            <div class="flex items-center gap-2">
-              <span v-if="nota.student" class="text-xs text-slate-500">
-                {{ nota.student.firstName }} {{ nota.student.lastName }}
-              </span>
-              <!-- La data è quella in cui la comunicazione è arrivata a te, non
-                   quella in cui è stata scritta: l'elenco è ordinato così, e due
-                   criteri diversi farebbero sembrare le date fuori ordine. -->
-              <span class="text-xs text-slate-400">
-                {{ formatDate(nota.approvataAt ?? nota.createdAt) }}
-              </span>
-            </div>
-          </div>
+            <!-- La foto in cima, intera (mai ritagliata), come nell'email -->
+            <img v-if="avviso.conImmagine" :src="`/api/immagini/comunicazioni/${avviso.id}`" alt="" loading="lazy" class="w-full h-auto rounded-xl" />
+            <h3 class="font-semibold text-base">{{ avviso.titolo }}</h3>
+            <p class="text-sm leading-5 text-pf-grigio-scuro whitespace-pre-wrap">{{ avviso.testo }}</p>
+          </article>
         </template>
 
-        <p class="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-          {{ nota.contenuto }}
-        </p>
-      </UCard>
-    </template>
+        <template v-if="notes.length > 0">
+          <h2 class="mt-2 text-[13px] font-bold text-pf-grigio uppercase tracking-wide">Sui tuoi ragazzi</h2>
+          <article v-for="nota in notes" :key="nota.id" class="bg-white rounded-[22px] p-4 flex gap-3 items-start pf-ombra">
+            <PortaleAvatar :nome="nota.student?.firstName" :indice="indiceDi(nota.student?.firstName)" misura="ico" />
+            <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+              <!-- La firma arriva già decisa dal server: "Segreteria" per le note scritte da
+                   un tutor, il nome vero se a scrivere è stato un responsabile. -->
+              <p class="text-[13px] text-pf-grigio">
+                <strong class="text-pf-testo">{{ firma(nota) }}</strong> su {{ nota.student?.firstName }}
+                · {{ formatDate(nota.approvataAt ?? nota.createdAt) }}
+              </p>
+              <p class="px-3 py-2.5 rounded-[14px] bg-pf-fondo text-[15px] leading-[21px] whitespace-pre-wrap">{{ nota.contenuto }}</p>
+            </div>
+          </article>
+        </template>
+      </template>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+// L'ARCHIVIO di note e comunicazioni (il genitore). Non ha una bozza v6: le novità ora
+// arrivano nelle Notifiche e nella Home, qui resta tutto lo storico. Ci portano le email
+// ("leggi nel portale") e le notifiche, per questo l'indirizzo non cambia.
 definePageMeta({
   layout: 'portal',
   middleware: ['portal-only'],
 })
-useHead({ title: 'Comunicazioni — Portale Famiglie' })
+useHead({ title: 'Note e comunicazioni — Portale Famiglie' })
 
 // Le note didattiche sono riservate alla famiglia: l'account studente non le vede
 const { user: sessionUser } = useUserSession()
@@ -110,8 +69,8 @@ if (sessionUser.value?.role === 'STUDENTE') {
   await navigateTo('/portale', { replace: true })
 }
 
-const { data, pending } = useLazyFetch('/api/portal/notes')
-const notes = computed(() => (data.value as any[]) ?? [])
+const { data, pending } = useLazyFetch<any[]>('/api/portal/notes')
+const notes = computed(() => data.value ?? [])
 
 // Avvisi della segreteria a tutte le famiglie. Qui il caricamento si ASPETTA
 // (await, non lazy) apposta: la pagina appena montata li segna come letti, e se
@@ -120,34 +79,24 @@ const { data: avvisiData } = await useFetch('/api/portal/comunicazioni')
 const avvisi = computed(() => avvisiData.value ?? [])
 const totale = computed(() => notes.value.length + avvisi.value.length)
 
-// Visita registrata: azzera il badge "note non lette" in nav (solo genitori)
+const { data: studentsData } = useLazyFetch<{ firstName: string }[]>('/api/portal/students')
+const indiceDi = (nome?: string) => Math.max(0, (studentsData.value ?? []).findIndex((s) => s.firstName === nome))
+
+// Visita registrata: comunicazioni e note risultano lette (solo genitori)
 onMounted(async () => {
   if (sessionUser.value?.role !== 'GENITORE') return
   try {
     await $fetch('/api/portal/notes-seen', { method: 'POST' })
-    useState<number>('portal-note-unseen', () => 0).value = 0
-  } catch { /* badge non azzerato: nessun impatto funzionale */ }
+  } catch { /* nessun impatto per la famiglia */ }
 })
 
-// Chi firma la comunicazione. Il server manda già il nome giusto ("Segreteria"
-// oppure nome e cognome del responsabile): qui non si decide nulla, si legge.
+// Chi firma la comunicazione: il server manda già il nome giusto, qui si legge e basta
 function firma(nota: any): string {
   const nome = `${nota?.author?.firstName ?? ''} ${nota?.author?.lastName ?? ''}`.trim()
   return nome || 'Segreteria'
 }
 
-// L'iniziale nel pallino colorato, presa dalla firma che si vede accanto: così
-// le due cose non possono mai dire due lettere diverse.
-function iniziale(nota: any): string {
-  return firma(nota).charAt(0).toUpperCase()
-}
-
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('it-IT', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
+  return new Date(dateStr).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 </script>
-
