@@ -29,7 +29,6 @@ export async function statoCardStudenti(studentIds: string[], senzaPacchetto?: s
       importoResiduo: packages.importoResiduo,
       nome:           packages.nome,
       nomeStandard:   standardPackages.nome,
-      stati:          packages.stati,
     }).from(packages)
       .leftJoin(standardPackages, eq(standardPackages.id, packages.standardPackageId))
       .where(inArray(packages.studentId, studentIds)),
@@ -58,7 +57,7 @@ export async function statoCardStudenti(studentIds: string[], senzaPacchetto?: s
       importoPagato:  p.importoPagato,
       importoResiduo: p.importoResiduo,
       ultimaLezione:  ultimaPer.get(p.id) ?? null,
-      proBono:        (eNomeProBono(p.nome) || eNomeProBono(p.nomeStandard)) && !p.stati.includes('CHIUSO'),
+      proBono:        eNomeProBono(p.nome) || eNomeProBono(p.nomeStandard),
     })
   }
   for (const [id, lista] of perAlunno) esito.set(id, calcolaStatoCard(lista, oggi, archiviati.has(id)))
