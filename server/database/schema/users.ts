@@ -56,9 +56,9 @@ export const users = pgTable('users', {
   codiceCard: varchar('codice_card', { length: 9 }).unique(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => ({
-  emailIdx: uniqueIndex('users_email_idx').on(t.email),
-}))
+  // Niente indice a parte sull'email: il .unique() ne crea già uno (users_email_unique),
+  // l'altro era un doppione tolto dalla migrazione 0042.
+})
 
 export const tutorProfiles = pgTable('tutor_profiles', {
   id:           text('id').primaryKey().$defaultFn(cuid),

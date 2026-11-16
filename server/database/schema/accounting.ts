@@ -77,7 +77,8 @@ export const accountingEntries = pgTable('accounting_entries', {
   tipoDataIdx:    index('acc_tipo_data_idx').on(t.tipo, t.data),
   categoriaIdx:   index('acc_categoria_idx').on(t.categoria),
   metodoIdx:      index('acc_metodo_idx').on(t.metodoPagamento),
-  tutorPaymentIdx:  index('acc_tutor_payment_idx').on(t.tutorPaymentId),
+  // tutorPaymentId non ha un indice qui: il suo .unique() ne crea già uno
+  // (accounting_entries_tutor_payment_id_unique). Il doppione l'ha tolto la 0042.
   reimbursementIdx: index('acc_reimbursement_idx').on(t.reimbursementId),
   // La card "Bolli da versare" cerca sempre la stessa cosa: categoria bollo +
   // versamento ancora vuoto. Con questo indice la risposta resta immediata anche

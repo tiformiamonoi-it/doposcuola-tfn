@@ -295,6 +295,13 @@
       "when": 1794852681381,
       "tag": "0041_conscious_starfox",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1794858506167,
+      "tag": "0042_luxuriant_viper",
+      "breakpoints": true
     }
   ]
 }

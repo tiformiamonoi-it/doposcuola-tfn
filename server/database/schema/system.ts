@@ -5,13 +5,12 @@ import type { TipoEmail, MotivoEmail, EsitoRegistroEmail } from '../../../shared
 
 export const closureDates = pgTable('closure_dates', {
   id:          text('id').primaryKey().$defaultFn(cuid),
-  // Giorno civile 'YYYY-MM-DD' (convenzione di progetto: mai timestamptz per le date-giorno)
+  // Giorno civile 'YYYY-MM-DD' (convenzione di progetto: mai timestamptz per le date-giorno).
+  // Il .unique() porta già il suo indice (closure_dates_date_unique): niente indice a parte.
   date:        date('date').notNull().unique(),
   description: text('description'),
   createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => ({
-  dateIdx: index('closure_date_idx').on(t.date),
-}))
+})
 
 export const systemConfigs = pgTable('system_configs', {
   id:          text('id').primaryKey().$defaultFn(cuid),
