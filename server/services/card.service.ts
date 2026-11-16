@@ -2,10 +2,11 @@
 // alla regola unica in shared/card-studente.ts. Qui non si decide niente.
 import { and, eq, inArray, lte, max } from 'drizzle-orm'
 import { db } from '../database/client'
-import { lessons, lessonStudents, packages, standardPackages, students } from '../database/schema'
+import { lessons, lessonStudents, packages, standardPackages, studentParents, students, users } from '../database/schema'
 import { nonTrovato } from '../utils/http-error'
 import { oggiRomeStr, romeDateStr } from '../utils/tutor-time-window'
-import { calcolaStatoCard, eNomeProBono, generaCodiceCard, type MotivoDisattivazioneCard, type PacchettoPerCard, type StatoCard } from '#shared/card-studente'
+import { getLinkedStudentIds } from '../utils/portal'
+import { calcolaStatoCard, calcolaStatoCardGenitore, eNomeProBono, generaCodiceCard, type MotivoDisattivazioneCard, type PacchettoPerCard, type StatoCard } from '#shared/card-studente'
 
 // Stato della card di più alunni in quattro letture, qualunque sia il loro numero.
 // Si leggono TUTTI i pacchetti, anche chiusi e vecchi: un mensile saldato e appena
@@ -107,31 +108,93 @@ export async function getPortalCards(studentIds: string[], perStudente: boolean)
   })
 }
 
+// La card del GENITORE nel portale: solo la sua, mai quella dell'altro genitore (si legge
+// per id della sessione). Stessa forma delle card dei figli, così la pagina la mette in
+// testa all'elenco. Lo stato viene dai figli (calcolaStatoCardGenitore), senza motivo e
+// senza "in margine": il perché lo racconta la card di ciascun figlio.
+export async function getCardGenitore(userId: string) {
+  const [[g], figli] = await Promise.all([
+    db.select({ firstName: users.firstName, lastName: users.lastName, codiceCard: users.codiceCard })
+      .from(users).where(and(eq(users.id, userId), eq(users.role, 'GENITORE'))).limit(1),
+    getLinkedStudentIds(userId),
+  ])
+  if (!g?.codiceCard) return null
+  const stato = calcolaStatoCardGenitore([...(await statoCardStudenti(figli)).values()])
+  return {
+    tipo: 'GENITORE' as const, id: userId, firstName: g.firstName, lastName: g.lastName,
+    classe: null, scuola: null, codiceCard: g.codiceCard, ...stato, inMargine: false, motivo: null,
+  }
+}
+
 // Verifica del negozio. Risponde SOLO se la card esiste ED è attiva: codice inesistente
 // e card sospesa danno lo stesso null, così da fuori non si capisce se un codice esiste.
-// Escono il nome e l'iniziale del cognome, nient'altro (regolamento, art. 6.1).
+// Escono il nome e l'iniziale del cognome, nient'altro (regolamento, art. 6.1), più se è
+// la card di uno studente o di un genitore.
+//
+// TEMPI UGUALI qualunque sia l'esito: si cerca SEMPRE in tutte e due le tabelle insieme,
+// e lo stato si calcola SEMPRE, anche per un codice inesistente (su un id che non c'è).
+// Altrimenti la risposta più rapida direbbe "codice mai dato", quella più lenta "codice di
+// qualcuno, card sospesa", e la differenza tra alunno e genitore si sentirebbe nei tempi.
+// Il genitore porta con sé i figli (una riga per figlio) nella stessa lettura.
 export async function verificaCard(codice: string) {
-  const [s] = await db.select({ id: students.id, firstName: students.firstName, lastName: students.lastName })
-    .from(students).where(eq(students.codiceCard, codice)).limit(1)
-  // Lo stato si calcola ANCHE per un codice inesistente (su un id che non c'è): stesse
-  // letture, stessi tempi. Altrimenti la risposta più rapida direbbe "codice mai dato",
-  // quella più lenta "codice di qualcuno, card sospesa".
-  const id = s?.id ?? ''
-  const stato = (await statoCardStudenti([id])).get(id)!
-  if (!s || !stato.attiva) return null
-  return { nome: s.firstName, inizialeCognome: s.lastName.charAt(0).toUpperCase(), validaFino: stato.validaFino }
+  const [[s], righeGenitore] = await Promise.all([
+    db.select({ id: students.id, firstName: students.firstName, lastName: students.lastName })
+      .from(students).where(eq(students.codiceCard, codice)).limit(1),
+    // Solo un account GENITORE attivo: un account disattivato (o anonimizzato) non ha card
+    db.select({ firstName: users.firstName, lastName: users.lastName, figlioId: studentParents.studentId })
+      .from(users)
+      .leftJoin(studentParents, eq(studentParents.parentUserId, users.id))
+      .where(and(eq(users.codiceCard, codice), eq(users.role, 'GENITORE'), eq(users.active, true))),
+  ])
+  const g = righeGenitore[0]
+  const figli = righeGenitore.flatMap((r) => r.figlioId ? [r.figlioId] : [])
+  const ids = s ? [s.id] : figli.length > 0 ? figli : ['']
+  const stati = await statoCardStudenti(ids)
+
+  const chi = s ?? g
+  const stato = s ? stati.get(s.id)! : calcolaStatoCardGenitore(figli.map((id) => stati.get(id)!))
+  if (!chi || !stato.attiva) return null
+  return {
+    tipo: s ? 'STUDENTE' as const : 'GENITORE' as const,
+    nome: chi.firstName, inizialeCognome: chi.lastName.charAt(0).toUpperCase(), validaFino: stato.validaFino,
+  }
+}
+
+// Un codice che non hanno né un alunno né un genitore: la pagina del negozio cerca in
+// tutte e due le tabelle, e uno stesso codice porterebbe a due persone. I vincoli unici
+// del database valgono una tabella per volta, quindi il controllo incrociato sta qui.
+// ponytail: gli alunni nuovi prendono il codice da $defaultFn (schema/students.ts) senza
+// guardare i genitori: 1 su ~10^9 con mille card, se mai servisse passarli da qui.
+export async function codiceCardLibero(): Promise<string> {
+  for (;;) {
+    const codice = generaCodiceCard()
+    const [alunni, genitori] = await Promise.all([
+      db.select({ id: students.id }).from(students).where(eq(students.codiceCard, codice)).limit(1),
+      db.select({ id: users.id }).from(users).where(eq(users.codiceCard, codice)).limit(1),
+    ])
+    if (alunni.length === 0 && genitori.length === 0) return codice
+  }
 }
 
 // "Cambia codice" (card persa o girata ad altri): il vecchio smette di valere nello
 // stesso istante, perché la verifica cerca solo il codice scritto qui.
-// ponytail: nessun nuovo tentativo se il codice estratto esiste già (1 su ~10^9 con
-// mille alunni): la scrittura fallisce sul vincolo unico e basta ripremere il tasto.
 export async function cambiaCodiceCard(studentId: string) {
   const [aggiornato] = await db.update(students)
-    .set({ codiceCard: generaCodiceCard(), updatedAt: new Date() })
+    .set({ codiceCard: await codiceCardLibero(), updatedAt: new Date() })
     .where(eq(students.id, studentId))
     .returning({ codiceCard: students.codiceCard })
   if (!aggiornato) throw nonTrovato('Studente non trovato')
+  return aggiornato
+}
+
+// "Cambia codice" della card del GENITORE, dalla scheda dell'alunno in segreteria
+// (Credenziali Portale Famiglie). Solo su un account GENITORE.
+export async function cambiaCodiceCardGenitore(userId: string) {
+  const [aggiornato] = await db.update(users)
+    .set({ codiceCard: await codiceCardLibero(), updatedAt: new Date() })
+    .where(and(eq(users.id, userId), eq(users.role, 'GENITORE')))
+    .returning({ codiceCard: users.codiceCard })
+  if (!aggiornato) throw nonTrovato('Genitore non trovato')
   return aggiornato
 }
 

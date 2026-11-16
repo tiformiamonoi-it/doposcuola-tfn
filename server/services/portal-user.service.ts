@@ -4,6 +4,7 @@ import { conflitto, nonTrovato } from '../utils/http-error'
 import { users, students, studentParents } from '../database/schema'
 import { annullaLinkAperti, inviaInvitoPassword, inviaInvitoPasswordAUtente, passwordSegnapostoHash } from '../utils/password-token'
 import { riepilogoSeraleAttivoGlobalmente } from './note-digest.service'
+import { codiceCardLibero } from './card.service'
 import { eMinoreDi14 } from '#shared/eta'
 import type { CreatePortalAccessInput } from '#shared/schemas/portal-user.schema'
 
@@ -34,7 +35,9 @@ export async function getPortalAccess(studentId: string) {
     orderBy: [asc(studentParents.createdAt)],
     with: {
       parentUser: {
-        columns: { id: true, email: true, firstName: true, lastName: true, active: true },
+        // codiceCard: per "Cambia codice" della card del genitore. Questa risposta la ricevono
+        // solo ADMIN e SUPER_TUTOR (portal-access.get.ts), mai i TUTOR.
+        columns: { id: true, email: true, firstName: true, lastName: true, active: true, codiceCard: true },
       },
     },
   })
@@ -59,6 +62,7 @@ export async function getPortalAccess(studentId: string) {
     firstName: link.parentUser.firstName,
     lastName:  link.parentUser.lastName,
     active:    link.parentUser.active,
+    codiceCard: link.parentUser.codiceCard,
     numeroFigli: figliPerGenitore.get(link.parentUser.id) ?? 1,
   }))
 
@@ -144,6 +148,8 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
   // Nessuno conosce questa password, nemmeno la segreteria: l'account resta
   // inutilizzabile finché il genitore non usa il link e ne sceglie una sua.
   const hashedPassword = await passwordSegnapostoHash()
+  // La card del genitore nasce con l'account (gli altri ruoli non ne hanno una)
+  const codiceCard = await codiceCardLibero()
 
   let created
   try {
@@ -155,6 +161,7 @@ export async function createPortalAccount(input: CreatePortalAccessInput, force 
         lastName:  input.lastName,
         role:      'GENITORE',
         active:    true,
+        codiceCard,
         // Recapito e data di nascita del genitore: per il secondo genitore questo
         // è l'unico posto dove possono stare (students ha una sola riga "genitore")
         phone:       input.phone ?? null,

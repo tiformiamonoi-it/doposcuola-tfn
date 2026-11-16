@@ -138,6 +138,20 @@ export function calcolaStatoCard(pacchetti: PacchettoPerCard[], oggi: string, ar
   return { attiva, validaFino: fino, motivo: attiva && !inMargine ? null : motivo, inMargine }
 }
 
+// LA CARD DEL GENITORE (deciso da Alessandro il 16/11/2026): ogni genitore registrato al
+// portale ha la sua card, che segue quelle dei figli, ognuna già calcolata con la regola qui
+// sopra (archiviati, disattivate a mano, Pro Bono e debiti compresi).
+// - Attiva se almeno un figlio ha la card attiva, spenta quando nessuno ce l'ha.
+// - "Valida fino al" è la data più lontana tra i figli attivi; se uno di loro ha la card
+//   senza data (Pro Bono, pacchetto a ore senza scadenza), è senza data anche questa.
+// Niente motivo: il perché sta sulla card di ciascun figlio. Niente "disattiva" a parte.
+export function calcolaStatoCardGenitore(figli: StatoCard[]): { attiva: boolean; validaFino: string | null } {
+  const attivi = figli.filter((f) => f.attiva)
+  if (attivi.length === 0) return { attiva: false, validaFino: null }
+  if (attivi.some((f) => f.validaFino === null)) return { attiva: true, validaFino: null }
+  return { attiva: true, validaFino: attivi.map((f) => f.validaFino!).sort().at(-1)! }
+}
+
 // ─────────────────────────────────────────────
 // IL CODICE DELLA CARD — es. K7QF-29XM
 //
@@ -145,7 +159,9 @@ export function calcolaStatoCard(pacchetti: PacchettoPerCard[], oggi: string, ar
 // vedrebbe il nome di un altro ragazzo. Alfabeto senza i caratteri che si confondono
 // a voce o su uno schermo piccolo (0/O, 1/I/L). 31^8 ≈ 850 miliardi di combinazioni:
 // insieme al limite di tentativi della pagina del negozio, provarli a caso è inutile.
-// Lo stesso alfabeto è nella migrazione che ha dato il codice agli alunni già in archivio.
+// Lo stesso alfabeto è nelle migrazioni che hanno dato il codice agli alunni già in
+// archivio (0039) e ai genitori già registrati (0041). Alunni e genitori pescano dallo
+// stesso insieme: un codice non può mai essere di tutti e due (vedi codiceCardLibero).
 // ─────────────────────────────────────────────
 export const ALFABETO_CODICE_CARD = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 

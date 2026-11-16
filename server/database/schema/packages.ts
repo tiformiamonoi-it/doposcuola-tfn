@@ -55,6 +55,11 @@ export const packages = pgTable('packages', {
   // Dedup avvisi email al genitore (azzerati da ricarica/modifica ore o scadenza)
   avvisoOreInviatoAt:      timestamp('avviso_ore_inviato_at', { withTimezone: true }),
   avvisoScadenzaInviatoAt: timestamp('avviso_scadenza_inviato_at', { withTimezone: true }),
+  // DA QUANDO il pacchetto ha le "ore quasi finite" (motiviRinnovo in package.service.ts).
+  // La scrive solo il cron delle 06 UTC, con le email accese o spente: la mette quando il
+  // pacchetto ci entra e la svuota quando ne esce (ricarica, modifica). Serve alla notifica
+  // F del portale, che con updated_at tornava "nuova" a ogni lezione.
+  oreQuasiFiniteDal:       timestamp('ore_quasi_finite_dal', { withTimezone: true }),
 
   note:      text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

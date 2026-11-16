@@ -48,6 +48,12 @@ export const users = pgTable('users', {
   // Portale famiglia: "notifiche viste fino a" (blocco 3). Tutto ciò che è più vecchio
   // conta come letto; "Segna tutte come lette" la sposta ad adesso. Vuoto = nessuna vista.
   notificheVisteAt: timestamp('notifiche_viste_at', { withTimezone: true }),
+  // CARD DEL GENITORE: il codice scritto sotto il QR, come students.codiceCard e dallo
+  // stesso insieme (mai uguale a quello di un alunno, vedi codiceCardLibero in
+  // card.service.ts). Vuoto per staff e alunni, che qui non hanno card: per questo
+  // niente NOT NULL. Lo dà l'app alla creazione del genitore (createPortalAccount);
+  // i genitori già registrati l'hanno ricevuto dalla migrazione 0041.
+  codiceCard: varchar('codice_card', { length: 9 }).unique(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
