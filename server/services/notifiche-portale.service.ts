@@ -73,7 +73,7 @@ export async function notifichePortale(user: { id: string; role: string }) {
   const daQuando = new Date(Date.now() - FINESTRA_GIORNI * 24 * 60 * 60 * 1000)
   const conAlunni = ids.length > 0
 
-  const [utente, anagrafiche, note, lezioniDomani, comunicazioni, card, pacchetti, convenzioniOggi, conPagamenti] = await Promise.all([
+  const [utente, anagrafiche, note, domaniConMaterie, comunicazioni, card, pacchetti, convenzioniOggi, pagamenti] = await Promise.all([
     db.select({ viste: users.notificheVisteAt }).from(users).where(eq(users.id, user.id)).limit(1),
     conAlunni ? db.select({ id: students.id, firstName: students.firstName, cardDisattivataAt: students.cardDisattivataAt }).from(students).where(inArray(students.id, ids)) : [],
     // A solo al genitore: oggi le note dei tutor le legge lui, non l'alunno. Mostrarle
@@ -82,6 +82,8 @@ export async function notifichePortale(user: { id: string; role: string }) {
     // B: le prenotazioni di DOMANI (giorno italiano). Il giorno di una prenotazione è la
     // data UTC di requestedDate (il portale salva le 12:00Z), come in matching/[date].get.ts.
     // Sono già confermate da quando nascono: CONFIRMED.
+    // Le materie si leggono subito dopo, DENTRO questo ramo: così aspettano solo le
+    // prenotazioni e non tutte le altre letture (prima era un viaggio in più in coda).
     conAlunni ? db.select({ id: bookings.id, studentId: bookings.studentId, createdAt: bookings.createdAt })
       .from(bookings)
       .where(and(
@@ -89,7 +91,12 @@ export async function notifichePortale(user: { id: string; role: string }) {
         eq(bookings.status, 'CONFIRMED'),
         gte(bookings.requestedDate, new Date(`${domani}T00:00:00.000Z`)),
         lte(bookings.requestedDate, new Date(`${domani}T23:59:59.999Z`)),
-      )) : [],
+      ))
+      .then(async (righe) => ({
+        righe,
+        materie: righe.length === 0 ? [] : await db.select({ bookingId: bookingSubjects.bookingId, name: bookingSubjects.name })
+          .from(bookingSubjects).where(inArray(bookingSubjects.bookingId, righe.map((b) => b.id))),
+      })) : { righe: [], materie: [] },
     comunicazioniDelGenitore(user.id),
     statoCardStudenti(ids),
     // F (solo genitore): i pacchetti che possono essere "da rinnovare"
@@ -108,8 +115,17 @@ export async function notifichePortale(user: { id: string; role: string }) {
     )) : [],
     // G: solo quelle ancora valide (una scaduta non c'è più nel portale), senza foto
     convenzioniValide(oggi),
-    // H (solo genitore), e solo se la sezione pagamenti è accesa in Impostazioni
-    conAlunni && !perStudente ? pagamentiPortaleAttivi() : false,
+    // H (solo genitore), e solo se la sezione pagamenti è accesa in Impostazioni.
+    // Come per le materie: i pagamenti si leggono appena si sa che la sezione è accesa,
+    // senza aspettare le altre letture. Sezione spenta = nessuna lettura dei pagamenti.
+    conAlunni && !perStudente
+      ? pagamentiPortaleAttivi().then((accesi) => accesi
+        ? db.select({ id: payments.id, createdAt: payments.createdAt, studentId: packages.studentId, pacchetto: packages.nome })
+          .from(payments)
+          .innerJoin(packages, eq(packages.id, payments.packageId))
+          .where(and(inArray(packages.studentId, ids), gte(payments.createdAt, daQuando)))
+        : [])
+      : [],
   ])
 
   const nome = new Map(anagrafiche.map((s) => [s.id, s.firstName]))
@@ -132,19 +148,16 @@ export async function notifichePortale(user: { id: string; role: string }) {
   // B. Domani c'è lezione. DATA: la mezzanotte di oggi, perché la voce "nasce" quando la
   // lezione diventa di domani; se la prenotazione è stata fatta oggi, dal momento della
   // prenotazione (altrimenti chi ha già segnato tutto come letto stamattina non la vedrebbe nuova).
-  if (lezioniDomani.length > 0) {
-    const materie = await db.select({ bookingId: bookingSubjects.bookingId, name: bookingSubjects.name })
-      .from(bookingSubjects).where(inArray(bookingSubjects.bookingId, lezioniDomani.map((b) => b.id)))
-    for (const b of lezioniDomani) {
-      const queste = materie.filter((m) => m.bookingId === b.id).map((m) => m.name)
-      voci.push({
-        id: `lezione:${b.id}`, categoria: 'LEZIONI',
-        titolo: 'Domani c\'è lezione',
-        testo: [nome.get(b.studentId!), giornoEsteso(domani, true), queste.join(', ')].filter(Boolean).join(' · '),
-        data: piuRecente(inizioOggi, b.createdAt),
-        link: '/portale/lezioni',
-      })
-    }
+  const { righe: lezioniDomani, materie } = domaniConMaterie
+  for (const b of lezioniDomani) {
+    const queste = materie.filter((m) => m.bookingId === b.id).map((m) => m.name)
+    voci.push({
+      id: `lezione:${b.id}`, categoria: 'LEZIONI',
+      titolo: 'Domani c\'è lezione',
+      testo: [nome.get(b.studentId!), giornoEsteso(domani, true), queste.join(', ')].filter(Boolean).join(' · '),
+      data: piuRecente(inizioOggi, b.createdAt),
+      link: '/portale/lezioni',
+    })
   }
 
   // C. Le comunicazioni della segreteria ricevute da questo utente, da quando sono partite
@@ -249,20 +262,14 @@ export async function notifichePortale(user: { id: string; role: string }) {
 
   // H. I pagamenti registrati dalla segreteria (solo genitore, solo a sezione pagamenti accesa),
   // dal momento in cui sono stati registrati. Nessun importo: basta sapere che è arrivato.
-  if (conPagamenti) {
-    const righe = await db.select({ id: payments.id, createdAt: payments.createdAt, studentId: packages.studentId, pacchetto: packages.nome })
-      .from(payments)
-      .innerJoin(packages, eq(packages.id, payments.packageId))
-      .where(and(inArray(packages.studentId, ids), gte(payments.createdAt, daQuando)))
-    for (const r of righe) {
-      voci.push({
-        id: `pagamento:${r.id}`, categoria: 'AVVISI',
-        titolo: 'Pagamento registrato',
-        testo: `Abbiamo registrato un pagamento per ${nome.get(r.studentId) ?? ''} (${r.pacchetto}).`,
-        data: r.createdAt,
-        link: '/portale/pagamenti',
-      })
-    }
+  for (const r of pagamenti) {
+    voci.push({
+      id: `pagamento:${r.id}`, categoria: 'AVVISI',
+      titolo: 'Pagamento registrato',
+      testo: `Abbiamo registrato un pagamento per ${nome.get(r.studentId) ?? ''} (${r.pacchetto}).`,
+      data: r.createdAt,
+      link: '/portale/pagamenti',
+    })
   }
 
   const viste = utente[0]?.viste ?? null
