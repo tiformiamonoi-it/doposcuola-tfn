@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { db } from '../../../../../database/client'
 import { studentParents } from '../../../../../database/schema'
 import { correggiEmailAccount, inviaLinkPassword } from '../../../../../services/portal-user.service'
+import { cambiaCodiceCardGenitore } from '../../../../../services/card.service'
 import { toHttpError } from '../../../../../utils/http-error'
 
 const PutSchema = z.discriminatedUnion('action', [
@@ -16,11 +17,14 @@ const PutSchema = z.discriminatedUnion('action', [
     email:     z.string().trim().email('Email non valida'),
     inviaLink: z.boolean(),
   }),
+  // "Cambia codice" della card del genitore (card persa o girata ad altri)
+  z.object({ action: z.literal('cambia-codice-card') }),
 ])
 
 // PUT /api/admin/students/:id/portal-access/:parentUserId
 // Azioni su UN singolo genitore collegato all'alunno: manda il link "scegli la
-// tua password", oppure correggi la sua email di accesso.
+// tua password", correggi la sua email di accesso, oppure cambia il codice della sua card.
+// Solo ADMIN/SUPER_TUTOR: anche il codice della card non arriva mai ai TUTOR.
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
 
@@ -60,6 +64,10 @@ export default defineEventHandler(async (event) => {
         nuovaEmail: result.data.email,
         inviaLink:  result.data.inviaLink,
       })
+    }
+
+    if (result.data.action === 'cambia-codice-card') {
+      return await cambiaCodiceCardGenitore(parentUserId)
     }
 
     // motivoEmail/dettaglioEmail valorizzati solo se l'email non è partita

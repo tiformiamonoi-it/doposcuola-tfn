@@ -632,11 +632,16 @@
                           <UBadge v-if="!g.active" color="neutral" variant="subtle" size="xs">Account disattivato</UBadge>
                         </div>
                         <div class="text-sm text-slate-500 mt-0.5 break-all">{{ g.email }}</div>
+                        <!-- La card del genitore (attiva finché un figlio ha la card attiva): qui solo il codice -->
+                        <div v-if="g.codiceCard" class="text-xs text-slate-500 mt-0.5">
+                          Codice card genitore <span class="font-mono tracking-wider text-slate-700">{{ g.codiceCard }}</span>
+                        </div>
                       </div>
                       <!-- flex-wrap: da telefono tre bottoni in fila non ci stanno, vanno a capo -->
                       <div class="flex flex-wrap gap-2">
                         <UButton variant="outline" size="xs" icon="i-heroicons-key" :loading="resettandoId === g.id" @click="reimpostaPassword(g.id, g.email, g.firstName)">Invia link password</UButton>
                         <UButton variant="outline" size="xs" icon="i-heroicons-pencil-square" :aria-label="`Correggi email di ${g.firstName} ${g.lastName}`" @click="apriCorreggiEmailGenitore(g)">Correggi email</UButton>
+                        <UButton v-if="g.codiceCard" variant="outline" size="xs" icon="i-heroicons-arrow-path" :loading="cambiandoCodiceGenitoreId === g.id" :aria-label="`Cambia codice della card di ${g.firstName} ${g.lastName}`" @click="cambiaCodiceCardGenitore(g)">Cambia codice</UButton>
                         <UButton variant="outline" color="error" size="xs" icon="i-heroicons-trash" :loading="rimuovendoId === g.id" @click="eliminaAccessoPortale(g.id, g.email)">Rimuovi</UButton>
                       </div>
                     </div>
@@ -1562,6 +1567,29 @@ function cambiaCodiceCard() {
         toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile cambiare il codice', color: 'error' })
       } finally {
         cambiandoCodice.value = false
+      }
+    }
+  )
+}
+
+// "Cambia codice" della card del GENITORE (Credenziali Portale Famiglie). Stesso effetto di
+// quella dell'alunno: il vecchio QR smette subito di funzionare. Vale per tutti i suoi figli,
+// perché la card è della persona.
+const cambiandoCodiceGenitoreId = ref<string | null>(null)
+
+function cambiaCodiceCardGenitore(g: { id: string; firstName: string; lastName: string }) {
+  chiediConferma(
+    { title: `Cambiare il codice della card di ${g.firstName} ${g.lastName}?`, description: 'Il codice attuale e il suo QR smettono subito di funzionare. Il genitore vedrà il codice nuovo nel portale.', confirmLabel: 'Cambia codice', confirmColor: 'warning' },
+    async () => {
+      cambiandoCodiceGenitoreId.value = g.id
+      try {
+        await $fetch(`/api/admin/students/${id}/portal-access/${g.id}`, { method: 'PUT', body: { action: 'cambia-codice-card' } })
+        toast.add({ title: 'Codice della card del genitore cambiato', color: 'success', icon: 'i-heroicons-check-circle' })
+        await refreshPortal()
+      } catch (err: any) {
+        toast.add({ title: 'Errore', description: err?.data?.statusMessage ?? 'Impossibile cambiare il codice', color: 'error' })
+      } finally {
+        cambiandoCodiceGenitoreId.value = null
       }
     }
   )
