@@ -5,7 +5,8 @@
 // convenzioni, pagamenti). Non c'è niente da creare, consegnare o cancellare.
 //
 // "LETTE" è una data sola per persona, users.notifiche_viste_at: ogni voce più
-// vecchia di quella data è letta, "Segna tutte come lette" la porta ad adesso.
+// vecchia di quella data è letta. La portano ad adesso l'apertura della pagina Notifiche
+// e "Segna tutte come lette"; toccare una voce dalla Home la porta fino a quella voce.
 // Per questo ogni voce ha UNA data, e per le voci calcolate (B, D, E, F) bisogna
 // sceglierne una sensata: è spiegato voce per voce qui sotto.
 //
@@ -20,7 +21,7 @@
 // MAI IL NOME DEL TUTOR (deciso): la voce di una nota dice di chi parla, non chi l'ha
 // scritta. Il testo arriva da getPortalNotes, che già firma "Segreteria"; qui la firma
 // non viaggia proprio.
-import { and, arrayContains, eq, gte, inArray, lte, not } from 'drizzle-orm'
+import { and, arrayContains, eq, gte, inArray, lte, not, sql } from 'drizzle-orm'
 import { db } from '../database/client'
 import { bookings, bookingSubjects, packages, payments, students, users } from '../database/schema'
 import { getPortalNotes } from './portal.service'
@@ -280,7 +281,17 @@ export async function notifichePortale(user: { id: string; role: string }) {
   return { voci: elenco, nuove: elenco.filter((v) => v.nuova).length }
 }
 
-/** "Segna tutte come lette": la data "viste fino a" diventa adesso. */
-export async function segnaNotificheLette(userId: string) {
-  await db.update(users).set({ notificheVisteAt: new Date() }).where(eq(users.id, userId))
+/**
+ * La data "viste fino a" va avanti: ad adesso (pagina Notifiche aperta, "Segna tutte come
+ * lette") o fino alla data di UNA voce toccata (`fino`). Mai indietro: toccare una voce
+ * vecchia non fa tornare nuove quelle già viste. Mai nel futuro.
+ * ponytail: con una data sola, toccare una voce conta come viste anche le più vecchie non
+ * aperte; per "lette una per una" servirebbe una tabella delle letture.
+ */
+export async function segnaNotificheLette(userId: string, fino?: Date) {
+  const adesso = new Date()
+  const quando = fino && fino < adesso ? fino : adesso
+  await db.update(users)
+    .set({ notificheVisteAt: sql`greatest(${users.notificheVisteAt}, ${quando.toISOString()}::timestamptz)` })
+    .where(eq(users.id, userId))
 }
