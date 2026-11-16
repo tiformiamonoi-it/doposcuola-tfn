@@ -309,6 +309,7 @@ La Card studente è offerta da tiformiamonoi.it di Alessandro Barone, P.IVA IT02
 2.4 Pacchetti da saldare. Se un pacchetto è scaduto da più di 15 giorni e non è stato ancora saldato, la Card risulta sospesa, anche quando lo studente ha già un pacchetto nuovo. Se i pacchetti da saldare sono più di uno, conta il più vecchio.
 2.5 La data fino a cui la Card è valida è sempre scritta sulla Card, nel portale. Qualche giorno prima che la Card si sospenda, la famiglia riceve un avviso nel portale.
 2.6 Passato quel termine, la Card risulta sospesa. Quando la segreteria registra il rinnovo o il pagamento, la Card torna attiva da sola, con lo stesso codice.
+2.7 Per gli studenti che il Centro segue gratuitamente, la Card resta sempre attiva per tutta la durata del percorso gratuito, senza scadenza.
 
 3. COME SI USA
 3.1 La Card si trova nel portale delle famiglie, alla voce "Card". La vede il genitore e, se ha un account, anche lo studente.

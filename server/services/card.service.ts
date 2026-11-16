@@ -2,10 +2,10 @@
 // alla regola unica in shared/card-studente.ts. Qui non si decide niente.
 import { and, eq, inArray, lte, max } from 'drizzle-orm'
 import { db } from '../database/client'
-import { lessons, lessonStudents, packages, students } from '../database/schema'
+import { lessons, lessonStudents, packages, standardPackages, students } from '../database/schema'
 import { nonTrovato } from '../utils/http-error'
 import { oggiRomeStr, romeDateStr } from '../utils/tutor-time-window'
-import { calcolaStatoCard, generaCodiceCard, type PacchettoPerCard, type StatoCard } from '#shared/card-studente'
+import { calcolaStatoCard, eNomeProBono, generaCodiceCard, type PacchettoPerCard, type StatoCard } from '#shared/card-studente'
 
 // Stato della card di più alunni in quattro letture, qualunque sia il loro numero.
 // Si leggono TUTTI i pacchetti, anche chiusi e vecchi: un mensile saldato e appena
@@ -27,7 +27,12 @@ export async function statoCardStudenti(studentIds: string[], senzaPacchetto?: s
       oreResiduo:     packages.oreResiduo,
       importoPagato:  packages.importoPagato,
       importoResiduo: packages.importoResiduo,
-    }).from(packages).where(inArray(packages.studentId, studentIds)),
+      nome:           packages.nome,
+      nomeStandard:   standardPackages.nome,
+      stati:          packages.stati,
+    }).from(packages)
+      .leftJoin(standardPackages, eq(standardPackages.id, packages.standardPackageId))
+      .where(inArray(packages.studentId, studentIds)),
     // L'ULTIMA LEZIONE SVOLTA di ogni pacchetto: la più recente tra quelle che hanno
     // scalato ore da lui (lesson_students.package_id), fino a oggi compreso. Una lezione
     // già inserita per un giorno futuro non è ancora "svolta" e non sposta la data.
@@ -53,6 +58,7 @@ export async function statoCardStudenti(studentIds: string[], senzaPacchetto?: s
       importoPagato:  p.importoPagato,
       importoResiduo: p.importoResiduo,
       ultimaLezione:  ultimaPer.get(p.id) ?? null,
+      proBono:        (eNomeProBono(p.nome) || eNomeProBono(p.nomeStandard)) && !p.stati.includes('CHIUSO'),
     })
   }
   for (const [id, lista] of perAlunno) esito.set(id, calcolaStatoCard(lista, oggi, archiviati.has(id)))

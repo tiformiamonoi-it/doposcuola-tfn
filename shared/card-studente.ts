@@ -37,7 +37,15 @@ export type PacchettoPerCard = {
   importoPagato: string
   importoResiduo: string
   ultimaLezione: string | null     // giorno civile dell'ultima lezione svolta con questo pacchetto
+  proBono?: boolean                // pacchetto "Pro Bono" ancora aperto (non CHIUSO)
 }
+
+// PRO BONO (deciso da Alessandro il 16/11/2026): chi è seguito gratuitamente ha la card
+// SEMPRE attiva, senza data, senza contare ore e pagamenti (il pacchetto costa 0, quindi
+// la regola "almeno un pagamento" non la accenderebbe mai). Si riconosce dal nome del
+// pacchetto o del suo pacchetto standard, "Pro Bono". Si spegne solo archiviando l'alunno
+// o chiudendo il pacchetto Pro Bono.
+export const eNomeProBono = (nome: string | null | undefined) => (nome ?? '').trim().toLowerCase() === 'pro bono'
 
 export type StatoCard = {
   attiva: boolean
@@ -58,6 +66,7 @@ const SENZA_FINE = '9999-12-31'
 // qualunque pacchetto abbia ancora (deciso da Alessandro il 16/11/2026).
 export function calcolaStatoCard(pacchetti: PacchettoPerCard[], oggi: string, archiviato = false): StatoCard {
   if (archiviato) return { attiva: false, validaFino: null, motivo: 'SCADUTO', inMargine: false }
+  if (pacchetti.some((p) => p.proBono)) return { attiva: true, validaFino: null, motivo: null, inMargine: false }
 
   // 1. Fino a quando i pacchetti la tengono accesa (il più lontano)
   let accesaFino: string | null = null
