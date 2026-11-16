@@ -456,6 +456,9 @@ export async function updatePackage(id: string, data: UpdatePackageInput) {
     const newResiduo = Math.max(0, parseFloat(existing.oreResiduo) + diff)
     changes.oreResiduo = String(newResiduo)
     changes.avvisoOreInviatoAt = null // ore cambiate: l'avviso email torna eleggibile
+    // …e la notifica F del portale riparte da capo: se le ore sono ancora quasi finite,
+    // il cron del mattino le dà una data nuova (fino ad allora vale la creazione)
+    changes.oreQuasiFiniteDal = null
   }
   if (data.dataScadenza !== undefined) {
     changes.avvisoScadenzaInviatoAt = null // scadenza cambiata: l'avviso email torna eleggibile
@@ -639,6 +642,8 @@ export async function rechargePackage(id: string, data: RechargePackageInput, op
       // Ricarica: gli avvisi email tornano eleggibili
       avvisoOreInviatoAt:      null,
       avvisoScadenzaInviatoAt: null,
+      // …e "ore quasi finite dal" (notifica F): la rimette il cron se servirà ancora
+      oreQuasiFiniteDal:       null,
       updatedAt:      new Date(),
     }).where(eq(packages.id, pkg!.id)).returning()
 
