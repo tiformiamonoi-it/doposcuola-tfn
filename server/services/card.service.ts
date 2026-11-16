@@ -163,8 +163,10 @@ export async function verificaCard(codice: string) {
 // Un codice che non hanno né un alunno né un genitore: la pagina del negozio cerca in
 // tutte e due le tabelle, e uno stesso codice porterebbe a due persone. I vincoli unici
 // del database valgono una tabella per volta, quindi il controllo incrociato sta qui.
-// ponytail: gli alunni nuovi prendono il codice da $defaultFn (schema/students.ts) senza
-// guardare i genitori: 1 su ~10^9 con mille card, se mai servisse passarli da qui.
+// Lo usano la creazione dell'alunno (createStudent), quella del genitore e i due "Cambia
+// codice". Il $defaultFn di schema/students.ts resta solo come rete di sicurezza per chi
+// inserisce un alunno senza passare da qui (l'import dal vecchio gestionale): quello non
+// guarda i genitori, ma con mille card una collisione capita 1 volta su ~10^9.
 export async function codiceCardLibero(): Promise<string> {
   for (;;) {
     const codice = generaCodiceCard()

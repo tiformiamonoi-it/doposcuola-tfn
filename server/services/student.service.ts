@@ -3,6 +3,7 @@ import { students, packages, lessons, lessonStudents } from '../database/schema'
 import { and, asc, count, desc, eq, gt, gte, ilike, isNull, or, inArray, exists, notExists, sql, arrayContains } from 'drizzle-orm'
 import { nomeProprio } from '../utils/nomi'
 import { computePackageStates } from './package.service'
+import { codiceCardLibero } from './card.service'
 import { confiniGiornoOggiRome, oggiRomeStr, romeDateStr } from '../utils/tutor-time-window'
 import type { CreateStudentInput, StudentQuery, UpdateStudentInput } from '#shared/schemas/student.schema'
 
@@ -379,6 +380,9 @@ export async function createStudent(data: CreateStudentInput) {
     note:            data.note            ?? null,
     bisogniSpeciali: data.bisogniSpeciali ?? null,
     active:          data.active          ?? true,
+    // Il codice della card scelto tra quelli che non hanno né un alunno né un genitore:
+    // il $defaultFn dello schema guarderebbe solo gli alunni (vedi codiceCardLibero).
+    codiceCard:      await codiceCardLibero(),
   }).returning()
 
   return created

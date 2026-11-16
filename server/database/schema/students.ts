@@ -90,8 +90,10 @@ export const students = pgTable('students', {
 
   // CARD STUDENTE: il codice scritto sotto il QR (es. K7QF-29XM). Casuale e non in fila,
   // vedi shared/card-studente.ts. Unico: è la chiave con cui il negozio verifica la card.
-  // Il valore lo dà l'applicazione alla creazione; gli alunni già in archivio l'hanno
-  // ricevuto dalla migrazione 0039. "Cambia codice" in segreteria lo sostituisce.
+  // Il valore lo dà createStudent con codiceCardLibero (card.service.ts), che guarda anche
+  // i codici dei genitori; il $defaultFn è solo la rete di sicurezza per chi inserisce senza
+  // passare da lì. Gli alunni già in archivio l'hanno ricevuto dalla migrazione 0039.
+  // "Cambia codice" in segreteria lo sostituisce.
   codiceCard: varchar('codice_card', { length: 9 }).notNull().unique().$defaultFn(generaCodiceCard),
 
   // CARD DISATTIVATA A MANO dalla segreteria (regolamento della card, art. 5.2). Vuote =
