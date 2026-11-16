@@ -32,7 +32,7 @@ export const PUBLIC_API_PREFIXES = [
   '/api/verifica-card',
   // La foto di una comunicazione: la chiedono le EMAIL, aperte da programmi di posta
   // senza sessione. Solo /api/immagini/comunicazioni/<id> (cuid, non si indovina) e
-  // /prova (la foto dell'ultima prova); fuori da /api/comunicazioni, che resta dello
+  // /prova?k=<chiave> (l'ultima prova, solo con la chiave casuale della sua email); fuori da /api/comunicazioni, che resta dello
   // staff. Se la comunicazione è eliminata, 404.
   '/api/immagini/comunicazioni',
   // La foto di una convenzione (portale e Impostazioni, stesse regole di quella sopra).
@@ -117,6 +117,11 @@ const INTERNAL_PUBLIC_PREFIXES = ['/api/_auth/', '/api/_nuxt_icon', '/api/_cron/
 export function isPublicApi(rawPath: string): boolean {
   // event.path contiene anche la query string: confrontiamo solo il percorso
   const path = rawPath.split('?')[0] ?? rawPath
+  // Un percorso con ".." o con punti, barre e controbarre scritti in codice (%2e, %2f, %5c)
+  // non è mai pubblico: oggi il router non li ricompone (vanno in 404), ma la porta aperta
+  // non deve dipendere da come un domani il router o la piattaforma li leggeranno.
+  // Codici della card e id delle foto non li contengono mai: senza sessione → 401.
+  if (/\.\.|%2e|%2f|%5c|\\/i.test(path)) return false
   if (INTERNAL_PUBLIC_PREFIXES.some((p) => path.startsWith(p))) return true
   // Confronto per percorso INTERO (o suo sotto-percorso), non per semplice "inizia con":
   // altrimenti il prefisso pubblico '/api/contact' (form del sito) renderebbe pubblica

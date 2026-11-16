@@ -12,7 +12,7 @@
 import { and, count, desc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../database/client'
 import { comunicazioni, comunicazioniDestinatari, consensi, studentParents, students, systemConfigs, users } from '../database/schema'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { sendEmail, emailComunicazione, notificaInvioDiMassa } from '../utils/email'
 import type { ComunicazioneInput, ComunicazioneTipo } from '#shared/schemas/comunicazione.schema'
 
@@ -157,12 +157,19 @@ export async function inviaComunicazione(input: ComunicazioneInput, authorId: st
 // L'email mostra le foto da un indirizzo del gestionale, e la prova non salva nessuna
 // comunicazione: senza questo posto non avrebbe un indirizzo da dare alla foto. Niente
 // comunicazioni "finte" nello storico. La serve /api/immagini/comunicazioni/prova.
+// La foto di prova NON è ancora stata mandata a nessuno: l'indirizzo porta una chiave
+// casuale nuova a ogni prova, salvata davanti alla foto ("<chiave> data:image/…").
+// Senza la chiave giusta (cioè senza l'email di prova in mano) la risposta è 404.
 export const CHIAVE_FOTO_PROVA = 'comunicazione_prova_immagine'
 
-/** La foto dell'ultima prova, per l'indirizzo pubblico; null se non c'è o non è una foto valida */
-export async function immagineProva(): Promise<string | null> {
+/** La foto dell'ultima prova, solo con la sua chiave; null se manca, se la chiave è sbagliata o se non è una foto valida */
+export async function immagineProva(chiave: string): Promise<string | null> {
   const [r] = await db.select({ value: systemConfigs.value }).from(systemConfigs).where(eq(systemConfigs.key, CHIAVE_FOTO_PROVA)).limit(1)
-  return r?.value || null
+  const spazio = r?.value.indexOf(' ') ?? -1
+  if (!chiave || spazio < 0) return null // anche la foto salvata prima della chiave: si rifà la prova
+  const giusta = Buffer.from(r!.value.slice(0, spazio))
+  const arrivata = Buffer.from(chiave)
+  return giusta.length === arrivata.length && timingSafeEqual(giusta, arrivata) ? r!.value.slice(spazio + 1) : null
 }
 
 /**
@@ -176,10 +183,13 @@ export async function inviaProva(input: ComunicazioneInput, userId: string) {
 
   let fotoPercorso: string | undefined
   if (input.immagine) {
-    await db.insert(systemConfigs).values({ key: CHIAVE_FOTO_PROVA, value: input.immagine })
-      .onConflictDoUpdate({ target: systemConfigs.key, set: { value: input.immagine, updatedAt: new Date() } })
-    // ?v= cambia a ogni prova: il programma di posta non riusa la foto della prova precedente
-    fotoPercorso = `/api/immagini/comunicazioni/prova?v=${Date.now()}`
+    const chiave = randomUUID()
+    const value = `${chiave} ${input.immagine}`
+    await db.insert(systemConfigs).values({ key: CHIAVE_FOTO_PROVA, value })
+      .onConflictDoUpdate({ target: systemConfigs.key, set: { value, updatedAt: new Date() } })
+    // La chiave cambia a ogni prova: nessuno la indovina, e il programma di posta non
+    // riusa la foto della prova precedente
+    fotoPercorso = `/api/immagini/comunicazioni/prova?k=${chiave}`
   }
 
   const esito = await sendEmail({

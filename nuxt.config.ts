@@ -1,3 +1,12 @@
+const INTESTAZIONI_VERIFICA = {
+  'Cache-Control': 'no-store',
+  'Referrer-Policy': 'no-referrer',
+  'X-Robots-Tag': 'noindex, nofollow',
+  'Content-Security-Policy': "frame-ancestors 'none'",
+  'X-Frame-Options': 'DENY',
+  'X-Content-Type-Options': 'nosniff',
+}
+
 export default defineNuxtConfig({
   future: {
     compatibilityVersion: 4,
@@ -68,6 +77,17 @@ export default defineNuxtConfig({
     // GDPR: i font vengono scaricati al build e serviti dal nostro dominio —
     // il browser del visitatore non contatta mai i server Google.
     download: true,
+  },
+
+  // LA VERIFICA DELLA CARD È PUBBLICA E IL CODICE STA NELL'INDIRIZZO: chi ha l'indirizzo
+  // vede il nome dell'alunno. Quindi: nessuna copia salvata per strada né nel telefono
+  // (no-store), l'indirizzo non parte verso altri siti se si tocca un link (no-referrer),
+  // niente motori di ricerca, e nessun sito può mostrarla dentro una sua cornice per
+  // farla sembrare sua (frame-ancestors / X-Frame-Options). Pagina e API, risposte
+  // d'errore comprese (il "troppi controlli" nasce prima che l'API scriva le sue).
+  routeRules: {
+    '/verifica/**':          { headers: INTESTAZIONI_VERIFICA },
+    '/api/verifica-card/**': { headers: INTESTAZIONI_VERIFICA },
   },
 
   css: ['~/assets/css/main.css'], // ~ risolve a app/ con compatibilityVersion: 4

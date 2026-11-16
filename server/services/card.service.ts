@@ -111,9 +111,12 @@ export async function getPortalCards(studentIds: string[], perStudente: boolean)
 export async function verificaCard(codice: string) {
   const [s] = await db.select({ id: students.id, firstName: students.firstName, lastName: students.lastName })
     .from(students).where(eq(students.codiceCard, codice)).limit(1)
-  if (!s) return null
-  const stato = (await statoCardStudenti([s.id])).get(s.id)!
-  if (!stato.attiva) return null
+  // Lo stato si calcola ANCHE per un codice inesistente (su un id che non c'è): stesse
+  // letture, stessi tempi. Altrimenti la risposta più rapida direbbe "codice mai dato",
+  // quella più lenta "codice di qualcuno, card sospesa".
+  const id = s?.id ?? ''
+  const stato = (await statoCardStudenti([id])).get(id)!
+  if (!s || !stato.attiva) return null
   return { nome: s.firstName, inizialeCognome: s.lastName.charAt(0).toUpperCase(), validaFino: stato.validaFino }
 }
 

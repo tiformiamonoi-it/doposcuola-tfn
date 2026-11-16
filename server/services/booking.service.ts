@@ -295,6 +295,10 @@ export async function listBookingsForPortalByStudents(studentIds: string[], user
       and(eq(bookings.userId, userId), isNull(bookings.studentId)),
     ),
     orderBy: [desc(bookings.createdAt)],
+    // Fuori quello che il portale non usa: il telefono dell'alunno (copiato dalla sua
+    // scheda) e il supplemento con il pacchetto a cui è stato aggiunto, che è un importo
+    // e arriverebbe anche all'account STUDENTE (lo studente non vede soldi).
+    columns: { studentPhone: false, supplemento: false, supplementoApplicatoAt: false, supplementoPackageId: false },
     with: {
       // Le famiglie vedono che c'è la lezione, non con quale tutor: niente
       // tutor né id del tutor nella risposta del portale.

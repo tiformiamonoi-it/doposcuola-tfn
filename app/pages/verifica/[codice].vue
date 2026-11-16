@@ -3,7 +3,11 @@
     <div class="w-full max-w-sm text-center">
       <p class="font-heading font-semibold text-tfn-600 mb-6">tiformiamonoi.it · Card studente</p>
 
-      <USkeleton v-if="pending" class="h-56 w-full rounded-2xl" />
+      <!-- "idle" conta come attesa: col fetch solo dal browser il server non chiede niente
+           (stato idle) e deve disegnare lo stesso scheletro che il telefono disegna mentre
+           chiede (pending). Con `pending` il server disegnava "Card non valida", il telefono
+           lo scheletro: Vue trovava due pagine diverse e il riquadro restava vuoto. -->
+      <USkeleton v-if="status === 'idle' || status === 'pending'" class="h-56 w-full rounded-2xl" />
 
       <div
         v-else-if="esito?.valida"
@@ -45,7 +49,7 @@ type Esito =
 
 // Solo dal browser (server: false): così ogni apertura è un controllo nuovo, fatto
 // adesso, e il limite di tentativi conta l'indirizzo vero del telefono del negozio.
-const { data: esito, pending, error } = useFetch<Esito>(
+const { data: esito, status, error } = useFetch<Esito>(
   () => `/api/verifica-card/${encodeURIComponent(String(route.params.codice ?? ''))}`,
   { server: false },
 )
