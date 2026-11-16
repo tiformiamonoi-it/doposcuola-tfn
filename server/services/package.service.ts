@@ -731,31 +731,33 @@ export async function getEstrattoContoLibretto(packageId: string): Promise<Estra
     )
   }
 
-  // Le due metà della storia, ciascuna dalla sua tabella
-  const ricariche = await db
-    .select()
-    .from(packageRecharges)
-    .where(eq(packageRecharges.packageId, packageId))
-    .orderBy(asc(packageRecharges.data))
-
-  const consumi = await db
-    .select({
-      id:             lessonStudents.id,
-      oreScalate:     lessonStudents.oreScalate,
-      createdAt:      lessonStudents.createdAt,
-      data:           lessons.data,
-      mezzaLezione:   lessons.mezzaLezione,
-      tutorFirstName: users.firstName,
-      tutorLastName:  users.lastName,
-      oraInizio:      timeSlots.oraInizio,
-      oraFine:        timeSlots.oraFine,
-    })
-    .from(lessonStudents)
-    .innerJoin(lessons, eq(lessonStudents.lessonId, lessons.id))
-    .innerJoin(users, eq(lessons.tutorId, users.id))
-    .leftJoin(timeSlots, eq(lessons.timeSlotId, timeSlots.id))
-    .where(eq(lessonStudents.packageId, packageId))
-    .orderBy(asc(lessons.data))
+  // Le due metà della storia, ciascuna dalla sua tabella: partono insieme, una non
+  // aspetta l'altra (un giro al database in meno)
+  const [ricariche, consumi] = await Promise.all([
+    db
+      .select()
+      .from(packageRecharges)
+      .where(eq(packageRecharges.packageId, packageId))
+      .orderBy(asc(packageRecharges.data)),
+    db
+      .select({
+        id:             lessonStudents.id,
+        oreScalate:     lessonStudents.oreScalate,
+        createdAt:      lessonStudents.createdAt,
+        data:           lessons.data,
+        mezzaLezione:   lessons.mezzaLezione,
+        tutorFirstName: users.firstName,
+        tutorLastName:  users.lastName,
+        oraInizio:      timeSlots.oraInizio,
+        oraFine:        timeSlots.oraFine,
+      })
+      .from(lessonStudents)
+      .innerJoin(lessons, eq(lessonStudents.lessonId, lessons.id))
+      .innerJoin(users, eq(lessons.tutorId, users.id))
+      .leftJoin(timeSlots, eq(lessons.timeSlotId, timeSlots.id))
+      .where(eq(lessonStudents.packageId, packageId))
+      .orderBy(asc(lessons.data)),
+  ])
 
   // Righe grezze, ancora senza saldo. `ordine` serve solo a decidere chi viene prima
   // a parità di giorno: la ricarica prima del consumo, perché nella realtà si paga e
