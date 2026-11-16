@@ -30,6 +30,14 @@ export function giornoInParole(g: string, opzioni: Intl.DateTimeFormatOptions = 
 /** 'AAAA-MM-GG' → 'GG/MM/AAAA', senza passare da Date */
 export const giornoNumeri = (g: string | null | undefined) => (g ? g.split('-').reverse().join('/') : '')
 
+/**
+ * La misura del nome sulla card: oltre 18 caratteri (spazi compresi) scende di un punto,
+ * da 22 a 21 px (richiesta del 16/11/2026). A 390 px accanto alla tessera stanno circa
+ * 18 caratteri a 22 px e 20 a 21 px: così i nomi da 19-20 restano su una riga.
+ * Quelli più lunghi vanno a capo: lo spazio della tessera lo riserva la card (pr-16).
+ */
+export const classeNomeCard = (nome: string) => (nome.length > 18 ? 'text-[21px]' : 'text-[22px]')
+
 /** Il giorno di una prenotazione del portale: la data UTC di requestedDate (si salva alle 12:00Z) */
 export const giornoPrenotazione = (b: { requestedDate: string | Date }) => new Date(b.requestedDate).toISOString().slice(0, 10)
 

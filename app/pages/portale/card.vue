@@ -42,8 +42,10 @@
             {{ scelta.attiva ? 'Attiva' : scelta.motivo === 'DISATTIVATA' ? 'Disattivata' : 'Sospesa' }}
           </span>
         </div>
-        <div class="relative flex flex-col gap-1">
-          <span class="font-heading font-bold text-[22px]">{{ scelta.firstName }} {{ scelta.lastName }}</span>
+        <!-- pr-16 = la larghezza della tessera qui sopra (size-16): il nome va a capo prima di
+             arrivarci, sempre, e non si taglia mai con i puntini (il negozio lo deve leggere) -->
+        <div class="relative flex flex-col gap-1 pr-16">
+          <span class="font-heading font-bold leading-7 break-words" :class="classeNomeCard(`${scelta.firstName} ${scelta.lastName}`)">{{ scelta.firstName }} {{ scelta.lastName }}</span>
           <span class="text-[13px] text-pf-su-blu">{{ scelta.tipo === 'GENITORE' ? 'Genitore' : [scelta.classe, scelta.scuola].filter(Boolean).join(' · ') }}</span>
         </div>
         <div v-if="scelta.attiva" class="relative flex flex-col gap-0.5">
