@@ -3,7 +3,21 @@
 
     <!-- ═══ HEADER ═══ -->
     <header class="fixed top-0 left-0 right-0 h-16 bg-tfn-500 flex items-center justify-between px-4 z-40">
-      <div class="w-8" />
+      <!-- Il campanellino delle notifiche del portale, con il numero delle nuove -->
+      <NuxtLink
+        to="/portale/notifiche"
+        class="relative w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors"
+        :aria-label="notificheNuove > 0 ? `Notifiche, ${notificheNuove} nuove` : 'Notifiche'"
+      >
+        <UIcon name="i-heroicons-bell" class="w-4 h-4 text-white" />
+        <span
+          v-if="notificheNuove > 0"
+          class="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center"
+          aria-hidden="true"
+        >
+          {{ notificheNuove }}
+        </span>
+      </NuxtLink>
       <span class="font-heading font-semibold text-white text-base tracking-tight">
         tiformiamonoi.it
       </span>
@@ -120,6 +134,8 @@ const allNavItems = computed(() => [
   // La card studente la vedono genitore e studente (regolamento, art. 3.1)
   { icon: 'i-heroicons-identification', label: 'Card',  route: '/portale/card',     always: true },
   { icon: 'i-heroicons-tag',           label: 'Sconti',  route: '/portale/sconti',   always: true },
+  // Pagamenti: solo il genitore (l'alunno non vede importi). Provvisoria fino alla grafica v6
+  { icon: 'i-heroicons-banknotes',     label: 'Paga',    route: '/portale/pagamenti', always: true },
   { icon: 'i-heroicons-user',          label: 'Profilo', route: '/portale/profilo',  always: true },
 ])
 
@@ -129,7 +145,7 @@ const isStudente = computed(() => user.value?.role === 'STUDENTE')
 
 const visibleNavItems = computed(() =>
   allNavItems.value
-    .filter(item => !(isStudente.value && item.route === '/portale/note'))
+    .filter(item => !(isStudente.value && ['/portale/note', '/portale/pagamenti'].includes(item.route)))
     .filter(item => item.always || prenotazioneAbilitata.value || isStudente.value)
 )
 
@@ -142,6 +158,12 @@ function isActive(path: string) {
 const noteUnseenCount = useState<number>('portal-note-unseen', () => 0)
 const { data: noteUnseenRes } = useLazyFetch('/api/portal/notes-unseen-count', { server: false })
 watchEffect(() => { noteUnseenCount.value = noteUnseenRes.value?.count ?? 0 })
+
+// Pallino del campanellino: le notifiche nuove. La pagina Notifiche lo aggiorna (useState)
+// quando si segna tutto come letto.
+const notificheNuove = useState<number>('portal-notifiche-nuove', () => 0)
+const { data: notificheRes } = useLazyFetch<{ nuove: number }>('/api/portal/notifiche', { server: false })
+watchEffect(() => { if (notificheRes.value) notificheNuove.value = notificheRes.value.nuove })
 
 // ─── WhatsApp logic ───
 const { data: portalConfigs } = useLazyFetch('/api/portal/configs')
@@ -163,7 +185,7 @@ const whatsappOrario = computed(() => {
 
 const showWhatsApp = computed(() => !!whatsappNumero.value)
 const whatsappLink = computed(() => {
-  const text = encodeURIComponent('Ciao, scrivo dal portale tiformiamonoi.')
+  const text = encodeURIComponent('Ciao, scrivo dal portale tiformiamonoi.it.')
   return `https://wa.me/${whatsappNumero.value.replace(/\D/g, '')}?text=${text}`
 })
 </script>

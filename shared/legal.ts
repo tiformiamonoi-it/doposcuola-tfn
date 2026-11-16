@@ -92,7 +92,7 @@ export const CONSENSO_MARKETING_TESTO = `Acconsento a ricevere da tiformiamonoi.
 È facoltativo: anche senza, continuo a ricevere tutte le comunicazioni che riguardano il servizio (lezioni, pagamenti, avvisi). Posso revocarlo quando voglio da questa pagina o scrivendo a info@tiformiamonoi.it.`
 
 export const TERMINI_TESTO = `TERMINI E CONDIZIONI DEL SERVIZIO
-tiformiamonoi — Doposcuola e ripetizioni
+tiformiamonoi.it — Doposcuola e ripetizioni
 Ultimo aggiornamento: 16 novembre 2026
 
 1. CHI SIAMO
@@ -164,7 +164,7 @@ Il trattamento dei dati personali è descritto nell'Informativa privacy; l'uso d
 
 export const PRIVACY_TESTO = `INFORMATIVA SUL TRATTAMENTO DEI DATI PERSONALI
 ai sensi degli artt. 13 e 14 del Regolamento (UE) 2016/679 ("GDPR")
-tiformiamonoi — Doposcuola e ripetizioni
+tiformiamonoi.it — Doposcuola e ripetizioni
 Ultimo aggiornamento: 16 novembre 2026
 
 1. TITOLARE DEL TRATTAMENTO
@@ -292,7 +292,7 @@ Per i dettagli sul trattamento dei dati personali consulta l'Informativa privacy
 // va cambiato anche l'art. 2 qui, e viceversa.
 // ─────────────────────────────────────────────
 export const REGOLAMENTO_CARD_TESTO = `REGOLAMENTO DELLA CARD STUDENTE
-tiformiamonoi — Doposcuola e ripetizioni
+tiformiamonoi.it — Doposcuola e ripetizioni
 Versione del 16 novembre 2026
 
 La Card studente è offerta da tiformiamonoi.it di Alessandro Barone, P.IVA IT02856610817, con sede in Via Anchise 10, 91100 Trapani (TP), email info@tiformiamonoi.it, telefono +39 357 400 2510 (di seguito "il Centro").

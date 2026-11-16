@@ -82,6 +82,16 @@ function romeOffsetMinutes(date: Date): number {
   return Math.round((romeMillis - utcMillis) / 60000)
 }
 
+// La mezzanotte italiana di un giorno civile 'AAAA-MM-GG', come istante. Serve alle
+// notifiche del portale per dare una data alle voci calcolate ("la card è sospesa dal…").
+// Il fuso si legge alla mezzanotte UTC di quel giorno (l'1 o le 2 di notte in Italia):
+// l'ora legale cambia alle 2-3, quindi a quell'ora vale ancora il fuso della mezzanotte.
+export function inizioGiornoRome(giorno: string): Date {
+  const [y, m, d] = giorno.split('-').map(Number) as [number, number, number]
+  const mezzanotteUtc = Date.UTC(y, m - 1, d)
+  return new Date(mezzanotteUtc - romeOffsetMinutes(new Date(mezzanotteUtc)) * 60000)
+}
+
 export function confiniGiornoOggiRome(): { start: Date; end: Date } {
   const now = new Date()
   const offsetMin = romeOffsetMinutes(now)

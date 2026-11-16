@@ -10,6 +10,7 @@ import { packages, students, studentParents, users } from '../database/schema'
 import { randomUUID } from 'node:crypto'
 import { sendEmail, emailAvvisoPacchetto, notificaInvioDiMassa, tipoEmailAttivo } from '../utils/email'
 import { motiviRinnovo } from './package.service'
+import { cardTenutaDaPacchetto } from './card.service'
 
 // ponytail: cap 50 pacchetti/run — ben sotto il limite Brevo (300/giorno); il resto passa al giro dopo
 const MAX_PER_RUN = 50
@@ -128,11 +129,17 @@ export async function runPackageAlerts() {
 
     const flags: Record<string, Date> = {}
 
+    // Postilla della card (sezione E del piano), chiesta solo se parte almeno un avviso:
+    // la data è validaFino della regola unica, e c'è solo se è QUESTO pacchetto a tenerla accesa
+    const finoAl = (oreQuasiEsaurite || inScadenza) ? await cardTenutaDaPacchetto(row.studentId, row.id) : null
+    const card = finoAl ? { nome: row.studentFirstName, finoAl: finoAl.split('-').reverse().join('/') } : undefined
+
     if (oreQuasiEsaurite) {
       const sent = await inviaATutti(destinatari, 'AVVISO_ORE', emailAvvisoPacchetto({
         nomeStudente,
         nomePacchetto: row.nome,
         tipoAvviso: 'ore',
+        card,
       }))
       if (sent) { flags.avvisoOreInviatoAt = new Date(); inviati++ }
     }
@@ -143,6 +150,7 @@ export async function runPackageAlerts() {
         nomePacchetto: row.nome,
         tipoAvviso: 'scadenza',
         dataScadenza: row.dataScadenza!.toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' }),
+        card,
       }))
       if (sent) { flags.avvisoScadenzaInviatoAt = new Date(); inviati++ }
     }

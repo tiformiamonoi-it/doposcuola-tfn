@@ -49,6 +49,9 @@
               <span class="text-xs text-slate-400">{{ formatDate(avviso.createdAt) }}</span>
             </div>
           </template>
+          <!-- La foto in cima, intera (mai ritagliata), poi titolo e testo, come nell'email.
+               Dal suo indirizzo: così l'elenco non si porta dietro tutte le foto -->
+          <img v-if="avviso.conImmagine" :src="`/api/immagini/comunicazioni/${avviso.id}`" alt="" loading="lazy" class="mb-3 w-full h-auto rounded-lg" />
           <p class="text-sm font-semibold text-slate-800">{{ avviso.titolo }}</p>
           <p class="mt-1 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{{ avviso.testo }}</p>
         </UCard>

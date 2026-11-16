@@ -217,17 +217,36 @@ async function consegnaABrevo({ to, subject, html }: EmailPayload): Promise<Esit
 
 // ─── Template (italiano semplice, stili inline) ───
 
-function layout(titolo: string, corpo: string): string {
+// Indirizzo del gestionale senza "/" finale; undefined se appUrl non è configurato
+function indirizzoApp(): string | undefined {
+  return (useRuntimeConfig().appUrl ?? '').replace(/\/+$/, '') || undefined
+}
+
+// LA TESTATA DI TUTTE LE EMAIL: il logo vero, su fondo bianco con una riga blu sotto.
+// Il logo è scuro e blu su fondo chiaro: sulla vecchia fascia blu non si leggerebbe.
+// È un PNG (public/email/logo.png, disegnato a 2x da public/logo.svg) perché Gmail e
+// molti altri programmi di posta non mostrano gli SVG; si chiede all'indirizzo
+// ASSOLUTO del gestionale, l'unico che un programma di posta sa raggiungere.
+// Senza appUrl non c'è un indirizzo da dare: la testata resta il nome scritto.
+//
+// `foto`: indirizzo assoluto di una foto da mettere SUBITO sotto la testata, prima del
+// titolo, larga quanto l'email e intera (mai ritagliata). La usano le comunicazioni.
+function layout(titolo: string, corpo: string, foto?: string): string {
+  const base = indirizzoApp()
+  const marchio = base
+    ? `<img src="${base}/email/logo.png" alt="tiformiamonoi.it" height="48" style="display:block;height:48px;width:auto;border:0;">`
+    : '<h2 style="margin: 0; font-size: 18px; color: #0063A6;">tiformiamonoi.it</h2>'
   return `
   <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #1e293b;">
-    <div style="background: #0063A6; color: #fff; padding: 16px 24px; border-radius: 8px 8px 0 0;">
-      <h2 style="margin: 0; font-size: 18px;">tiformiamonoi</h2>
+    <div style="background: #fff; padding: 16px 24px; border: 1px solid #e2e8f0; border-bottom: 4px solid #0063A6; border-radius: 8px 8px 0 0;">
+      ${marchio}
     </div>
+    ${foto ? `<img src="${foto}" width="560" alt="" style="display:block;width:100%;max-width:100%;height:auto;border:0;">` : ''}
     <div style="border: 1px solid #e2e8f0; border-top: none; padding: 24px; border-radius: 0 0 8px 8px;">
       <h3 style="margin-top: 0; font-size: 16px;">${titolo}</h3>
       ${corpo}
       <p style="font-size: 12px; color: #94a3b8; margin-top: 24px;">
-        Questa è un'email automatica del gestionale di tiformiamonoi. Per assistenza contatta la segreteria.
+        Questa è un'email automatica del gestionale di tiformiamonoi.it. Per assistenza contatta la segreteria.
       </p>
     </div>
   </div>`
@@ -248,7 +267,7 @@ export function emailProva(quando: Date): { subject: string; html: string } {
   })
 
   return {
-    subject: 'Prova invio — tiformiamonoi',
+    subject: 'Prova invio — tiformiamonoi.it',
     html: layout('Prova di invio', `
       <p style="font-size: 14px;">
         Se stai leggendo questo messaggio la posta del gestionale funziona: le email a tutor e famiglie partono regolarmente.
@@ -283,8 +302,8 @@ export function emailInvitoPassword(p: { nome: string; link: string; scopo: 'PRI
 
   return {
     subject: primoAccesso
-      ? 'Attiva il tuo accesso — tiformiamonoi'
-      : 'Reimposta la tua password — tiformiamonoi',
+      ? 'Attiva il tuo accesso — tiformiamonoi.it'
+      : 'Reimposta la tua password — tiformiamonoi.it',
     html: layout(titolo, `
       <p style="font-size: 14px;">${spiegazione}</p>
       <p style="margin: 20px 0;">
@@ -307,22 +326,29 @@ export function emailInvitoPassword(p: { nome: string; link: string; scopo: 'PRI
 // NB: l'avviso "ore" NON indica quante ore restano. Il conteggio residuo è un dato
 // che il portale non mostra alla famiglia (vedi getPortalStudents): dirlo per email
 // aggirerebbe la stessa riservatezza. Il numero esatto lo comunica la segreteria.
+//
+// LA POSTILLA DELLA CARD (piano del 16/11/2026, sezione E): in fondo, la data fino a cui
+// resta attiva la card studente. Arriva solo se è proprio questo pacchetto a tenerla
+// accesa: lo decide chi chiama (cardTenutaDaPacchetto in card.service.ts); qui si scrive.
 export function emailAvvisoPacchetto(p: {
   nomeStudente: string
   nomePacchetto: string
   tipoAvviso: 'ore' | 'scadenza'
   dataScadenza?: string
+  /** Postilla della card: nome di battesimo e giorno 'gg/mm/aaaa'. Assente = niente postilla */
+  card?: { nome: string; finoAl: string }
 }): { subject: string; html: string } {
   const dettaglio = p.tipoAvviso === 'ore'
     ? `<p style="font-size: 14px;">Il pacchetto <strong>${p.nomePacchetto}</strong> di <strong>${p.nomeStudente}</strong> sta per esaurirsi.</p>`
     : `<p style="font-size: 14px;">Il pacchetto <strong>${p.nomePacchetto}</strong> di <strong>${p.nomeStudente}</strong> scadrà il <strong>${p.dataScadenza}</strong>.</p>`
   return {
     subject: p.tipoAvviso === 'ore'
-      ? `Pacchetto di ${p.nomeStudente} in esaurimento — tiformiamonoi`
-      : `Pacchetto di ${p.nomeStudente} in scadenza — tiformiamonoi`,
+      ? `Pacchetto di ${p.nomeStudente} in esaurimento — tiformiamonoi.it`
+      : `Pacchetto di ${p.nomeStudente} in scadenza — tiformiamonoi.it`,
     html: layout('Avviso pacchetto', `
       ${dettaglio}
       <p style="font-size: 14px;">Per continuare le lezioni senza interruzioni, contatta la segreteria per una ricarica o un rinnovo.</p>
+      ${p.card ? `<p style="font-size: 14px;">La card studente di <strong>${p.card.nome}</strong> resta attiva fino al <strong>${p.card.finoAl}</strong>. Se il pacchetto non viene rinnovato entro quella data, la card si disattiverà.</p>` : ''}
     `),
   }
 }
@@ -398,7 +424,7 @@ export function emailNoteNelPortale(p: {
           Leggi nel portale
         </a>
       </p>`
-    : '<p style="font-size: 14px;">Entra nel portale delle famiglie di tiformiamonoi e apri la sezione <strong>Note</strong>.</p>'
+    : '<p style="font-size: 14px;">Entra nel portale delle famiglie di tiformiamonoi.it e apri la sezione <strong>Note</strong>.</p>'
 
   // La riga sulla riservatezza parla del testo delle NOTE: senza note sarebbe
   // una frase fuori posto, quindi vive dentro la loro sezione.
@@ -426,25 +452,25 @@ export function emailNoteNelPortale(p: {
           Vedi le convenzioni
         </a>
       </p>`
-    : '<p style="font-size: 14px;">Le trovi nel portale delle famiglie di tiformiamonoi, nella sezione <strong>Sconti</strong>.</p>'
+    : '<p style="font-size: 14px;">Le trovi nel portale delle famiglie di tiformiamonoi.it, nella sezione <strong>Sconti</strong>.</p>'
 
   // Se l'email parla SOLO di convenzioni il saluto apre questa sezione; se ci
   // sono anche le note il saluto l'ha già fatto la sezione di sopra.
   const sezioneConvenzioni = conConvenzioni
     ? `
-      ${conNote ? '' : `<p style="font-size: 14px;">${saluto} ci sono novità tra le convenzioni riservate alle famiglie di tiformiamonoi.</p>`}
+      ${conNote ? '' : `<p style="font-size: 14px;">${saluto} ci sono novità tra le convenzioni riservate alle famiglie di tiformiamonoi.it.</p>`}
       <h4 style="font-size: 15px; margin: 24px 0 12px;">Nuove convenzioni per voi</h4>
       ${elencoConvenzioni}
       ${azioneConvenzioni}`
     : ''
 
   const subject = conNote && conConvenzioni
-    ? 'Novità nel portale — tiformiamonoi'
+    ? 'Novità nel portale — tiformiamonoi.it'
     : conConvenzioni
-      ? 'Nuove convenzioni per le famiglie — tiformiamonoi'
+      ? 'Nuove convenzioni per le famiglie — tiformiamonoi.it'
       : unaSola
-        ? 'Una nuova comunicazione nel portale — tiformiamonoi'
-        : 'Nuove comunicazioni nel portale — tiformiamonoi'
+        ? 'Una nuova comunicazione nel portale — tiformiamonoi.it'
+        : 'Nuove comunicazioni nel portale — tiformiamonoi.it'
 
   return {
     subject,
@@ -452,7 +478,7 @@ export function emailNoteNelPortale(p: {
       ${sezioneNote}
       ${sezioneConvenzioni}
       <p style="font-size: 13px; color: #64748b; margin-top: 16px;">
-        Ricevi questa email perché sei collegato al portale famiglie di tiformiamonoi:
+        Ricevi questa email perché sei collegato al portale famiglie di tiformiamonoi.it:
         ti scriviamo una volta sola a fine giornata, e soltanto nei giorni in cui c'è davvero qualcosa di nuovo.
       </p>
     `),
@@ -486,6 +512,12 @@ export function emailComunicazione(p: {
   base?: string
   /** true = "Invia una prova a me": l'oggetto lo dice, così non si confonde con quella vera */
   prova?: boolean
+  /**
+   * Percorso della foto (es. /api/immagini/comunicazioni/<id>), se c'è. La foto NON
+   * viaggia dentro l'email (Gmail blocca le immagini "data:", vedi emailNoteNelPortale):
+   * l'email la chiede al gestionale. Serve `base`; senza, niente foto nell'email (resta nel portale).
+   */
+  fotoPercorso?: string
 }): { subject: string; html: string } {
   // L'oggetto non è HTML ma una riga sola: niente a capo che lo spezzino
   const titoloRiga = p.titolo.replace(/\s+/g, ' ').trim()
@@ -508,11 +540,13 @@ export function emailComunicazione(p: {
 
   return {
     subject: `${p.prova ? '[Prova] ' : ''}${titoloRiga}`,
+    // La foto va in testata, prima del titolo: intera, larga quanto l'email, alt vuoto
+    // (è una decorazione: il testo dice già tutto da solo)
     html: layout(escapeHtml(titoloRiga), `
       <p style="font-size: 14px; line-height: 1.5;">${corpo}</p>
       <p style="font-size: 14px; margin-top: 16px;">La Segreteria</p>
       ${azione}
       ${revoca}
-    `),
+    `, p.fotoPercorso && p.base ? `${p.base}${p.fotoPercorso}` : undefined),
   }
 }

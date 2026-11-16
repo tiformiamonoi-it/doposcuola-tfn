@@ -11,7 +11,7 @@
 
 import { and, count, desc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../database/client'
-import { comunicazioni, comunicazioniDestinatari, consensi, studentParents, students, users } from '../database/schema'
+import { comunicazioni, comunicazioniDestinatari, consensi, studentParents, students, systemConfigs, users } from '../database/schema'
 import { randomUUID } from 'node:crypto'
 import { sendEmail, emailComunicazione, notificaInvioDiMassa } from '../utils/email'
 import type { ComunicazioneInput, ComunicazioneTipo } from '#shared/schemas/comunicazione.schema'
@@ -87,10 +87,13 @@ async function aGruppi<T>(lista: T[], quanti: number, fn: (x: T) => Promise<void
  * così la pagina può dire "invio email spento" invece di "non partite" e basta.
  */
 async function spedisci(
-  c: { titolo: string; testo: string; tipo: ComunicazioneTipo },
+  c: { id: string; titolo: string; testo: string; tipo: ComunicazioneTipo; conImmagine: boolean },
   righe: { rigaId: string; email: string; nome?: string }[],
 ): Promise<{ inviate: number; nonPartite: number; spente: number }> {
-  const contenuto = emailComunicazione({ titolo: c.titolo, testo: c.testo, tipo: c.tipo, base: baseUrl() })
+  const contenuto = emailComunicazione({
+    titolo: c.titolo, testo: c.testo, tipo: c.tipo, base: baseUrl(),
+    fotoPercorso: c.conImmagine ? `/api/immagini/comunicazioni/${c.id}` : undefined,
+  })
   // Un invio = un gruppo nel registro email e una sola notifica alla fine
   const invioId = randomUUID()
   let inviate = 0
@@ -134,30 +137,55 @@ export async function inviaComunicazione(input: ComunicazioneInput, authorId: st
     throw new Error('Nessuna famiglia riceverebbe questa comunicazione: non è stata inviata')
   }
 
-  const righe = await db.transaction(async (tx) => {
+  const { id, righe } = await db.transaction(async (tx) => {
     const [c] = await tx.insert(comunicazioni)
-      .values({ titolo: input.titolo, testo: input.testo, tipo: input.tipo, authorId })
+      .values({ titolo: input.titolo, testo: input.testo, tipo: input.tipo, immagine: input.immagine || null, authorId })
       .returning({ id: comunicazioni.id })
-    return await tx.insert(comunicazioniDestinatari)
+    const righe = await tx.insert(comunicazioniDestinatari)
       .values(elenco.map((u) => ({ comunicazioneId: c!.id, userId: u.id })))
       .returning({ id: comunicazioniDestinatari.id, userId: comunicazioniDestinatari.userId })
+    return { id: c!.id, righe }
   })
 
   const persona = new Map(elenco.map((u) => [u.id, u]))
-  const esito = await spedisci(input, righe.map((r) => ({ rigaId: r.id, email: persona.get(r.userId)!.email, nome: persona.get(r.userId)!.nome })))
+  const esito = await spedisci({ ...input, id, conImmagine: !!input.immagine }, righe.map((r) => ({ rigaId: r.id, email: persona.get(r.userId)!.email, nome: persona.get(r.userId)!.nome })))
 
   return { destinatari: elenco.length, ...esito }
 }
 
-/** "Invia una prova a me": solo all'email di chi la sta scrivendo. Non salva niente. */
+// LA FOTO DELLA PROVA, in un posto solo che ogni prova sovrascrive (system_configs).
+// L'email mostra le foto da un indirizzo del gestionale, e la prova non salva nessuna
+// comunicazione: senza questo posto non avrebbe un indirizzo da dare alla foto. Niente
+// comunicazioni "finte" nello storico. La serve /api/immagini/comunicazioni/prova.
+export const CHIAVE_FOTO_PROVA = 'comunicazione_prova_immagine'
+
+/** La foto dell'ultima prova, per l'indirizzo pubblico; null se non c'è o non è una foto valida */
+export async function immagineProva(): Promise<string | null> {
+  const [r] = await db.select({ value: systemConfigs.value }).from(systemConfigs).where(eq(systemConfigs.key, CHIAVE_FOTO_PROVA)).limit(1)
+  return r?.value || null
+}
+
+/**
+ * "Invia una prova a me": solo all'email di chi la sta scrivendo. Non salva la
+ * comunicazione; salva soltanto la foto, se c'è, nel posto della prova (qui sopra),
+ * così l'email di prova è identica a quella vera, foto compresa.
+ */
 export async function inviaProva(input: ComunicazioneInput, userId: string) {
   const [io] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1)
   if (!io) throw new Error('Utente non trovato')
 
+  let fotoPercorso: string | undefined
+  if (input.immagine) {
+    await db.insert(systemConfigs).values({ key: CHIAVE_FOTO_PROVA, value: input.immagine })
+      .onConflictDoUpdate({ target: systemConfigs.key, set: { value: input.immagine, updatedAt: new Date() } })
+    // ?v= cambia a ogni prova: il programma di posta non riusa la foto della prova precedente
+    fotoPercorso = `/api/immagini/comunicazioni/prova?v=${Date.now()}`
+  }
+
   const esito = await sendEmail({
     to: io.email,
     tipo: 'COMUNICAZIONE_PROVA',
-    ...emailComunicazione({ ...input, base: baseUrl(), prova: true }),
+    ...emailComunicazione({ ...input, base: baseUrl(), prova: true, fotoPercorso }),
   })
   return { email: io.email, ...esito }
 }
@@ -182,7 +210,19 @@ export async function riprovaEmail(comunicazioneId: string) {
       ...(c.tipo === 'PROMOZIONALE' ? [consensoMarketingAttivo()] : []),
     ))
 
-  return await spedisci(c, righe)
+  return await spedisci({ ...c, conImmagine: !!c.immagine }, righe)
+}
+
+/**
+ * La foto di una comunicazione, per l'indirizzo pubblico /api/immagini/comunicazioni/<id>
+ * (lo usano le email, che non possono portarsi dietro la foto, e il portale).
+ * null se la comunicazione non c'è, è stata eliminata o non ha foto: così, eliminandola,
+ * la foto sparisce anche dalle email già arrivate.
+ */
+export async function immagineComunicazione(id: string): Promise<string | null> {
+  const [c] = await db.select({ immagine: comunicazioni.immagine }).from(comunicazioni)
+    .where(and(eq(comunicazioni.id, id), isNull(comunicazioni.eliminataAt))).limit(1)
+  return c?.immagine ?? null
 }
 
 /** Toglie la comunicazione dai portali. Le email già partite restano dove sono. */
@@ -202,6 +242,8 @@ export async function storicoComunicazioni() {
     titolo:       comunicazioni.titolo,
     testo:        comunicazioni.testo,
     tipo:         comunicazioni.tipo,
+    // Solo "c'è o non c'è": la foto la pagina la prende dal suo indirizzo, non dentro l'elenco
+    conImmagine:  sql<boolean>`${comunicazioni.immagine} is not null`,
     createdAt:    comunicazioni.createdAt,
     eliminataAt:  comunicazioni.eliminataAt,
     autoreNome:   users.firstName,
@@ -234,6 +276,8 @@ export async function comunicazioniDelGenitore(userId: string) {
     id:        comunicazioni.id,
     titolo:    comunicazioni.titolo,
     testo:     comunicazioni.testo,
+    // Solo il segno: la foto si scarica dal suo indirizzo, una per volta (vedi immagineComunicazione)
+    conImmagine: sql<boolean>`${comunicazioni.immagine} is not null`,
     createdAt: comunicazioni.createdAt,
     lettaAt:   comunicazioniDestinatari.lettaAt,
   })

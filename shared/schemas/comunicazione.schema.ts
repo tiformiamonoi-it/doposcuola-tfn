@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { problemaImmagine } from '../immagini'
 
 // Comunicazioni a tutte le famiglie: lo stesso schema vale per l'invio vero e per
 // "Invia una prova a me", così la prova controlla esattamente ciò che partirà.
@@ -13,6 +14,11 @@ export const ComunicazioneSchema = z.object({
     .min(1, { message: 'Scrivi il testo' })
     .max(5000, { message: 'Il testo può avere al massimo 5000 caratteri' }),
   tipo: ComunicazioneTipoEnum,
+  // Foto facoltativa, già ridotta nel browser: qui si ricontrollano formato e peso (shared/immagini.ts)
+  immagine: z.string().nullish().superRefine((v, ctx) => {
+    const problema = problemaImmagine(v)
+    if (problema) ctx.addIssue({ code: 'custom', message: problema.charAt(0).toUpperCase() + problema.slice(1) })
+  }),
 })
 
 export type ComunicazioneTipo = z.infer<typeof ComunicazioneTipoEnum>

@@ -38,7 +38,8 @@ import { db } from '../database/client'
 import { studentNotes, students, studentParents, users, systemConfigs } from '../database/schema'
 import { randomUUID } from 'node:crypto'
 import { sendEmail, emailNoteNelPortale, notificaInvioDiMassa, tipoEmailAttivo } from '../utils/email'
-import { confiniGiornoOggiRome } from '../utils/tutor-time-window'
+import { confiniGiornoOggiRome, oggiRomeStr } from '../utils/tutor-time-window'
+import { convenzioniValide } from './convenzioni.service'
 
 // TETTO DI EMAIL PER GIRO: solo una rete contro le anomalie.
 // La quota di Brevo non è più un problema (confermato dalla segreteria), e con le
@@ -49,13 +50,11 @@ import { confiniGiornoOggiRome } from '../utils/tutor-time-window'
 // e allora è meglio FERMARSI e segnalarlo che spedire alla cieca.
 const MAX_EMAIL_PER_RUN = 1000
 
-// IL SEGNALIBRO DELLE CONVENZIONI, in system_configs accanto alla riga 'sconti'.
-// Contiene la data di creazione dell'ultima convenzione già annunciata; lo scrive
-// SOLO questo file. Sta in una riga a parte e non dentro il JSON delle convenzioni
-// perché quel JSON lo riscrive per intero la pagina Impostazioni a ogni "Salva":
-// un timbro messo lì dal riepilogo verrebbe cancellato dal primo salvataggio di
-// una pagina aperta da prima. Il salvataggio delle Impostazioni tocca solo le
-// righe che invia, quindi questa non la sfiora.
+// IL SEGNALIBRO DELLE CONVENZIONI, in system_configs. Contiene la data di creazione
+// dell'ultima convenzione già annunciata; lo scrive SOLO questo file. Nato quando le
+// convenzioni erano un JSON in system_configs ('sconti'), riscritto per intero a ogni
+// "Salva" delle Impostazioni; dalla migrazione 0039 stanno nella tabella `convenzioni`,
+// che ha conservato le date di creazione: il segnalibro vale com'era.
 const CHIAVE_CONVENZIONI_ANNUNCIATE = 'sconti_annunciate_fino_a'
 
 /**
@@ -69,23 +68,21 @@ const CHIAVE_CONVENZIONI_ANNUNCIATE = 'sconti_annunciate_fino_a'
  * assente = nessun annuncio fatto finora = valgono tutte quelle con la data.
  */
 async function convenzioniDaAnnunciare(): Promise<{ nuove: { nome: string; descrizione: string }[]; ultima: number }> {
-  const righe = await db.select({ key: systemConfigs.key, value: systemConfigs.value })
-    .from(systemConfigs)
-    .where(inArray(systemConfigs.key, ['sconti', CHIAVE_CONVENZIONI_ANNUNCIATE]))
-  const valore = (chiave: string) => righe.find((r) => r.key === chiave)?.value ?? ''
-
-  const segnalibro = Date.parse(valore(CHIAVE_CONVENZIONI_ANNUNCIATE))
-  let elenco: any
-  try { elenco = JSON.parse(valore('sconti') || '[]') } catch { elenco = [] }
-  if (!Array.isArray(elenco)) elenco = []
+  const [[riga], valide] = await Promise.all([
+    db.select({ value: systemConfigs.value }).from(systemConfigs)
+      .where(eq(systemConfigs.key, CHIAVE_CONVENZIONI_ANNUNCIATE)).limit(1),
+    // Solo quelle ancora valide: una già finita il portale non la mostra, quindi non si annuncia
+    convenzioniValide(oggiRomeStr()),
+  ])
+  const segnalibro = Date.parse(riga?.value ?? '')
 
   const nuove: { nome: string; descrizione: string }[] = []
   let ultima = 0
-  for (const s of elenco) {
-    const creata = Date.parse(s?.creataAt ?? '')
+  for (const c of valide) {
+    const creata = c.creataAt?.getTime() ?? NaN
     if (!Number.isFinite(creata)) continue
     if (Number.isFinite(segnalibro) && creata <= segnalibro) continue
-    nuove.push({ nome: String(s.nome ?? ''), descrizione: String(s.descrizione ?? '') })
+    nuove.push({ nome: c.nome, descrizione: c.descrizione })
     ultima = Math.max(ultima, creata)
   }
   return { nuove, ultima }

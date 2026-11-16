@@ -1,20 +1,9 @@
-import { db } from '../../database/client'
-import { systemConfigs } from '../../database/schema'
-import { eq } from 'drizzle-orm'
+import { convenzioniValide } from '../../services/convenzioni.service'
+import { oggiRomeStr } from '../../utils/tutor-time-window'
 
 // GET /api/portal/sconti — Convenzioni con le attività partner (cartolibrerie, palestre…)
 // mostrate alle famiglie. Configurate dall'admin in Impostazioni → Sconti.
-export default defineEventHandler(async () => {
-  const [row] = await db
-    .select({ value: systemConfigs.value })
-    .from(systemConfigs)
-    .where(eq(systemConfigs.key, 'sconti'))
-    .limit(1)
-
-  try {
-    const sconti = JSON.parse(row?.value || '[]')
-    return Array.isArray(sconti) ? sconti : []
-  } catch {
-    return []
-  }
-})
+// Quelle con "valida fino al" già passato (giorno italiano) spariscono da sole: le
+// toglie il server, così una convenzione finita non arriva nemmeno nel browser.
+// Le foto non sono qui dentro: ognuna ha il suo indirizzo (campo `foto`).
+export default defineEventHandler(async () => await convenzioniValide(oggiRomeStr()))

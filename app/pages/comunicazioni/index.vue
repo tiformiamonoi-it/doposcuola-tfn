@@ -25,6 +25,27 @@
           <UTextarea v-model="testo" :maxlength="5000" :rows="6" autoresize class="w-full" />
         </UFormField>
 
+        <!-- Foto facoltativa: si vede INTERA sotto il testo, nel portale e nell'email -->
+        <UFormField label="Foto (facoltativa)">
+          <UFileUpload
+            v-model="fileImmagine"
+            accept="image/*"
+            label="Trascina o clicca per scegliere"
+            description="JPG/PNG fino a 10 MB — viene ridotta automaticamente"
+            class="w-full min-h-24"
+          />
+          <p class="text-xs text-slate-500 mt-1">
+            Consigliata orizzontale, 1200 × 800 pixel. Va bene anche una locandina verticale: si vede intera.
+          </p>
+          <p class="text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
+            Se nella foto si riconoscono degli alunni, usala solo con quelli che hanno dato il consenso foto e video.
+          </p>
+          <div v-if="immagine" class="mt-2 flex items-start gap-2">
+            <img :src="immagine" alt="Anteprima della foto" class="max-h-48 rounded border border-slate-200" />
+            <UButton size="xs" variant="ghost" color="error" icon="i-heroicons-x-mark" @click="() => { immagine = null }">Togli</UButton>
+          </div>
+        </UFormField>
+
         <!-- Nessuna scelta già fatta, apposta: informativa o promozionale decide chi
              la riceve (le promozioni solo a chi ha dato il consenso), e una scelta
              che conta per la privacy va fatta ogni volta, non ereditata per abitudine. -->
@@ -102,7 +123,10 @@
             <p class="font-semibold text-slate-800">{{ c.titolo }}</p>
   
             <details class="text-sm">
-              <summary class="cursor-pointer text-slate-500">Mostra il testo</summary>
+              <summary class="cursor-pointer text-slate-500">Mostra {{ c.conImmagine ? 'la foto e il testo' : 'il testo' }}</summary>
+              <!-- Foto in cima e intera, come la vedono le famiglie. Dal suo indirizzo, non
+                   dentro l'elenco: si scarica solo aprendo -->
+              <img v-if="c.conImmagine && !c.eliminataAt" :src="`/api/immagini/comunicazioni/${c.id}`" alt="" loading="lazy" class="mt-2 max-h-64 rounded border border-slate-200" />
               <p class="mt-2 text-slate-700 whitespace-pre-wrap">{{ c.testo }}</p>
             </details>
   
@@ -176,15 +200,30 @@ const OPZIONI_TIPO: { value: ComunicazioneTipo; label: string; descrizione: stri
 const titolo = ref('')
 const testo = ref('')
 const tipo = ref<ComunicazioneTipo | null>(null)
+// La foto, già ridotta nel browser (app/utils/immagini.ts): 1200 px sul lato lungo
+const immagine = ref<string | null>(null)
+const fileImmagine = ref<File | null>(null)
+watch(fileImmagine, async (file) => {
+  if (!file) return
+  try {
+    immagine.value = await ridimensionaImmagine(file)
+  } catch (e: any) {
+    toast.add({ title: 'Foto non caricata', description: e?.message, color: 'error' })
+  } finally {
+    fileImmagine.value = null
+  }
+})
 
 const pronta = computed(() => !!titolo.value.trim() && !!testo.value.trim() && !!tipo.value)
 
 function corpo() {
-  return { titolo: titolo.value, testo: testo.value, tipo: tipo.value }
+  return { titolo: titolo.value, testo: testo.value, tipo: tipo.value, immagine: immagine.value }
 }
 
 function messaggioErrore(err: unknown, ripiego: string): string {
-  return (err as { data?: { statusMessage?: string } })?.data?.statusMessage ?? ripiego
+  const dati = (err as { data?: { statusMessage?: string; data?: { errors?: Record<string, string[]> } } })?.data
+  // Una foto rifiutata dal server (troppo pesante, formato strano) ha il suo messaggio
+  return dati?.data?.errors?.immagine?.[0] ?? dati?.statusMessage ?? ripiego
 }
 
 function testoFamiglie(n: number): string {
@@ -218,7 +257,7 @@ async function inviaProva() {
   try {
     const r = await $fetch('/api/comunicazioni/prova', { method: 'POST', body: corpo() })
     if (r.sent) {
-      toast.add({ title: `Prova inviata a ${r.email}`, description: 'Non è stato salvato niente e nessuna famiglia l\'ha ricevuta.', color: 'success' })
+      toast.add({ title: `Prova inviata a ${r.email}`, description: 'Nessuna famiglia l\'ha ricevuta e nello storico non compare.', color: 'success' })
     } else {
       toast.add({ title: 'La prova non è partita', description: r.dettaglio ?? r.motivo, color: 'error' })
     }
@@ -262,6 +301,7 @@ async function invia() {
     titolo.value = ''
     testo.value = ''
     tipo.value = null
+    immagine.value = null
     await refreshStorico()
   } catch (err) {
     toast.add({ title: messaggioErrore(err, 'Non è stato possibile inviare la comunicazione'), color: 'error' })
@@ -294,7 +334,7 @@ async function riprova(id: string) {
 function chiediEliminazione(id: string, titoloComunicazione: string) {
   chiediConferma({
     title: 'Eliminare la comunicazione?',
-    description: `«${titoloComunicazione}» sparirà dal portale delle famiglie. Le email già partite non si possono richiamare: restano nella posta di chi le ha ricevute.`,
+    description: `«${titoloComunicazione}» sparirà dal portale delle famiglie. Le email già partite non si possono richiamare: restano nella posta di chi le ha ricevute, ma senza più la foto.`,
     confirmLabel: 'Elimina',
     confirmColor: 'error',
     attendi: true,

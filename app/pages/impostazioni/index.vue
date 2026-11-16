@@ -21,6 +21,7 @@
       { label: 'Spese Fisse', slot: 'spese' },
       { label: 'Chiusure', slot: 'chiusure' },
       { label: 'Sconti', slot: 'sconti' },
+      { label: 'Pagamenti', slot: 'pagamenti_portale' },
       { label: 'Email', slot: 'email' }
     ]">
       <template #pacchetti>
@@ -624,11 +625,14 @@
           <div class="space-y-4">
             <p class="text-xs text-slate-500">
               Le convenzioni con le attività partner (cartolibrerie, panifici, palestre…) mostrate alle famiglie
-              nella sezione <strong>Sconti</strong> del portale: immagine + breve descrizione.
+              nella sezione <strong>Sconti</strong> del portale: foto e breve descrizione, e se vuoi sconto,
+              indirizzo, orari e telefono. Quelle scadute restano qui, segnate in rosso, ma il portale non le mostra più.
+              Ogni modifica vale subito: non serve "Salva Modifiche".
             </p>
 
-            <!-- Nuova convenzione -->
+            <!-- Nuova convenzione, o correzione di una esistente -->
             <div class="p-3 bg-slate-50 rounded-lg space-y-3">
+              <p v-if="scontoInModifica" class="text-sm font-medium text-slate-700">Stai correggendo «{{ scontoInModifica.nome }}»</p>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <UFormField label="Nome attività" required>
                   <UInput v-model="nuovoSconto.nome" placeholder="Es. Cartolibreria Rossi" class="w-full" />
@@ -638,9 +642,30 @@
                     v-model="fileSconto"
                     accept="image/*"
                     label="Trascina o clicca per scegliere"
-                    description="JPG/PNG — viene ridimensionata automaticamente"
+                    description="JPG/PNG fino a 10 MB — viene ridotta automaticamente"
                     class="w-full min-h-24"
                   />
+                  <p class="text-xs text-slate-500 mt-1">
+                    Foto orizzontale, consigliata 1600 × 1000 pixel. Tieni logo o insegna al centro, lontano dai bordi:
+                    nelle liste la foto viene ritagliata quadrata.
+                  </p>
+                  <!-- Il riquadro bianco è il ritaglio quadrato delle liste: quello che sta fuori non si vede -->
+                  <div v-if="anteprimaSconto" class="mt-2 flex items-start gap-2">
+                    <div class="relative inline-block overflow-hidden rounded">
+                      <img
+                        :src="anteprimaSconto"
+                        alt="Anteprima della foto"
+                        class="max-h-32 rounded border border-slate-200 block"
+                        @load="fotoScontoVerticale = ($event.target as HTMLImageElement).naturalHeight > ($event.target as HTMLImageElement).naturalWidth"
+                      />
+                      <div
+                        class="absolute aspect-square border-2 border-white shadow-[0_0_0_9999px_rgba(15,23,42,0.45)] pointer-events-none"
+                        :class="fotoScontoVerticale ? 'inset-x-0 top-1/2 -translate-y-1/2' : 'inset-y-0 left-1/2 -translate-x-1/2'"
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <UButton size="xs" variant="ghost" color="error" icon="i-heroicons-x-mark" @click="togliFotoSconto">Togli la foto</UButton>
+                  </div>
                 </UFormField>
               </div>
               <UFormField label="Breve descrizione dello sconto" required>
@@ -651,30 +676,103 @@
                   class="w-full"
                 />
               </UFormField>
+              <!-- Campi facoltativi: nel portale compare solo quello che è compilato -->
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <UFormField label="Sconto (etichetta corta)">
+                  <UInput v-model="nuovoSconto.sconto" placeholder="Es. −10%" class="w-full" />
+                </UFormField>
+                <UFormField label="Categoria">
+                  <UInput v-model="nuovoSconto.categoria" placeholder="Es. Cartoleria, Sport" class="w-full" />
+                </UFormField>
+                <UFormField label="Valida fino al" help="Vuoto = senza scadenza. Dal giorno dopo sparisce dal portale.">
+                  <UInput v-model="nuovoSconto.validaFino" type="date" class="w-full" />
+                </UFormField>
+                <UFormField label="Indirizzo" help="Serve al tasto «Apri in Mappe».">
+                  <UInput v-model="nuovoSconto.indirizzo" placeholder="Es. Via Roma 12" class="w-full" />
+                </UFormField>
+                <UFormField label="Città">
+                  <UInput v-model="nuovoSconto.citta" placeholder="Es. Trapani" class="w-full" />
+                </UFormField>
+                <UFormField label="Telefono">
+                  <UInput v-model="nuovoSconto.telefono" type="tel" placeholder="Es. 0923 123456" class="w-full" />
+                </UFormField>
+              </div>
+              <UFormField label="Orari">
+                <UInput v-model="nuovoSconto.orari" placeholder="Es. Lun–Sab 9:00–13:00 e 16:30–20:00" class="w-full" />
+              </UFormField>
               <div class="flex items-center gap-3">
-                <img v-if="nuovoSconto.immagine" :src="nuovoSconto.immagine" class="h-12 w-12 rounded object-cover border border-slate-200" />
-                <UButton icon="i-heroicons-plus" @click="aggiungiSconto">Aggiungi convenzione</UButton>
+                <UButton :icon="scontoInModifica ? 'i-heroicons-check' : 'i-heroicons-plus'" :loading="salvandoSconto" @click="salvaSconto">
+                  {{ scontoInModifica ? 'Salva la correzione' : 'Aggiungi convenzione' }}
+                </UButton>
+                <UButton v-if="scontoInModifica" variant="ghost" color="neutral" @click="annullaModificaSconto">Annulla</UButton>
               </div>
             </div>
 
-            <!-- Elenco convenzioni -->
-            <div v-if="sconti.length === 0" class="py-8 text-center text-slate-400 text-sm">
+            <!-- Elenco convenzioni: le foto dal loro indirizzo, non dentro l'elenco -->
+            <div v-if="pendingSconti && sconti.length === 0" class="py-2"><USkeleton class="h-14 w-full" /></div>
+            <div v-else-if="sconti.length === 0" class="py-8 text-center text-slate-400 text-sm">
               <UIcon name="i-heroicons-tag" class="w-8 h-8 mx-auto mb-2 text-slate-300" />
               Nessuna convenzione. Aggiungine una qui sopra: comparirà nel portale famiglie.
             </div>
             <div v-else class="divide-y divide-slate-100">
-              <div v-for="(s, idx) in sconti" :key="idx" class="flex items-center gap-3 py-3 px-1">
-                <img v-if="s.immagine" :src="s.immagine" class="h-12 w-12 rounded object-cover border border-slate-200 shrink-0" />
+              <div v-for="s in sconti" :key="s.id" class="flex items-center gap-3 py-3 px-1">
+                <img v-if="s.foto" :src="s.foto" alt="" loading="lazy" class="h-12 w-12 rounded object-cover object-center border border-slate-200 shrink-0" />
                 <div v-else class="h-12 w-12 rounded bg-slate-100 flex items-center justify-center shrink-0">
                   <UIcon name="i-heroicons-building-storefront" class="w-5 h-5 text-slate-300" />
                 </div>
                 <div class="flex-1 min-w-0">
-                  <div class="font-medium text-sm text-slate-800">{{ s.nome }}</div>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-medium text-sm text-slate-800">{{ s.nome }}</span>
+                    <UBadge v-if="s.sconto" color="success" variant="subtle" size="xs">{{ s.sconto }}</UBadge>
+                    <!-- Qui si vedono tutte; nel portale le scadute non ci sono più -->
+                    <UBadge v-if="!convenzioneValida(s, oggiSconti)" color="error" variant="subtle" size="xs">
+                      scaduta il {{ s.validaFino!.split('-').reverse().join('/') }} · non visibile nel portale
+                    </UBadge>
+                    <span v-else-if="s.validaFino" class="text-xs text-slate-400">fino al {{ s.validaFino.split('-').reverse().join('/') }}</span>
+                  </div>
                   <p class="text-xs text-slate-500 truncate">{{ s.descrizione }}</p>
+                  <p v-if="s.categoria || s.citta" class="text-xs text-slate-400 truncate">{{ [s.categoria, s.citta].filter(Boolean).join(' · ') }}</p>
                 </div>
-                <UButton icon="i-heroicons-trash" variant="ghost" color="error" size="xs" @click="rimuoviSconto(idx)" />
+                <UButton icon="i-heroicons-pencil-square" variant="ghost" color="neutral" size="xs" title="Correggi" :aria-label="`Correggi ${s.nome}`" @click="modificaSconto(s)" />
+                <UButton icon="i-heroicons-trash" variant="ghost" color="error" size="xs" :aria-label="`Togli ${s.nome}`" @click="rimuoviSconto(s)" />
               </div>
             </div>
+          </div>
+        </UCard>
+      </template>
+
+      <template #pagamenti_portale>
+        <UCard class="mt-4">
+          <template #header>
+            <div class="flex items-center gap-2">
+              <UIcon name="i-heroicons-banknotes" class="w-4 h-4 text-tfn-500" />
+              <span class="font-medium text-slate-800">Pagamenti nel portale</span>
+            </div>
+          </template>
+
+          <div class="space-y-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-slate-800">Pagamenti nel portale</p>
+                <p class="text-xs text-slate-500 mt-0.5">
+                  Spento, nel portale la sezione dice solo «In arrivo» e non si apre. Acceso, ogni genitore vede
+                  quanto resta da saldare per i suoi figli, con IBAN e causale da copiare. Gli alunni non vedono mai
+                  importi. Il pagamento risulta quando lo registri tu, come oggi.
+                </p>
+              </div>
+              <USwitch v-model="pagamentiPortaleAttivi" aria-label="Pagamenti nel portale" />
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <UFormField label="Intestatario del bonifico">
+                <UInput v-model="bonificoIntestatario" placeholder="Es. il nome dell'associazione, come sul conto" class="w-full" />
+              </UFormField>
+              <UFormField label="IBAN">
+                <UInput v-model="bonificoIban" placeholder="IT00 X000 0000 0000 0000 0000 000" class="w-full font-mono" />
+              </UFormField>
+            </div>
+            <p v-if="pagamentiPortaleAttivi && (!bonificoIntestatario.trim() || !bonificoIban.trim())" class="text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded-lg p-2">
+              L'interruttore è acceso ma mancano intestatario o IBAN: le famiglie vedrebbero i dati del bonifico incompleti.
+            </p>
           </div>
 
           <template #footer>
@@ -955,6 +1053,8 @@ import { SUPPLEMENTO_SPECIALE, TARIFFE_DEFAULT } from '#shared/tariffe'
 import { MATERIE_SUPERIORI, materieDaAggiungere } from '#shared/materie'
 import { annoScolasticoDa, inizioAnnoProposto } from '#shared/rientri'
 import { isDomenica } from '#shared/giorno-civile'
+import { convenzioneValida, type Convenzione } from '#shared/convenzioni'
+import { CHIAVE_BONIFICO_IBAN, CHIAVE_BONIFICO_INTESTATARIO, INTERRUTTORE_PAGAMENTI_PORTALE } from '#shared/pagamenti-portale'
 import {
   ETICHETTA_TIPO_EMAIL, INTERRUTTORE_EMAIL_GENERALE, INTERRUTTORI_EMAIL, interruttoreAcceso,
   type MotivoEmail, type TipoEmail,
@@ -1371,10 +1471,10 @@ const emailPerTipo = reactive<Record<TipoEmail, boolean>>(
 // Maxi gruppo (system_configs.maxi_gruppo_attivo): acceso finché non si salva "false",
 // stesso criterio del server (lesson.service.ts → getMaxiAttivo). La tariffa MAXI resta salvata.
 const maxiGruppoAttivo = ref(true)
-// creataAt: quando la convenzione è stata aggiunta. Serve al riepilogo serale per
-// annunciare alle famiglie SOLO le convenzioni nuove (vedi note-digest.service.ts).
-// Quelle nate prima di questo campo non ce l'hanno e contano come già note.
-const sconti = ref<{ nome: string; descrizione: string; immagine: string; creataAt?: string }[]>([])
+// Scheda Pagamenti: le chiavi e la regola "spento-di-base" stanno in shared/pagamenti-portale.ts
+const pagamentiPortaleAttivi = ref(false)
+const bonificoIntestatario = ref('')
+const bonificoIban = ref('')
 const materieSpeciali = ref<string[]>([])
 const giornateSpeciali = ref<Record<string, string[]>>({})
 // Anno scolastico dei Rientri: se non è mai stato salvato, la pagina propone
@@ -1398,7 +1498,9 @@ watchEffect(() => {
       categoria: typeof s?.categoria === 'string' ? s.categoria : '',
     }))
   } catch(e){}
-  try { sconti.value = JSON.parse(configs.value.sconti || '[]') } catch(e){}
+  pagamentiPortaleAttivi.value = interruttoreAcceso(configs.value[INTERRUTTORE_PAGAMENTI_PORTALE.chiave], INTERRUTTORE_PAGAMENTI_PORTALE.seAssente)
+  bonificoIntestatario.value = configs.value[CHIAVE_BONIFICO_INTESTATARIO] || ''
+  bonificoIban.value = configs.value[CHIAVE_BONIFICO_IBAN] || ''
   try { materieSpeciali.value = JSON.parse(configs.value.materie_speciali || '[]') } catch(e){}
   try {
     // Normalizza in array (tollera il vecchio formato "una materia per giorno")
@@ -1483,66 +1585,111 @@ function toggleGiornoSpeciale(dateStr: string, domenica: boolean) {
 }
 
 // ─── Sconti e convenzioni (portale famiglie) ───
-const nuovoSconto = reactive({ nome: '', descrizione: '', immagine: '' })
-const fileSconto = ref<File | null>(null)
+// Stanno nella tabella `convenzioni` (migrazione 0039) e si gestiscono con le loro API
+// (/api/settings/convenzioni): ogni aggiunta, correzione o eliminazione vale subito,
+// senza passare da "Salva Modifiche". Le foto arrivano dal loro indirizzo, mai nell'elenco.
+const { data: scontiData, pending: pendingSconti, refresh: refreshSconti } = useLazyFetch<Convenzione[]>('/api/settings/convenzioni')
+const sconti = computed(() => scontiData.value ?? [])
+const oggiSconti = oggiISO()
 
-// L'immagine scelta viene rimpicciolita nel browser (max 800px, JPEG) prima di salvarla:
-// così il database resta leggero e il portale carica in fretta.
+// I campi del modulo: quelli aggiunti il 16/11/2026 (categoria … validaFino) sono facoltativi
+const SCONTO_VUOTO = {
+  nome: '', descrizione: '',
+  categoria: '', citta: '', sconto: '', indirizzo: '', orari: '', telefono: '', validaFino: '',
+}
+const nuovoSconto = reactive({ ...SCONTO_VUOTO })
+const fileSconto = ref<File | null>(null)
+// La foto: `fotoNuova` è quella appena scelta (già ridotta); `fotoTolta` = "Togli la foto".
+// In una correzione senza foto nuova né "togli", la foto resta quella di prima.
+const fotoNuova = ref<string | null>(null)
+const fotoTolta = ref(false)
+// La convenzione che si sta correggendo; null = se ne aggiunge una nuova. La correzione
+// mantiene la data di creazione: il riepilogo serale non la riannuncia come "nuova".
+const scontoInModifica = ref<Convenzione | null>(null)
+const anteprimaSconto = computed(() =>
+  fotoNuova.value ?? (!fotoTolta.value ? scontoInModifica.value?.foto ?? null : null))
+const salvandoSconto = ref(false)
+
+// L'immagine scelta viene rimpicciolita nel browser (1200 px sul lato lungo, JPEG) prima di
+// salvarla: così il database resta leggero e il portale carica in fretta (app/utils/immagini.ts).
 watch(fileSconto, async (file) => {
   if (!file) return
   try {
-    nuovoSconto.immagine = await ridimensionaImmagine(file)
-  } catch {
-    toast.add({ title: 'Immagine non valida', description: 'Scegli un file JPG o PNG.', color: 'error' })
+    fotoNuova.value = await ridimensionaImmagine(file)
+    fotoTolta.value = false
+  } catch (e: any) {
+    toast.add({ title: 'Immagine non caricata', description: e?.message ?? 'Scegli un file JPG o PNG.', color: 'error' })
     fileSconto.value = null
   }
 })
+// Anteprima del ritaglio: nelle liste la foto diventa quadrata, presa dal centro.
+// Serve sapere se è verticale per disegnare il quadrato nel verso giusto.
+const fotoScontoVerticale = ref(false)
 
-function ridimensionaImmagine(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    const url = URL.createObjectURL(file)
-    img.onload = () => {
-      const MAX = 800
-      const scala = Math.min(1, MAX / Math.max(img.width, img.height))
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.round(img.width * scala)
-      canvas.height = Math.round(img.height * scala)
-      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
-      URL.revokeObjectURL(url)
-      resolve(canvas.toDataURL('image/jpeg', 0.82))
-    }
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Immagine non leggibile')) }
-    img.src = url
-  })
+function togliFotoSconto() {
+  fotoNuova.value = null
+  fotoTolta.value = true
+  fileSconto.value = null
 }
 
-function aggiungiSconto() {
+async function salvaSconto() {
   if (!nuovoSconto.nome.trim() || !nuovoSconto.descrizione.trim()) {
     toast.add({ title: 'Compila nome e descrizione', color: 'warning', icon: 'i-heroicons-exclamation-circle' })
     return
   }
-  sconti.value.push({
-    nome: nuovoSconto.nome.trim(),
-    descrizione: nuovoSconto.descrizione.trim(),
-    immagine: nuovoSconto.immagine,
-    creataAt: new Date().toISOString(),
-  })
-  Object.assign(nuovoSconto, { nome: '', descrizione: '', immagine: '' })
-  fileSconto.value = null
-  toast.add({ title: 'Convenzione aggiunta', description: 'Ricordati di premere "Salva Modifiche".', color: 'info' })
+  const inModifica = scontoInModifica.value
+  // Foto: nuova → si manda; tolta → null; altrimenti in una correzione non si manda (resta)
+  const immagine = fotoNuova.value ?? (fotoTolta.value || !inModifica ? null : undefined)
+  salvandoSconto.value = true
+  try {
+    await $fetch(inModifica ? `/api/settings/convenzioni/${inModifica.id}` : '/api/settings/convenzioni', {
+      method: inModifica ? 'PUT' : 'POST',
+      body: { ...nuovoSconto, immagine },
+    })
+    toast.add({ title: inModifica ? 'Convenzione corretta' : 'Convenzione aggiunta', color: 'success' })
+    annullaModificaSconto()
+    await refreshSconti()
+  } catch (e: any) {
+    const errori = e?.data?.data?.errors as Record<string, string[]> | undefined
+    toast.add({
+      title: 'Convenzione non salvata',
+      description: Object.values(errori ?? {})[0]?.[0] ?? e?.data?.statusMessage ?? 'Riprova fra qualche istante.',
+      color: 'error',
+    })
+  } finally {
+    salvandoSconto.value = false
+  }
 }
-function rimuoviSconto(idx: number) {
-  const s = sconti.value[idx]
-  if (!s) return
+function modificaSconto(s: Convenzione) {
+  annullaModificaSconto()
+  Object.assign(nuovoSconto, Object.fromEntries(Object.keys(SCONTO_VUOTO).map((k) => [k, (s as any)[k] ?? ''])))
+  scontoInModifica.value = s
+}
+function annullaModificaSconto() {
+  Object.assign(nuovoSconto, SCONTO_VUOTO)
+  fileSconto.value = null
+  fotoNuova.value = null
+  fotoTolta.value = false
+  scontoInModifica.value = null
+}
+function rimuoviSconto(s: Convenzione) {
   chiediConferma(
     {
       title: `Togliere la convenzione "${s.nome}"?`,
-      description: 'Sparirà dalla sezione Sconti del portale famiglie, insieme alla sua immagine. Diventa definitivo quando premi "Salva Modifiche".',
+      description: 'Sparirà subito dalla sezione Sconti del portale famiglie, insieme alla sua foto.',
       confirmLabel: 'Togli',
       confirmColor: 'error',
     },
-    () => { sconti.value.splice(idx, 1) }
+    async () => {
+      try {
+        await $fetch(`/api/settings/convenzioni/${s.id}`, { method: 'DELETE' })
+        if (scontoInModifica.value?.id === s.id) annullaModificaSconto()
+        toast.add({ title: 'Convenzione tolta', color: 'success' })
+        await refreshSconti()
+      } catch (e: any) {
+        toast.add({ title: 'Errore', description: e?.data?.statusMessage ?? 'Impossibile toglierla', color: 'error' })
+      }
+    }
   )
 }
 
@@ -1732,7 +1879,10 @@ async function salvaConfigs(opzioni?: { silenzioso?: boolean; rilancia?: boolean
         [INTERRUTTORE_EMAIL_GENERALE.chiave]: emailAttive.value ? 'true' : 'false',
         ...Object.fromEntries(EMAIL_SPEGNIBILI.map(({ tipo }) => [INTERRUTTORI_EMAIL[tipo]!.chiave, emailPerTipo[tipo] ? 'true' : 'false'])),
         maxi_gruppo_attivo: maxiGruppoAttivo.value ? 'true' : 'false',
-        sconti: JSON.stringify(sconti.value),
+        [INTERRUTTORE_PAGAMENTI_PORTALE.chiave]: pagamentiPortaleAttivi.value ? 'true' : 'false',
+        [CHIAVE_BONIFICO_INTESTATARIO]: bonificoIntestatario.value.trim(),
+        // Senza spazi e in maiuscolo: è la forma che il portale fa copiare alle famiglie
+        [CHIAVE_BONIFICO_IBAN]: bonificoIban.value.replace(/\s/g, '').toUpperCase(),
         materie_speciali: JSON.stringify(materieSpeciali.value),
         giornate_speciali: JSON.stringify(giornateSpeciali.value),
         anno_scolastico_corrente: annoScolastico.value.trim(),
@@ -1742,7 +1892,8 @@ async function salvaConfigs(opzioni?: { silenzioso?: boolean; rilancia?: boolean
     if (!opzioni?.silenzioso) toast.add({ title: 'Impostazioni salvate', color: 'success' })
     refreshConfigs()
   } catch(e: any) {
-    toast.add({ title: 'Errore al salvataggio', color: 'error' })
+    // Il messaggio del server dice cosa non va (es. una foto troppo pesante)
+    toast.add({ title: 'Errore al salvataggio', description: e?.data?.statusMessage, color: 'error' })
     if (opzioni?.rilancia) throw e
   } finally {
     salvandoConfigs.value = false

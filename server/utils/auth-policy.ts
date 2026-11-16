@@ -30,6 +30,15 @@ export const PUBLIC_API_PREFIXES = [
   // senza account. Apre solo /api/verifica-card/<codice> (stesso confronto per percorso
   // intero di sopra); limite di tentativi e privacy sono nell'handler.
   '/api/verifica-card',
+  // La foto di una comunicazione: la chiedono le EMAIL, aperte da programmi di posta
+  // senza sessione. Solo /api/immagini/comunicazioni/<id> (cuid, non si indovina) e
+  // /prova (la foto dell'ultima prova); fuori da /api/comunicazioni, che resta dello
+  // staff. Se la comunicazione è eliminata, 404.
+  '/api/immagini/comunicazioni',
+  // La foto di una convenzione (portale e Impostazioni, stesse regole di quella sopra).
+  // Perché pubblica: la convenzione è già pubblica per chi ha il portale, e un <img> la
+  // carica senza problemi di sessione. Solo /api/immagini/convenzioni/<id>.
+  '/api/immagini/convenzioni',
 ]
 
 // Regole ordinate: la PRIMA che matcha decide i ruoli ammessi.

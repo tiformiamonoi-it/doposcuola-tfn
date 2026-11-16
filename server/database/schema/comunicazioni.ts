@@ -19,6 +19,11 @@ export const comunicazioni = pgTable('comunicazioni', {
   // Testo semplice, con gli a capo: niente HTML (nell'email viene "disinnescato").
   testo:  text('testo').notNull(),
   tipo:   comunicazioneTipoEnum('tipo').notNull(),
+  // Una foto facoltativa (locandina, volantino, evento), come data URI già ridotto a
+  // 1200 px (shared/immagini.ts). Non viaggia mai negli elenchi: portale ed email la
+  // prendono dall'indirizzo pubblico /api/immagini/comunicazioni/<id>, che smette di
+  // rispondere quando la comunicazione viene eliminata.
+  immagine: text('immagine'),
 
   // Chi l'ha mandata. 'set null': se l'account dello staff sparisce, lo storico resta.
   authorId: text('author_id').references(() => users.id, { onDelete: 'set null' }),
