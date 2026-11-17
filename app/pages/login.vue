@@ -101,26 +101,34 @@
 <script setup lang="ts">
 import { z } from 'zod'
 
-definePageMeta({ layout: false })
+definePageMeta({
+  layout: false,
+  // CHI È GIÀ COLLEGATO VA A CASA SUBITO, PRIMA CHE LA PAGINA SI DISEGNI. La webapp
+  // installata si apre su /login: prima il modulo restava a schermo qualche secondo,
+  // finché il telefono non rimandava a casa. Ora lo rimanda il server, all'istante.
+  // Il cookie però dice solo chi eri: un account disattivato o con la password cambiata
+  // ha ancora il cookie, ma le API lo respingono. Rimandarlo a casa alla cieca lo
+  // porterebbe a ogni apertura su una casa vuota, senza mai più vedere il modulo per
+  // rientrare. Per questo prima si chiede al server se la sessione vale ancora: se no,
+  // la si cancella (anche dal browser) e si mostra il modulo.
+  middleware: [async () => {
+    const { loggedIn, user, clear } = useUserSession()
+    if (!loggedIn.value) return
+    const casa = homeDiRuolo(user.value?.role)
+    if (casa === '/login') return // ruolo sconosciuto: niente /login → /login
+    try {
+      await useRequestFetch()('/api/auth/sessione-valida')
+    } catch (e) {
+      if ((e as { statusCode?: number }).statusCode === 401) {
+        await clear()
+        return
+      }
+      // Altri errori (rete, database): la sessione non è smentita, si va a casa.
+    }
+    return navigateTo(casa, { replace: true })
+  }],
+})
 useHead({ title: 'Accedi — tiformiamonoi.it' })
-
-// Redirect se già loggato (solo client-side per evitare SSR loop)
-const { loggedIn, user } = useUserSession()
-function homePerRuolo() {
-  const role = user.value?.role ?? ''
-  if (['GENITORE', 'STUDENTE'].includes(role)) return '/portale'
-  return role === 'TUTOR' ? '/area-tutor' : '/'
-}
-onMounted(async () => {
-  if (loggedIn.value) {
-    await navigateTo(homePerRuolo(), { replace: true })
-  }
-})
-watch(loggedIn, async (isLoggedIn) => {
-  if (isLoggedIn) {
-    await navigateTo(homePerRuolo(), { replace: true })
-  }
-})
 
 const schema = z.object({
   email:    z.string().email('Email non valida'),

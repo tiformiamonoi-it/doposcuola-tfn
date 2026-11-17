@@ -53,6 +53,8 @@ export const API_POLICY: Array<{ prefix: string; roles: Role[]; mutationRoles?: 
   // Le schermate "Novità" ora le vedono anche genitori e alunni (portale, grafica v6)
   { prefix: '/api/auth/novita-vista',       roles: [...STAFF, ...FAMIGLIA] },
   { prefix: '/api/auth/logout',             roles: [...STAFF, ...FAMIGLIA] },
+  // La pagina /login chiede se la sessione vale ancora (tutti i ruoli)
+  { prefix: '/api/auth/sessione-valida',    roles: [...STAFF, ...FAMIGLIA] },
   { prefix: '/api/accounting',              roles: ADMIN_ONLY },
   // Registro delle email: indirizzi e nomi di tutte le famiglie, e cosa hanno
   // ricevuto. È lo strumento di chi gestisce la posta: solo ADMIN.
