@@ -97,7 +97,8 @@ const AZIONI = [
 // ─── Le lezioni di oggi: la stessa lettura del calendario, ristretta a oggi ───
 // (il server dà al TUTOR solo le sue lezioni)
 const { data: lezioniRes, pending: pendingLezioni } = useLazyFetch<{ data: any[] }>('/api/lessons', {
-  query: { dataInizio: ora.giorno, dataFine: ora.giorno, limit: 500 },
+  // tutorId per il SUPER_TUTOR nell'app (D2), che altrimenti leggerebbe le lezioni di tutti
+  query: { dataInizio: ora.giorno, dataFine: ora.giorno, limit: 500, tutorId: user.value?.id },
 })
 const riassuntoOggi = computed(() => {
   const lezioni = (lezioniRes.value?.data ?? []).filter((l) => String(l.data).startsWith(ora.giorno))

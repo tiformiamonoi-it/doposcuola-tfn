@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">tiformiamonoi.it</string>
+    <string name="title_activity_main">tiformiamonoi.it</string>
+    <string name="package_name">it.tiformiamonoi.app</string>
+    <string name="custom_url_scheme">it.tiformiamonoi.app</string>
+</resources>

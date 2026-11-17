@@ -7,7 +7,7 @@
       <span aria-hidden="true" class="size-14 shrink-0 rounded-full bg-pf-celeste text-pf-blu font-heading font-bold text-lg flex items-center justify-center">{{ iniziali }}</span>
       <span class="min-w-0 flex flex-col gap-0.5">
         <span class="font-heading font-bold text-lg break-words">{{ user?.firstName }} {{ user?.lastName }}</span>
-        <span class="text-[13px] text-pf-grigio">Tutor</span>
+        <span class="text-[13px] text-pf-grigio">{{ user?.role === 'SUPER_TUTOR' ? 'Super Tutor' : 'Tutor' }}</span>
         <span class="text-[13px] text-pf-grigio-scuro break-all">{{ user?.email }}</span>
       </span>
     </section>
@@ -42,6 +42,8 @@
         <span class="flex-1">La mia disponibilità</span>
         <UIcon name="i-heroicons-chevron-right" class="size-4 text-pf-grigio" aria-hidden="true" />
       </NuxtLink>
+      <!-- Tutorial e card sono solo del TUTOR: il super tutor (nell'app) non ha né l'uno né l'altra -->
+      <template v-if="user?.role === 'TUTOR'">
       <button type="button" :class="RIGA" @click="() => { tutorialRiapri = true }">
         <span :class="ICONA" aria-hidden="true"><UIcon name="i-heroicons-play-circle" class="size-5" /></span>
         <span class="flex-1">Rivedi il tutorial di benvenuto</span>
@@ -52,6 +54,7 @@
         <span class="flex-1">Regolamento della card</span>
         <UIcon name="i-heroicons-chevron-right" class="size-4 text-pf-grigio" aria-hidden="true" />
       </NuxtLink>
+      </template>
     </nav>
 
     <div class="mx-5 mt-5">
@@ -135,7 +138,8 @@ useHead({ title: 'Il mio profilo — tiformiamonoi.it' })
 
 const toast = useToast()
 const { user } = useUserSession()
-const perTutor = computed(() => user.value?.role === 'TUTOR')
+// Il TUTOR, e il SUPER_TUTOR dentro l'app (D2), vedono la veste nuova
+const perTutor = useVesteTutor()
 const tutorialRiapri = useState('tutorial-riapri', () => false)
 const { uscendo, logout } = useLogout()
 

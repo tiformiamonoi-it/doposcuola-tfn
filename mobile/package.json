@@ -1,0 +1,19 @@
+{
+  "name": "tiformiamonoi-app",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Guscio Android/iOS che apre il sito tiformiamonoi.it",
+  "scripts": {
+    "sync": "cap sync android",
+    "assets": "capacitor-assets generate --android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^4.0.0",
+    "@capacitor/cli": "^8.6.2",
+    "typescript": "^5.9.3"
+  }
+}

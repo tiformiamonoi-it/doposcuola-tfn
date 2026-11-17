@@ -3,6 +3,8 @@
 // se lo ascoltasse solo InstallBanner (montato nel layout portale, raggiunto con navigazione
 // client) andrebbe perso. Lo teniamo in useState: lato client non viene mai serializzato.
 export default defineNuxtPlugin(() => {
+  // Dentro l'app per telefono l'app c'è già: nessun invito a installarla
+  if (useInApp()) return
   const prompt = useState<any>('installPrompt', () => null)
   window.addEventListener('beforeinstallprompt', (e: Event) => {
     e.preventDefault() // niente mini-infobar di Chrome: mostriamo noi il bottone

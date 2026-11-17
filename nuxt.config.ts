@@ -64,7 +64,7 @@ export default defineNuxtConfig({
     brevoApiKey:   '',
     emailFrom:     '',                    // mittente verificato su Brevo
     emailFromName: 'tiformiamonoi',
-    appUrl:        '',                    // es. https://gestionale.tiformiamonoi.it (per i link nelle email)
+    appUrl:        '',                    // es. https://app.tiformiamonoi.it (per i link nelle email)
   },
 
   googleFonts: {

@@ -93,6 +93,8 @@ const { data: lezioniRes, pending } = useLazyFetch<{ data: any[] }>('/api/lesson
     dataInizio: dataInizio.value,
     dataFine: dataFine.value,
     limit: 500,
+    // Per il SUPER_TUTOR nell'app (D2): al TUTOR il server lo impone già
+    tutorId: user.value?.id,
   })),
 })
 const lezioni = computed(() =>

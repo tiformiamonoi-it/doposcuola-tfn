@@ -2,7 +2,8 @@
   <div class="pf min-h-screen bg-pf-fondo text-pf-testo font-sans overflow-x-hidden">
     <!-- L'AREA TUTOR, nella stessa veste del portale famiglie (layouts/portal.vue): colonna
          larga al massimo 640 px, testata blu messa da ogni pagina, menu in basso con la Card
-         al centro. Solo per il ruolo TUTOR: Super Tutor e Admin restano sul gestionale (D1). -->
+         al centro. Per il TUTOR, e per il SUPER_TUTOR solo dentro l'app (D2): nel browser
+         Super Tutor e Admin restano sul gestionale (D1). -->
     <div class="mx-auto max-w-[640px] min-h-screen flex flex-col pb-28">
       <slot />
 
@@ -13,7 +14,7 @@
       </footer>
     </div>
 
-    <PortaleMenu :voci="VOCI" />
+    <PortaleMenu :voci="voci" />
 
     <!-- Benvenuto al primo accesso e Novità dopo un aggiornamento, a schermo intero come
          nel portale famiglie (D6). Schermate dei tutor in Presentazione e in shared/changelog.ts. -->
@@ -31,4 +32,8 @@ const VOCI = [
   { to: '/area-tutor/convenzioni', etichetta: 'Convenzioni', icona: 'i-heroicons-tag' },
   { to: '/area-tutor/profilo',     etichetta: 'Profilo',     icona: 'i-heroicons-user' },
 ]
+// Il super tutor (solo nell'app, D2) non ha la card: niente Card né Convenzioni, le loro
+// API sono solo del TUTOR. Gli restano Home, Lezioni e Profilo.
+const { user } = useUserSession()
+const voci = user.value?.role === 'TUTOR' ? VOCI : VOCI.filter((v) => !['/area-tutor/card', '/area-tutor/convenzioni'].includes(v.to))
 </script>

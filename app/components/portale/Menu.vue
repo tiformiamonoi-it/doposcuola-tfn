@@ -3,7 +3,8 @@
        Sul computer resta in fondo, largo quanto la colonna centrale del portale. -->
   <nav aria-label="Menu principale" class="fixed bottom-0 inset-x-0 z-40">
     <div
-      class="mx-auto max-w-[640px] bg-white border-t border-pf-bordo grid grid-cols-5 items-end px-2 pt-1 md:rounded-t-3xl md:border-x"
+      :class="voci.length === 5 ? 'grid-cols-5' : 'grid-cols-3'"
+      class="mx-auto max-w-[640px] bg-white border-t border-pf-bordo grid items-end px-2 pt-1 md:rounded-t-3xl md:border-x"
       style="padding-bottom: max(10px, env(safe-area-inset-bottom))"
     >
       <NuxtLink

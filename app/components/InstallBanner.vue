@@ -43,8 +43,10 @@ onMounted(() => {
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 })
 
+// Dentro l'app per telefono è già installata: l'invito non serve (vale anche per iPhone)
+const inApp = useInApp()
 const mostra = computed(() =>
-  !dismissed.value && !giaInstallata.value && (!!promptNativo.value || isIos.value)
+  !inApp && !dismissed.value && !giaInstallata.value && (!!promptNativo.value || isIos.value)
 )
 
 async function installa() {

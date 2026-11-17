@@ -30,4 +30,16 @@ export default defineNuxtRouteMiddleware((to) => {
   if (user.value.role === 'GENITORE' && (user.value.dichiarazioniMinori?.length ?? 0) > 0) {
     return navigateTo('/portale/accetta-termini')
   }
+  // DENTRO L'APP (D1, D2): la segreteria vede solo "Il gestionale si usa dal computer",
+  // il super tutor solo l'area tutor. Basta questo controllo, perché ogni pagina passa di
+  // qui: anche "/" dove i middleware delle pagine rimandano chi non è a casa sua.
+  // Cambia solo cosa si vede: le API restano protette dai ruoli come nel browser.
+  if (useInApp()) {
+    if (user.value.role === 'ADMIN' && to.path !== '/solo-computer') return navigateTo('/solo-computer')
+    if (user.value.role === 'SUPER_TUTOR' && !PAGINE_SUPER_TUTOR_APP.includes(to.path)) return navigateTo('/area-tutor')
+  }
 })
+
+// Le pagine dell'area tutor che funzionano anche per il super tutor. Mancano Card e
+// Convenzioni: le loro API (/api/tutor/...) sono solo del TUTOR e il super tutor la card non ce l'ha.
+const PAGINE_SUPER_TUTOR_APP = ['/area-tutor', '/area-tutor/profilo', '/area-tutor/disponibilita', '/area-tutor/note', '/tutor-calendario', '/stampe/tutor-lezioni']

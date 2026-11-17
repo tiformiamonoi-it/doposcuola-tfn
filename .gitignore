@@ -48,3 +48,9 @@ manuale/
 # Strumenti locali: impostazioni del design e video di presentazione
 .impeccable/
 brag-output/
+
+# App per telefono (mobile/): le dipendenze sono già escluse da "node_modules" qui sopra,
+# i file costruiti e local.properties da mobile/android/.gitignore.
+# Le chiavi di firma dell'app (keystore) non vanno MAI su GitHub, ovunque siano.
+*.jks
+*.keystore

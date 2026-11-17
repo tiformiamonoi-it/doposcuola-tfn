@@ -145,7 +145,8 @@
         <span class="flex-1">La mia disponibilità</span>
         <UIcon name="i-heroicons-chevron-right" class="size-4 text-pf-grigio" aria-hidden="true" />
       </NuxtLink>
-      <NuxtLink to="/stampe/tutor-lezioni" class="min-h-14 px-4 flex items-center gap-3 text-[15px] font-medium text-pf-testo hover:bg-pf-fondo">
+      <!-- Nell'app niente "Stampa": il WebView di Android ignora window.print(), il tasto non farebbe nulla -->
+      <NuxtLink v-if="!inApp" to="/stampe/tutor-lezioni" class="min-h-14 px-4 flex items-center gap-3 text-[15px] font-medium text-pf-testo hover:bg-pf-fondo">
         <span class="flex-1">Stampa le mie lezioni</span>
         <UIcon name="i-heroicons-printer" class="size-4 text-pf-grigio" aria-hidden="true" />
       </NuxtLink>
@@ -184,6 +185,7 @@ definePageMeta({ layout: 'tutor', middleware: ['tutor-only'] })
 useHead({ title: 'Il mio Calendario — tiformiamonoi' })
 
 const { user } = useUserSession()
+const inApp = useInApp()
 
 // ==========================================
 // Finestra oraria (solo per la UI — la verità è sempre lato server)
@@ -224,7 +226,9 @@ const timeSlots = computed(() => {
 
 const { data: lezioniRes, pending, refresh } = useFetch('/api/lessons', {
   lazy: true,
-  query: computed(() => ({ dataInizio: dateInizio.value, dataFine: dateFine.value, limit: 500 })),
+  // tutorId: al TUTOR il server lo impone già; il SUPER_TUTOR (nell'app, D2) altrimenti
+  // vedrebbe le lezioni di tutti nel "suo" calendario.
+  query: computed(() => ({ dataInizio: dateInizio.value, dataFine: dateFine.value, limit: 500, tutorId: user.value?.id })),
   watch: [currentDate],
 })
 
