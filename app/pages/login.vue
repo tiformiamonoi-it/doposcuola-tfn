@@ -112,6 +112,10 @@ definePageMeta({
   // rientrare. Per questo prima si chiede al server se la sessione vale ancora: se no,
   // la si cancella (anche dal browser) e si mostra il modulo.
   middleware: [async () => {
+    // Sul server, dopo un `await` Nuxt perde il filo della richiesta in corso ("instance
+    // unavailable", pagina 500). Questo middleware scritto qui dentro non viene sistemato
+    // da solo: si tiene l'app in mano prima dell'attesa e dopo si passa da runWithContext.
+    const nuxtApp = useNuxtApp()
     const { loggedIn, user, clear } = useUserSession()
     if (!loggedIn.value) return
     const casa = homeDiRuolo(user.value?.role)
@@ -120,12 +124,12 @@ definePageMeta({
       await useRequestFetch()('/api/auth/sessione-valida')
     } catch (e) {
       if ((e as { statusCode?: number }).statusCode === 401) {
-        await clear()
+        await nuxtApp.runWithContext(() => clear())
         return
       }
       // Altri errori (rete, database): la sessione non è smentita, si va a casa.
     }
-    return navigateTo(casa, { replace: true })
+    return nuxtApp.runWithContext(() => navigateTo(casa, { replace: true }))
   }],
 })
 useHead({ title: 'Accedi — tiformiamonoi.it' })
@@ -187,7 +191,7 @@ async function onSubmit() {
     const { fetch: refreshSession } = useUserSession()
     await refreshSession()
     
-    await navigateTo(res.redirectTo)
+    await navigateTo(res.redirectTo, { replace: true })
   }
   catch (err: unknown) {
     const e = err as { data?: { message?: string } }
